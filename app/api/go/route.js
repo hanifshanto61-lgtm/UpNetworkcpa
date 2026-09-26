@@ -1,24 +1,18 @@
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const offerId = searchParams.get("offer");
-  const subid = searchParams.get("subid") || "test_publisher";
+  const subid = searchParams.get("subid") || "default_pub";
 
-  // আপনার সব Offer এর Real Link এখানে
   const OFFERS = {
-    "iphone15": "https://onlyhotdates.com/dTmGzfkC?aid=fzkbxfzxzk&kid=hxxhxzhdpdk",
     "onlyhot": "https://onlyhotdates.com/dTmGzfkC?aid=fzkbxfzxzk&kid=hxxhxzhdpdk",
-    "hotdates": "https://onlyhotdates.com/dTmGzfkC?aid=fzkbxfzxzk&kid=hxxhxzhdpdk"
+    "hotdates": "https://onlyhotdates.com/dTmGzfkC?aid=fzkbxfzxzk&kid=hxxhxzhdpdk",
+    "dating": "https://onlyhotdates.com/dTmGzfkC?aid=fzkbxfzxzk&kid=hxxhxzhdpdk"
   };
 
-  // Default offer - যদি কোন offer ID না পায়, তাহলে আপনার Main Link এ যাবে
-  let baseLink = OFFERS[offerId] || OFFERS["onlyhot"];
+  const baseLink = OFFERS[offerId] || OFFERS["onlyhot"];
 
-  // Publisher এর subid টা tracking এর জন্য জুড়ে দেওয়া
-  // onlyhotdates এর system এ click id হিসাবে subid যাবে
-  const separator = baseLink.includes("?")? "&" : "?";
-  const finalUrl = `${baseLink}${separator}subid=${subid}&click_id=${subid}&s1=${subid}`;
-
-  console.log(`TRACK: Offer=${offerId}, Publisher=${subid} -> ${finalUrl}`);
+  // subid tracking এর জন্য add করা হলো
+  const finalUrl = `${baseLink}&subid=${subid}&s1=${subid}&click_id=${subid}`;
 
   return Response.redirect(finalUrl, 302);
 }
