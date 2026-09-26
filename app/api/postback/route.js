@@ -1,7 +1,9 @@
-export async function GET(request) {
-  const { searchParams } = new URL(request.url);
-  const clickid = searchParams.get("clickid");
-  const payout = searchParams.get("payout");
-  console.log(`LEAD: ${clickid} - $${payout}`);
-  return new Response("OK", { status: 200 });
+export async function GET(req) {
+  const { searchParams } = new URL(req.url)
+  const click_id = searchParams.get('click_id')
+  const payout = searchParams.get('payout')
+
+  // সরাসরি DB তে conversion save করুন, কোনো auth check ছাড়া
+
+  return new Response("OK", { status: 200 })
 }
