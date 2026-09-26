@@ -1,9 +1,40 @@
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+
+// Supabase client - public access
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
+
 export async function GET(req) {
-  const { searchParams } = new URL(req.url)
-  const click_id = searchParams.get('click_id')
-  const payout = searchParams.get('payout')
+  try {
+    const { searchParams } = new URL(req.url);
+    const click_id = searchParams.get("click_id") || searchParams.get("sub1") || searchParams.get("aff_sub");
+    const payout = searchParams.get("payout") || 0;
 
-  // সরাসরি DB তে conversion save করুন, কোনো auth check ছাড়া
+    if (!click_id) {
+      return new NextResponse("Missing click_id", { status: 400 });
+    }
 
-  return new Response("OK", { status: 200 })
+    // Find click and update to conversion
+    const { data, error } = await supabase
+      .from("clicks")
+      .update({ 
+        status: "converted",
+        payout: payout,
+        converted_at: new Date().toISOString()
+      })
+      .eq("click_id", click_id);
+
+    console.log("Postback received:", click_id, payout, error);
+
+    return new NextResponse("OK", { status: 200 });
+  } catch (e) {
+    return new NextResponse("OK", { status: 200 }); // Always return OK to network
+  }
+}
+
+export async function POST(req) {
+  return GET(req);
 }
