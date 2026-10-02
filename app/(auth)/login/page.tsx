@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 
 export default function LoginPage() {
   const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
@@ -15,34 +16,52 @@ export default function LoginPage() {
   async function handleLogin(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setMessage("");
-    setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    setLoading(false);
-
-    if (error) {
-      setMessage(error.message);
+    if (!supabase) {
+      setMessage(
+        "Supabase configuration is missing. Please contact the administrator."
+      );
       return;
     }
 
-    router.push("/admin");
+    setLoading(true);
+
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        setMessage(error.message);
+        return;
+      }
+
+      router.push("/admin");
+    } catch {
+      setMessage("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-md bg-white p-8 rounded-xl shadow-md">
-        <h1 className="text-2xl font-bold text-center mb-2">Welcome Back</h1>
+        <h1 className="text-2xl font-bold text-center mb-2">
+          Welcome Back
+        </h1>
+
         <p className="text-sm text-gray-500 text-center mb-6">
           Login to your account
         </p>
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Email</label>
+            <label className="block text-sm font-medium mb-1">
+              Email
+            </label>
+
             <input
               type="email"
               required
@@ -54,7 +73,10 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Password</label>
+            <label className="block text-sm font-medium mb-1">
+              Password
+            </label>
+
             <input
               type="password"
               required
