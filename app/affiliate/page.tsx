@@ -416,43 +416,48 @@ export default function AffiliatePage() {
   }
 
   function navigateMenu(action: string) {
-  setMenuOpen(false);
+    setMenuOpen(false);
 
-  if (action === "dashboard") {
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
+    if (action === "dashboard") {
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
 
-    return;
-  }
+      return;
+    }
 
-  // Referrals is now a separate page
-  if (action === "referrals") {
-    router.push("/affiliate/referrals");
-    return;
-  }
+    // Offers is now a separate page
+    if (action === "offers") {
+      router.push("/affiliate/offers");
+      return;
+    }
 
-  const sectionMap: Record<string, string> = {
-    offers: "offers",
-    smartlinks: "smart-link",
-    statistics: "statistics",
-    earnings: "earnings",
-    payments: "payments",
-  };
+    // Referrals is now a separate page
+    if (action === "referrals") {
+      router.push("/affiliate/referrals");
+      return;
+    }
 
-  const sectionId = sectionMap[action];
+    const sectionMap: Record<string, string> = {
+      smartlinks: "smart-link",
+      statistics: "statistics",
+      earnings: "earnings",
+      payments: "payments",
+    };
 
-  if (sectionId) {
-    setTimeout(() => {
-      document
-        .getElementById(sectionId)
-        ?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
-    }, 100);
-  }
+    const sectionId = sectionMap[action];
+
+    if (sectionId) {
+      setTimeout(() => {
+        document
+          .getElementById(sectionId)
+          ?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+      }, 100);
+    }
   }
 
   const dark = theme === "dark";
@@ -1196,15 +1201,9 @@ export default function AffiliatePage() {
                 className="border-yellow-500/10 hover:border-yellow-400/30"
                 iconClass="bg-yellow-500/10 text-yellow-500"
                 onClick={() =>
-                  document
-                    .getElementById(
-                      "offers"
-                    )
-                    ?.scrollIntoView({
-                      behavior:
-                        "smooth",
-                      block: "start",
-                    })
+                  router.push(
+                    "/affiliate/offers"
+                  )
                 }
                 dark={dark}
               />
@@ -1559,10 +1558,6 @@ export default function AffiliatePage() {
             </div>
           </section>
 
-          {/* =========================
-              REFERRAL COMMISSION
-          ========================== */}
-
           <section
             id="referrals"
             className={`mt-6 scroll-mt-24 rounded-2xl border p-5 sm:p-6 ${
@@ -1602,8 +1597,6 @@ export default function AffiliatePage() {
                 </p>
               </div>
             </div>
-
-            {/* Commission Cards */}
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <ReferralStatCard
@@ -1663,8 +1656,6 @@ export default function AffiliatePage() {
               />
             </div>
 
-            {/* Referral Link */}
-
             <div className="mt-6">
               <p
                 className={`mb-2 text-xs font-semibold ${muted}`}
@@ -1719,8 +1710,6 @@ export default function AffiliatePage() {
                 </p>
               </div>
             </div>
-
-            {/* Referral List */}
 
             <div className="mt-6">
               <p
@@ -1810,8 +1799,6 @@ export default function AffiliatePage() {
                 </div>
               )}
             </div>
-
-            {/* Commission History */}
 
             <div className="mt-6">
               <div className="mb-3 flex items-center justify-between">
@@ -2255,15 +2242,9 @@ export default function AffiliatePage() {
                 className="border-yellow-500/10 hover:border-yellow-400/30"
                 iconClass="bg-yellow-500/10 text-yellow-500"
                 onClick={() =>
-                  document
-                    .getElementById(
-                      "offers"
-                    )
-                    ?.scrollIntoView({
-                      behavior:
-                        "smooth",
-                      block: "start",
-                    })
+                  router.push(
+                    "/affiliate/offers"
+                  )
                 }
                 dark={dark}
               />
@@ -2829,4 +2810,4 @@ function formatDate(
       minute: "2-digit",
     }
   );
-    }
+                }
