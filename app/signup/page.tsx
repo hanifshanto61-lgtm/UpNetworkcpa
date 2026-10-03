@@ -1,39 +1,63 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type ChangeEvent, type FormEvent } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
-export default function SignupPage() {
-  const [form, setForm] = useState({
-    firstName: "",
-    lastName: "",
-    username: "",
-    email: "",
-    phone: "",
-    country: "",
-    city: "",
-    address: "",
-    trafficSource: "",
-    trafficUrl: "",
-    socialProfile: "",
-    monthlyTraffic: "",
-    promotionMethod: "",
-    experience: "",
-    previousNetworks: "",
-    companyName: "",
-    paymentMethod: "",
-    password: "",
-    confirmPassword: "",
-  });
+type FormState = {
+  firstName: string;
+  lastName: string;
+  username: string;
+  email: string;
+  phone: string;
+  country: string;
+  city: string;
+  address: string;
+  trafficSource: string;
+  trafficUrl: string;
+  socialProfile: string;
+  monthlyTraffic: string;
+  promotionMethod: string;
+  experience: string;
+  previousNetworks: string;
+  companyName: string;
+  paymentMethod: string;
+  password: string;
+  confirmPassword: string;
+};
 
+const initialForm: FormState = {
+  firstName: "",
+  lastName: "",
+  username: "",
+  email: "",
+  phone: "",
+  country: "",
+  city: "",
+  address: "",
+  trafficSource: "",
+  trafficUrl: "",
+  socialProfile: "",
+  monthlyTraffic: "",
+  promotionMethod: "",
+  experience: "",
+  previousNetworks: "",
+  companyName: "",
+  paymentMethod: "",
+  password: "",
+  confirmPassword: "",
+};
+
+export default function SignupPage() {
+  const [form, setForm] = useState<FormState>(initialForm);
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [agreeAccuracy, setAgreeAccuracy] = useState(false);
   const [message, setMessage] = useState("");
+  const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
 
   function updateField(
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+    e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) {
     const { name, value } = e.target;
 
@@ -46,9 +70,12 @@ export default function SignupPage() {
   async function handleSignup(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setMessage("");
+    setSuccess(false);
 
     if (!supabase) {
-      setMessage("Supabase configuration is missing. Please contact the administrator.");
+      setMessage(
+        "Supabase configuration is missing. Please contact the administrator."
+      );
       return;
     }
 
@@ -63,7 +90,9 @@ export default function SignupPage() {
     }
 
     if (!agreeTerms || !agreeAccuracy) {
-      setMessage("Please accept the required confirmations before creating your account.");
+      setMessage(
+        "Please accept the required confirmations before creating your account."
+      );
       return;
     }
 
@@ -71,26 +100,26 @@ export default function SignupPage() {
 
     try {
       const { error } = await supabase.auth.signUp({
-        email: form.email,
+        email: form.email.trim(),
         password: form.password,
         options: {
           data: {
             account_type: "affiliate",
-            first_name: form.firstName,
-            last_name: form.lastName,
-            username: form.username,
-            phone: form.phone,
-            country: form.country,
-            city: form.city,
-            address: form.address,
+            first_name: form.firstName.trim(),
+            last_name: form.lastName.trim(),
+            username: form.username.trim(),
+            phone: form.phone.trim(),
+            country: form.country.trim(),
+            city: form.city.trim(),
+            address: form.address.trim(),
             traffic_source: form.trafficSource,
-            traffic_url: form.trafficUrl,
-            social_profile: form.socialProfile,
+            traffic_url: form.trafficUrl.trim(),
+            social_profile: form.socialProfile.trim(),
             monthly_traffic: form.monthlyTraffic,
             promotion_method: form.promotionMethod,
             experience: form.experience,
-            previous_networks: form.previousNetworks,
-            company_name: form.companyName,
+            previous_networks: form.previousNetworks.trim(),
+            company_name: form.companyName.trim(),
             payment_method: form.paymentMethod,
             application_status: "pending",
           },
@@ -102,6 +131,7 @@ export default function SignupPage() {
         return;
       }
 
+      setSuccess(true);
       setMessage(
         "Application submitted successfully. Please check your email to verify your account. Your affiliate application is now pending admin approval."
       );
@@ -111,7 +141,8 @@ export default function SignupPage() {
         password: "",
         confirmPassword: "",
       }));
-    } catch {
+    } catch (error) {
+      console.error("Signup error:", error);
       setMessage("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
@@ -141,14 +172,10 @@ export default function SignupPage() {
         >
           {/* Account Information */}
           <section className="border-b border-slate-200 p-6 sm:p-8">
-            <div className="mb-6">
-              <h2 className="text-lg font-bold text-slate-900">
-                Account Information
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Basic information for your affiliate account.
-              </p>
-            </div>
+            <SectionHeading
+              title="Account Information"
+              description="Basic information for your affiliate account."
+            />
 
             <div className="grid gap-5 sm:grid-cols-2">
               <Field
@@ -212,14 +239,10 @@ export default function SignupPage() {
 
           {/* Contact Information */}
           <section className="border-b border-slate-200 p-6 sm:p-8">
-            <div className="mb-6">
-              <h2 className="text-lg font-bold text-slate-900">
-                Contact Information
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Tell us how we can contact you.
-              </p>
-            </div>
+            <SectionHeading
+              title="Contact Information"
+              description="Tell us how we can contact you."
+            />
 
             <div className="grid gap-5 sm:grid-cols-2">
               <Field
@@ -250,11 +273,15 @@ export default function SignupPage() {
               />
 
               <div className="sm:col-span-2">
-                <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+                <label
+                  htmlFor="address"
+                  className="mb-1.5 block text-sm font-semibold text-slate-700"
+                >
                   Address
                 </label>
 
                 <textarea
+                  id="address"
                   name="address"
                   value={form.address}
                   onChange={updateField}
@@ -269,14 +296,10 @@ export default function SignupPage() {
 
           {/* Promotion Information */}
           <section className="border-b border-slate-200 p-6 sm:p-8">
-            <div className="mb-6">
-              <h2 className="text-lg font-bold text-slate-900">
-                Promotion Information
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Help us understand how you plan to promote our offers.
-              </p>
-            </div>
+            <SectionHeading
+              title="Promotion Information"
+              description="Help us understand how you plan to promote our offers."
+            />
 
             <div className="grid gap-5 sm:grid-cols-2">
               <SelectField
@@ -362,11 +385,15 @@ export default function SignupPage() {
               />
 
               <div className="sm:col-span-2">
-                <label className="mb-1.5 block text-sm font-semibold text-slate-700">
+                <label
+                  htmlFor="previousNetworks"
+                  className="mb-1.5 block text-sm font-semibold text-slate-700"
+                >
                   Previous CPA / Affiliate Networks
                 </label>
 
                 <textarea
+                  id="previousNetworks"
                   name="previousNetworks"
                   value={form.previousNetworks}
                   onChange={updateField}
@@ -380,15 +407,209 @@ export default function SignupPage() {
 
           {/* Business Information */}
           <section className="border-b border-slate-200 p-6 sm:p-8">
-            <div className="mb-6">
-              <h2 className="text-lg font-bold text-slate-900">
-                Business Information
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Optional information about your business.
-              </p>
-            </div>
+            <SectionHeading
+              title="Business Information"
+              description="Optional information about your business."
+            />
 
             <div className="grid gap-5 sm:grid-cols-2">
               <Field
-                label="Company
+                label="Company Name"
+                name="companyName"
+                value={form.companyName}
+                onChange={updateField}
+                placeholder="Your company name (optional)"
+              />
+
+              <SelectField
+                label="Preferred Payment Method"
+                name="paymentMethod"
+                value={form.paymentMethod}
+                onChange={updateField}
+                options={[
+                  "PayPal",
+                  "Payoneer",
+                  "Bank Transfer",
+                  "Cryptocurrency",
+                  "Other",
+                ]}
+              />
+            </div>
+          </section>
+
+          {/* Agreements */}
+          <section className="p-6 sm:p-8">
+            <SectionHeading
+              title="Final Confirmation"
+              description="Please review and confirm before submitting your application."
+            />
+
+            <div className="space-y-4">
+              <label className="flex cursor-pointer items-start gap-3 text-sm text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={agreeTerms}
+                  onChange={(e) => setAgreeTerms(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span>
+                  I agree to the terms and conditions of UpNetwork CPA.
+                </span>
+              </label>
+
+              <label className="flex cursor-pointer items-start gap-3 text-sm text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={agreeAccuracy}
+                  onChange={(e) => setAgreeAccuracy(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span>
+                  I confirm that the information provided in this application
+                  is accurate and complete.
+                </span>
+              </label>
+            </div>
+
+            {message && (
+              <div
+                role="alert"
+                className={`mt-6 rounded-xl border p-4 text-sm ${
+                  success
+                    ? "border-green-200 bg-green-50 text-green-700"
+                    : "border-red-200 bg-red-50 text-red-700"
+                }`}
+              >
+                {message}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="mt-7 w-full rounded-xl bg-blue-600 px-6 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loading ? "Submitting Application..." : "Create Affiliate Account"}
+            </button>
+
+            <p className="mt-5 text-center text-sm text-slate-500">
+              Already have an account?{" "}
+              <Link
+                href="/login"
+                className="font-semibold text-blue-600 hover:text-blue-700"
+              >
+                Sign in
+              </Link>
+            </p>
+          </section>
+        </form>
+
+        <p className="mt-6 text-center text-xs text-slate-400">
+          © {new Date().getFullYear()} UpNetwork CPA. All rights reserved.
+        </p>
+      </div>
+    </main>
+  );
+}
+
+type FieldProps = {
+  label: string;
+  name: string;
+  value: string;
+  onChange: (e: ChangeEvent<HTMLInputElement>) => void;
+  type?: string;
+  required?: boolean;
+  placeholder?: string;
+};
+
+function Field({
+  label,
+  name,
+  value,
+  onChange,
+  type = "text",
+  required = false,
+  placeholder = "",
+}: FieldProps) {
+  return (
+    <div>
+      <label
+        htmlFor={name}
+        className="mb-1.5 block text-sm font-semibold text-slate-700"
+      >
+        {label}
+      </label>
+
+      <input
+        id={name}
+        name={name}
+        type={type}
+        value={value}
+        onChange={onChange}
+        required={required}
+        placeholder={placeholder}
+        className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+      />
+    </div>
+  );
+}
+
+type SelectFieldProps = {
+  label: string;
+  name: string;
+  value: string;
+  onChange: (e: ChangeEvent<HTMLSelectElement>) => void;
+  options: string[];
+  required?: boolean;
+};
+
+function SelectField({
+  label,
+  name,
+  value,
+  onChange,
+  options,
+  required = false,
+}: SelectFieldProps) {
+  return (
+    <div>
+      <label
+        htmlFor={name}
+        className="mb-1.5 block text-sm font-semibold text-slate-700"
+      >
+        {label}
+      </label>
+
+      <select
+        id={name}
+        name={name}
+        value={value}
+        onChange={onChange}
+        required={required}
+        className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+      >
+        <option value="">Select an option</option>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function SectionHeading({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="mb-6">
+      <h2 className="text-lg font-bold text-slate-900">{title}</h2>
+      <p className="mt-1 text-sm text-slate-500">{description}</p>
+    </div>
+  );
+}
