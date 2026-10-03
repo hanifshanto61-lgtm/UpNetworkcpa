@@ -15,6 +15,35 @@ type MenuKey =
   | "reports"
   | "profile";
 
+type ClickRow = {
+  click_id: string | null;
+  affiliate_id: string | null;
+  smartlink_id: string | null;
+  country: string | null;
+  device: string | null;
+  browser: string | null;
+  referer: string | null;
+  created_at: string | null;
+};
+
+type ClickStats = {
+  today: number;
+  yesterday: number;
+  month: number;
+  total: number;
+  countries: { name: string; clicks: number }[];
+  devices: { name: string; clicks: number; percent: number }[];
+};
+
+const emptyStats: ClickStats = {
+  today: 0,
+  yesterday: 0,
+  month: 0,
+  total: 0,
+  countries: [],
+  devices: [],
+};
+
 export default function AffiliatePage() {
   const router = useRouter();
 
@@ -22,6 +51,8 @@ export default function AffiliatePage() {
   const [profileLoading, setProfileLoading] = useState(true);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileMessage, setProfileMessage] = useState("");
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [stats, setStats] = useState<ClickStats>(emptyStats);
 
   const [profile, setProfile] = useState({
     fullName: "",
@@ -77,6 +108,115 @@ export default function AffiliatePage() {
     loadProfile();
   }, []);
 
+  useEffect(() => {
+    if (!profile.affiliateId || !supabase) return;
+
+    loadClickStats(profile.affiliateId);
+  }, [profile.affiliateId]);
+
+  async function loadClickStats(affiliateId: string) {
+    if (!supabase) return;
+
+    setStatsLoading(true);
+
+    const { data, error } = await supabase
+      .from("clicks")
+      .select(
+        "click_id, affiliate_id, smartlink_id, country, device, browser, referer, created_at"
+      )
+      .eq("affiliate_id", affiliateId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Click statistics error:", error);
+      setStats(emptyStats);
+      setStatsLoading(false);
+      return;
+    }
+
+    const rows = (data || []) as ClickRow[];
+
+    const now = new Date();
+
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+
+    const yesterdayStart = new Date(todayStart);
+    yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const today = rows.filter((row) => {
+      if (!row.created_at) return false;
+      return new Date(row.created_at) >= todayStart;
+    }).length;
+
+    const yesterday = rows.filter((row) => {
+      if (!row.created_at) return false;
+
+      const date = new Date(row.created_at);
+
+      return date >= yesterdayStart && date < todayStart;
+    }).length;
+
+    const month = rows.filter((row) => {
+      if (!row.created_at) return false;
+      return new Date(row.created_at) >= monthStart;
+    }).length;
+
+    const countryMap: Record<string, number> = {};
+
+    rows.forEach((row) => {
+      const country = row.country?.trim() || "Unknown";
+
+      countryMap[country] = (countryMap[country] || 0) + 1;
+    });
+
+    const countries = Object.entries(countryMap)
+      .map(([name, clicks]) => ({
+        name,
+        clicks,
+      }))
+      .sort((a, b) => b.clicks - a.clicks)
+      .slice(0, 5);
+
+    const deviceMap: Record<string, number> = {};
+
+    rows.forEach((row) => {
+      const device = row.device?.trim() || "Unknown";
+
+      deviceMap[device] = (deviceMap[device] || 0) + 1;
+    });
+
+    const devices = Object.entries(deviceMap)
+      .map(([name, clicks]) => ({
+        name,
+        clicks,
+        percent:
+          rows.length > 0
+            ? Math.round((clicks / rows.length) * 100)
+            : 0,
+      }))
+      .sort((a, b) => b.clicks - a.clicks);
+
+    setStats({
+      today,
+      yesterday,
+      month,
+      total: rows.length,
+      countries,
+      devices,
+    });
+
+    setStatsLoading(false);
+  }
+
+  async function refreshStats() {
+    if (!profile.affiliateId) return;
+
+    await loadClickStats(profile.affiliateId);
+  }
+
   async function logout() {
     if (supabase) {
       await supabase.auth.signOut();
@@ -128,7 +268,10 @@ export default function AffiliatePage() {
 
   async function copySmartLink() {
     try {
+      if (!profile.affiliateId) return;
+
       await navigator.clipboard.writeText(smartLink);
+
       setCopied(true);
 
       setTimeout(() => {
@@ -160,7 +303,8 @@ export default function AffiliatePage() {
   ];
 
   const pageTitle =
-    menuItems.find((item) => item.key === activeMenu)?.label || "Dashboard";
+    menuItems.find((item) => item.key === activeMenu)?.label ||
+    "Dashboard";
 
   return (
     <div className="min-h-screen bg-[#f5f7fb] text-slate-800">
@@ -283,46 +427,56 @@ export default function AffiliatePage() {
                     </h2>
 
                     <p className="mt-3 max-w-2xl text-sm leading-6 text-blue-100 md:text-base">
-                      Manage your Smartlinks, traffic, conversions and earnings
-                      from one modern CPA affiliate dashboard.
+                      Manage your Smartlinks, traffic, conversions and
+                      earnings from one modern CPA affiliate dashboard.
                     </p>
 
-                    <button
-                      onClick={() => openMenu("tracking")}
-                      className="mt-5 rounded-xl bg-white px-5 py-3 text-sm font-bold text-blue-600 shadow-lg hover:bg-blue-50"
-                    >
-                      Get Smartlink →
-                    </button>
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        onClick={() => openMenu("tracking")}
+                        className="mt-5 rounded-xl bg-white px-5 py-3 text-sm font-bold text-blue-600 shadow-lg hover:bg-blue-50"
+                      >
+                        Get Smartlink →
+                      </button>
+
+                      <button
+                        onClick={refreshStats}
+                        disabled={statsLoading}
+                        className="mt-5 rounded-xl border border-white/30 bg-white/10 px-5 py-3 text-sm font-bold text-white hover:bg-white/20 disabled:opacity-60"
+                      >
+                        {statsLoading ? "Refreshing..." : "↻ Refresh Stats"}
+                      </button>
+                    </div>
                   </div>
                 </section>
 
                 <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                  <RevenueCard
-                    title="Today"
-                    value="$0.00"
-                    icon="💰"
-                    subtitle="Today's revenue"
+                  <StatCard
+                    title="Today Clicks"
+                    value={stats.today}
+                    icon="👆"
+                    subtitle="Today's traffic"
                   />
 
-                  <RevenueCard
+                  <StatCard
                     title="Yesterday"
-                    value="$0.00"
+                    value={stats.yesterday}
                     icon="📅"
-                    subtitle="Yesterday revenue"
+                    subtitle="Yesterday clicks"
                   />
 
-                  <RevenueCard
+                  <StatCard
                     title="This Month"
-                    value="$0.00"
+                    value={stats.month}
                     icon="📈"
-                    subtitle="Current month"
+                    subtitle="Current month clicks"
                   />
 
-                  <RevenueCard
-                    title="Total Revenue"
-                    value="$0.00"
-                    icon="💵"
-                    subtitle="All-time revenue"
+                  <StatCard
+                    title="Total Clicks"
+                    value={stats.total}
+                    icon="⚡"
+                    subtitle="All-time traffic"
                   />
                 </section>
 
@@ -335,16 +489,13 @@ export default function AffiliatePage() {
                         </h3>
 
                         <p className="text-sm text-slate-400">
-                          Revenue and clicks performance
+                          Your real click traffic
                         </p>
                       </div>
 
-                      <select className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none">
-                        <option>Last 30 days</option>
-                        <option>This month</option>
-                        <option>This week</option>
-                        <option>Today</option>
-                      </select>
+                      <span className="rounded-lg bg-blue-50 px-3 py-2 text-xs font-bold text-blue-600">
+                        {statsLoading ? "Loading..." : "Live Data"}
+                      </span>
                     </div>
 
                     <div className="mt-6 grid grid-cols-2 gap-3">
@@ -356,22 +507,37 @@ export default function AffiliatePage() {
 
                       <MiniMetric
                         title="Clicks"
-                        value="0"
+                        value={String(stats.total)}
                         icon="👆"
                       />
                     </div>
 
-                    <div className="mt-5 flex h-[230px] items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50">
-                      <div className="text-center">
-                        <div className="text-3xl">📊</div>
-
-                        <div className="mt-2 font-bold text-slate-600">
-                          No traffic data yet
+                    <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                      <div className="mb-4 flex items-center justify-between">
+                        <div className="text-sm font-black text-slate-700">
+                          Click Overview
                         </div>
 
-                        <div className="mt-1 text-xs text-slate-400">
-                          Your performance chart will appear here
+                        <div className="text-xs font-semibold text-slate-400">
+                          Total: {stats.total}
                         </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-3">
+                        <TrafficBox
+                          label="Today"
+                          value={stats.today}
+                        />
+
+                        <TrafficBox
+                          label="Yesterday"
+                          value={stats.yesterday}
+                        />
+
+                        <TrafficBox
+                          label="Month"
+                          value={stats.month}
+                        />
                       </div>
                     </div>
                   </div>
@@ -399,9 +565,20 @@ export default function AffiliatePage() {
                       </div>
                     </div>
 
+                    <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-4">
+                      <div className="text-xs font-semibold text-blue-500">
+                        Total Clicks
+                      </div>
+
+                      <div className="mt-1 text-2xl font-black text-blue-700">
+                        {stats.total}
+                      </div>
+                    </div>
+
                     <button
                       onClick={copySmartLink}
-                      className="mt-4 w-full rounded-xl bg-blue-600 py-3 text-sm font-bold text-white shadow-lg shadow-blue-100 hover:bg-blue-700"
+                      disabled={!profile.affiliateId}
+                      className="mt-4 w-full rounded-xl bg-blue-600 py-3 text-sm font-bold text-white shadow-lg shadow-blue-100 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {copied ? "✓ Copied" : "Copy Smartlink"}
                     </button>
@@ -420,23 +597,47 @@ export default function AffiliatePage() {
                     <div className="flex items-center justify-between">
                       <div>
                         <h3 className="text-lg font-black text-slate-900">
-                          TOP-5 GEOs by EPC
+                          TOP-5 GEOs by Clicks
                         </h3>
 
                         <p className="text-sm text-slate-400">
-                          This month
+                          Your top traffic countries
                         </p>
                       </div>
 
                       <span className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-500">
-                        This Month
+                        Top 5
                       </span>
                     </div>
 
-                    <EmptyTable
-                      columns={["Country", "Clicks", "EPC"]}
-                      message="No GEO data"
-                    />
+                    {stats.countries.length === 0 ? (
+                      <EmptyState message="No GEO data yet" />
+                    ) : (
+                      <div className="mt-5 overflow-hidden rounded-xl border border-slate-200">
+                        <div className="grid grid-cols-2 bg-slate-50 px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-400">
+                          <div>Country</div>
+                          <div className="text-right">Clicks</div>
+                        </div>
+
+                        {stats.countries.map((country, index) => (
+                          <div
+                            key={country.name}
+                            className="grid grid-cols-2 border-t border-slate-100 px-4 py-3 text-sm"
+                          >
+                            <div className="font-semibold text-slate-700">
+                              <span className="mr-2 text-xs text-slate-400">
+                                #{index + 1}
+                              </span>
+                              {country.name}
+                            </div>
+
+                            <div className="text-right font-black text-slate-800">
+                              {country.clicks}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
@@ -446,14 +647,45 @@ export default function AffiliatePage() {
                       </h3>
 
                       <p className="text-sm text-slate-400">
-                        Traffic performance
+                        Traffic by device
                       </p>
                     </div>
 
-                    <EmptyTable
-                      columns={["Platform", "Leads", "Percent"]}
-                      message="No data"
-                    />
+                    {stats.devices.length === 0 ? (
+                      <EmptyState message="No platform data yet" />
+                    ) : (
+                      <div className="mt-5 space-y-3">
+                        {stats.devices.map((device) => (
+                          <div
+                            key={device.name}
+                            className="rounded-xl border border-slate-200 p-4"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="font-bold text-slate-700">
+                                {device.name}
+                              </div>
+
+                              <div className="text-sm font-black text-slate-900">
+                                {device.clicks}
+                              </div>
+                            </div>
+
+                            <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+                              <div
+                                className="h-full rounded-full bg-blue-600"
+                                style={{
+                                  width: `${device.percent}%`,
+                                }}
+                              />
+                            </div>
+
+                            <div className="mt-1 text-right text-[11px] font-semibold text-slate-400">
+                              {device.percent}%
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </section>
 
@@ -769,10 +1001,28 @@ export default function AffiliatePage() {
 
                   <button
                     onClick={copySmartLink}
-                    className="mt-4 rounded-xl bg-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-blue-100"
+                    disabled={!profile.affiliateId}
+                    className="mt-4 rounded-xl bg-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-blue-100 disabled:opacity-60"
                   >
                     {copied ? "✓ Copied" : "Copy Smartlink"}
                   </button>
+
+                  <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                    <MiniStatBox
+                      label="Today"
+                      value={stats.today}
+                    />
+
+                    <MiniStatBox
+                      label="This Month"
+                      value={stats.month}
+                    />
+
+                    <MiniStatBox
+                      label="Total"
+                      value={stats.total}
+                    />
+                  </div>
 
                   <div className="mt-6 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm leading-6 text-blue-700">
                     <strong>Tracking enabled:</strong> Clicks are recorded by
@@ -793,11 +1043,10 @@ export default function AffiliatePage() {
             )}
 
             {activeMenu === "statistics" && (
-              <GenericPage
-                title="Statistics"
-                subtitle="Monitor clicks, revenue, EPC and traffic."
-                icon="▥"
-                action="Performance Statistics"
+              <StatisticsPage
+                stats={stats}
+                loading={statsLoading}
+                onRefresh={refreshStats}
               />
             )}
 
@@ -877,7 +1126,9 @@ export default function AffiliatePage() {
                   }`}
                 >
                   <div className="text-lg">{item.icon}</div>
-                  <div className="text-[10px] font-bold">{item.label}</div>
+                  <div className="text-[10px] font-bold">
+                    {item.label}
+                  </div>
                 </button>
               ))}
             </div>
@@ -888,14 +1139,14 @@ export default function AffiliatePage() {
   );
 }
 
-function RevenueCard({
+function StatCard({
   title,
   value,
   icon,
   subtitle,
 }: {
   title: string;
-  value: string;
+  value: number;
   icon: string;
   subtitle: string;
 }) {
@@ -903,13 +1154,17 @@ function RevenueCard({
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between">
         <div>
-          <div className="text-sm font-semibold text-slate-400">{title}</div>
-
-          <div className="mt-2 text-2xl font-black text-slate-900">
-            {value}
+          <div className="text-sm font-semibold text-slate-400">
+            {title}
           </div>
 
-          <div className="mt-1 text-xs text-slate-400">{subtitle}</div>
+          <div className="mt-2 text-2xl font-black text-slate-900">
+            {value.toLocaleString()}
+          </div>
+
+          <div className="mt-1 text-xs text-slate-400">
+            {subtitle}
+          </div>
         </div>
 
         <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-xl">
@@ -936,34 +1191,57 @@ function MiniMetric({
         {title}
       </div>
 
-      <div className="mt-2 text-xl font-black text-slate-900">{value}</div>
+      <div className="mt-2 text-xl font-black text-slate-900">
+        {value}
+      </div>
     </div>
   );
 }
 
-function EmptyTable({
-  columns,
-  message,
+function TrafficBox({
+  label,
+  value,
 }: {
-  columns: string[];
-  message: string;
+  label: string;
+  value: number;
 }) {
   return (
-    <div className="mt-5 overflow-hidden rounded-xl border border-slate-200">
-      <div
-        className="grid bg-slate-50 px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-400"
-        style={{
-          gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr))`,
-        }}
-      >
-        {columns.map((column) => (
-          <div key={column}>{column}</div>
-        ))}
+    <div className="rounded-xl bg-white p-4 text-center shadow-sm">
+      <div className="text-xs font-semibold text-slate-400">
+        {label}
       </div>
 
-      <div className="flex min-h-[150px] items-center justify-center text-sm font-semibold text-slate-400">
-        {message}
+      <div className="mt-1 text-xl font-black text-slate-900">
+        {value.toLocaleString()}
       </div>
+    </div>
+  );
+}
+
+function MiniStatBox({
+  label,
+  value,
+}: {
+  label: string;
+  value: number;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <div className="text-xs font-semibold text-slate-400">
+        {label}
+      </div>
+
+      <div className="mt-1 text-xl font-black text-slate-900">
+        {value.toLocaleString()}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="mt-5 flex min-h-[150px] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 text-sm font-semibold text-slate-400">
+      {message}
     </div>
   );
 }
@@ -1034,7 +1312,9 @@ function InputField({
 }) {
   return (
     <label className="block">
-      <div className="mb-2 text-sm font-bold text-slate-700">{label}</div>
+      <div className="mb-2 text-sm font-bold text-slate-700">
+        {label}
+      </div>
 
       <input
         type="text"
@@ -1048,6 +1328,151 @@ function InputField({
         }`}
       />
     </label>
+  );
+}
+
+function StatisticsPage({
+  stats,
+  loading,
+  onRefresh,
+}: {
+  stats: ClickStats;
+  loading: boolean;
+  onRefresh: () => void;
+}) {
+  return (
+    <div className="space-y-6">
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+          <div>
+            <h2 className="text-2xl font-black text-slate-900">
+              Statistics
+            </h2>
+
+            <p className="mt-1 text-sm text-slate-400">
+              Real-time click and traffic statistics
+            </p>
+          </div>
+
+          <button
+            onClick={onRefresh}
+            disabled={loading}
+            className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-60"
+          >
+            {loading ? "Refreshing..." : "↻ Refresh"}
+          </button>
+        </div>
+      </section>
+
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          title="Today"
+          value={stats.today}
+          icon="👆"
+          subtitle="Today's clicks"
+        />
+
+        <StatCard
+          title="Yesterday"
+          value={stats.yesterday}
+          icon="📅"
+          subtitle="Yesterday clicks"
+        />
+
+        <StatCard
+          title="This Month"
+          value={stats.month}
+          icon="📈"
+          subtitle="Monthly clicks"
+        />
+
+        <StatCard
+          title="Total"
+          value={stats.total}
+          icon="⚡"
+          subtitle="All-time clicks"
+        />
+      </section>
+
+      <section className="grid gap-6 lg:grid-cols-2">
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h3 className="text-lg font-black text-slate-900">
+            Top GEOs
+          </h3>
+
+          <p className="mt-1 text-sm text-slate-400">
+            Countries generating your traffic
+          </p>
+
+          {stats.countries.length === 0 ? (
+            <EmptyState message="No GEO data yet" />
+          ) : (
+            <div className="mt-5 space-y-3">
+              {stats.countries.map((country) => (
+                <div
+                  key={country.name}
+                  className="flex items-center justify-between rounded-xl border border-slate-200 p-4"
+                >
+                  <span className="font-semibold text-slate-700">
+                    {country.name}
+                  </span>
+
+                  <span className="font-black text-slate-900">
+                    {country.clicks}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h3 className="text-lg font-black text-slate-900">
+            Platforms
+          </h3>
+
+          <p className="mt-1 text-sm text-slate-400">
+            Traffic by device
+          </p>
+
+          {stats.devices.length === 0 ? (
+            <EmptyState message="No platform data yet" />
+          ) : (
+            <div className="mt-5 space-y-3">
+              {stats.devices.map((device) => (
+                <div
+                  key={device.name}
+                  className="rounded-xl border border-slate-200 p-4"
+                >
+                  <div className="flex justify-between">
+                    <span className="font-semibold text-slate-700">
+                      {device.name}
+                    </span>
+
+                    <span className="font-black text-slate-900">
+                      {device.clicks}
+                    </span>
+                  </div>
+
+                  <div className="mt-2 h-2 rounded-full bg-slate-100">
+                    <div
+                      className="h-2 rounded-full bg-blue-600"
+                      style={{
+                        width: `${device.percent}%`,
+                      }}
+                    />
+                  </div>
+
+                  <div className="mt-1 text-right text-xs text-slate-400">
+                    {device.percent}%
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -1079,13 +1504,15 @@ function GenericPage({
       <section className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
         <div className="text-4xl">📊</div>
 
-        <h3 className="mt-4 font-black text-slate-800">{action}</h3>
+        <h3 className="mt-4 font-black text-slate-800">
+          {action}
+        </h3>
 
         <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-400">
-          Data will appear here when your CPA tracking and Supabase database
-          are connected.
+          This section is ready for the next stage of the CPA
+          network system.
         </p>
       </section>
     </div>
   );
-      }
+                }
