@@ -17,11 +17,16 @@ import {
   LogOut,
   Copy,
   Check,
-  TrendingUp,
   MousePointerClick,
+  TrendingUp,
   DollarSign,
   Activity,
   ChevronRight,
+  FileText,
+  Globe,
+  Smartphone,
+  Monitor,
+  Clock3,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -64,41 +69,41 @@ const PANEL_MANAGERS: Manager[] = [
   },
 ];
 
-const menuItems = [
+const mainMenu = [
   {
     label: "Dashboard",
-    href: "/affiliate",
     icon: Home,
+    action: "dashboard",
   },
   {
     label: "Offers",
-    href: "/affiliate/offers",
     icon: Target,
+    action: "offers",
   },
   {
     label: "Smart Links",
-    href: "/affiliate",
     icon: Link2,
+    action: "smartlinks",
   },
   {
     label: "Statistics",
-    href: "/affiliate",
     icon: BarChart3,
+    action: "statistics",
   },
   {
     label: "Earnings",
-    href: "/affiliate",
     icon: Wallet,
+    action: "earnings",
   },
   {
     label: "Referrals",
-    href: "/affiliate",
     icon: Users,
+    action: "referrals",
   },
   {
     label: "Payments",
-    href: "/affiliate",
     icon: CreditCard,
+    action: "payments",
   },
 ];
 
@@ -144,7 +149,8 @@ export default function AffiliatePage() {
         return;
       }
 
-      const accessToken = sessionData.session.access_token;
+      const accessToken =
+        sessionData.session.access_token;
 
       const response = await fetch(
         "/api/affiliate/dashboard",
@@ -161,7 +167,8 @@ export default function AffiliatePage() {
 
       if (!response.ok) {
         throw new Error(
-          data?.error || "Unable to load dashboard."
+          data?.error ||
+            "Unable to load dashboard."
         );
       }
 
@@ -169,8 +176,10 @@ export default function AffiliatePage() {
       setClicks(data.clicks || []);
     } catch (err: any) {
       console.error(err);
+
       setError(
-        err?.message || "Unable to load affiliate dashboard."
+        err?.message ||
+          "Unable to load affiliate dashboard."
       );
     } finally {
       setLoading(false);
@@ -191,7 +200,9 @@ export default function AffiliatePage() {
 
   const conversions = useMemo(() => {
     return clicks.filter((row) => {
-      const status = String(row.status || "").toLowerCase();
+      const status = String(
+        row.status || ""
+      ).toLowerCase();
 
       return (
         status === "converted" ||
@@ -205,7 +216,9 @@ export default function AffiliatePage() {
 
   const earnings = useMemo(() => {
     return clicks.reduce((total, row) => {
-      const status = String(row.status || "").toLowerCase();
+      const status = String(
+        row.status || ""
+      ).toLowerCase();
 
       const converted =
         status === "converted" ||
@@ -218,17 +231,26 @@ export default function AffiliatePage() {
 
       const payout = Number(row.payout || 0);
 
-      return total + (Number.isFinite(payout) ? payout : 0);
+      return (
+        total +
+        (Number.isFinite(payout)
+          ? payout
+          : 0)
+      );
     }, 0);
   }, [clicks]);
 
   const conversionRate =
     totalClicks > 0
-      ? ((conversions / totalClicks) * 100).toFixed(2)
+      ? (
+          (conversions / totalClicks) *
+          100
+        ).toFixed(2)
       : "0.00";
 
   const affiliateId =
-    profile?.affiliateId || "Loading...";
+    profile?.affiliateId ||
+    "Loading...";
 
   const smartLink =
     typeof window !== "undefined"
@@ -241,20 +263,49 @@ export default function AffiliatePage() {
 
   async function copySmartLink() {
     try {
-      await navigator.clipboard.writeText(smartLink);
+      await navigator.clipboard.writeText(
+        smartLink
+      );
+
       setCopied(true);
 
       setTimeout(() => {
         setCopied(false);
       }, 2000);
-    } catch (err) {
-      console.error(err);
+    } catch (error) {
+      console.error(error);
     }
   }
 
-  function openManagerModal() {
+  function navigateMenu(action: string) {
     setMenuOpen(false);
-    setManagerOpen(true);
+
+    if (action === "dashboard") {
+      router.push("/affiliate");
+      return;
+    }
+
+    if (action === "offers") {
+      router.push("/affiliate/offers");
+      return;
+    }
+
+    if (
+      action === "smartlinks" ||
+      action === "statistics" ||
+      action === "earnings" ||
+      action === "referrals" ||
+      action === "payments"
+    ) {
+      /*
+       * These sections can later receive their
+       * own dedicated routes.
+       *
+       * For now we keep the user on the
+       * affiliate dashboard.
+       */
+      return;
+    }
   }
 
   if (loading) {
@@ -262,7 +313,8 @@ export default function AffiliatePage() {
       <main className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
         <div className="text-center">
           <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-slate-700 border-t-cyan-400" />
-          <p className="text-slate-400">
+
+          <p className="text-sm text-slate-400">
             Loading affiliate dashboard...
           </p>
         </div>
@@ -271,25 +323,37 @@ export default function AffiliatePage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white">
+    <main className="min-h-screen bg-[#070b14] text-white">
+      {/* ========================================================= */}
       {/* TOP BAR */}
-      <header className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/90 backdrop-blur-xl">
+      {/* ========================================================= */}
+
+      <header className="sticky top-0 z-40 border-b border-white/10 bg-[#070b14]/90 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-3">
-            {/* 3 DOT BUTTON */}
+            {/* 3 DOT MENU */}
             <button
-              onClick={() => setMenuOpen(true)}
-              aria-label="Open menu"
-              className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 transition hover:bg-white/10"
+              onClick={() =>
+                setMenuOpen(true)
+              }
+              aria-label="Open affiliate menu"
+              className="group flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] transition hover:border-cyan-400/30 hover:bg-cyan-400/10"
             >
-              <Menu size={21} />
+              <Menu
+                size={21}
+                className="text-slate-300 group-hover:text-cyan-400"
+              />
             </button>
 
             <div>
-              <div className="text-lg font-bold tracking-tight">
-                UpNetwork<span className="text-cyan-400">CPA</span>
+              <div className="text-lg font-extrabold tracking-tight">
+                UpNetwork
+                <span className="text-cyan-400">
+                  CPA
+                </span>
               </div>
-              <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
+
+              <div className="text-[9px] font-medium uppercase tracking-[0.22em] text-slate-600">
                 Affiliate Panel
               </div>
             </div>
@@ -297,32 +361,42 @@ export default function AffiliatePage() {
 
           <div className="flex items-center gap-3">
             <div className="hidden text-right sm:block">
-              <p className="text-sm font-semibold">
-                {profile?.name || "Affiliate"}
+              <p className="text-sm font-semibold text-slate-200">
+                {profile?.name ||
+                  "Affiliate"}
               </p>
+
               <p className="text-xs text-slate-500">
                 {profile?.email || ""}
               </p>
             </div>
 
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-500/15 text-cyan-400 ring-1 ring-cyan-400/20">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-400 ring-1 ring-cyan-400/20">
               <User size={19} />
             </div>
           </div>
         </div>
       </header>
 
+      {/* ========================================================= */}
       {/* SIDEBAR OVERLAY */}
+      {/* ========================================================= */}
+
       {menuOpen && (
         <div
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
-          onClick={() => setMenuOpen(false)}
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm"
+          onClick={() =>
+            setMenuOpen(false)
+          }
         />
       )}
 
+      {/* ========================================================= */}
       {/* SIDEBAR */}
+      {/* ========================================================= */}
+
       <aside
-        className={`fixed left-0 top-0 z-[60] h-full w-[290px] max-w-[88vw] border-r border-white/10 bg-slate-950 shadow-2xl transition-transform duration-300 ${
+        className={`fixed left-0 top-0 z-[60] h-full w-[290px] max-w-[88vw] border-r border-white/10 bg-[#090d17] shadow-2xl transition-transform duration-300 ${
           menuOpen
             ? "translate-x-0"
             : "-translate-x-full"
@@ -332,32 +406,36 @@ export default function AffiliatePage() {
           {/* SIDEBAR HEADER */}
           <div className="flex items-center justify-between border-b border-white/10 px-5 py-5">
             <div>
-              <p className="font-bold">
+              <p className="font-bold text-white">
                 Affiliate Menu
               </p>
-              <p className="mt-1 text-xs text-slate-500">
+
+              <p className="mt-1 text-[10px] uppercase tracking-widest text-slate-600">
                 UpNetworkCPA
               </p>
             </div>
 
             <button
-              onClick={() => setMenuOpen(false)}
-              className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+              onClick={() =>
+                setMenuOpen(false)
+              }
+              className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/5 text-slate-400 transition hover:bg-white/10 hover:text-white"
             >
-              <X size={19} />
+              <X size={18} />
             </button>
           </div>
 
-          {/* PROFILE */}
+          {/* SIDEBAR PROFILE */}
           <div className="border-b border-white/10 p-5">
-            <div className="flex items-center gap-3 rounded-2xl bg-white/[0.04] p-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cyan-500/15 text-cyan-400">
+            <div className="flex items-center gap-3 rounded-2xl border border-white/5 bg-white/[0.03] p-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-400 ring-1 ring-cyan-400/10">
                 <User size={20} />
               </div>
 
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">
-                  {profile?.name || "Affiliate"}
+                <p className="truncate text-sm font-semibold text-white">
+                  {profile?.name ||
+                    "Affiliate"}
                 </p>
 
                 <p className="truncate text-xs text-slate-500">
@@ -367,97 +445,119 @@ export default function AffiliatePage() {
             </div>
           </div>
 
-          {/* MAIN MENU */}
+          {/* SIDEBAR NAV */}
           <nav className="flex-1 overflow-y-auto p-4">
-            <p className="mb-3 px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-600">
-              Main Menu
+            <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-600">
+              Dashboard
             </p>
 
             <div className="space-y-1">
-              {menuItems.map((item) => {
-                const Icon = item.icon;
+              {mainMenu.map(
+                (item) => {
+                  const Icon = item.icon;
 
-                return (
-                  <button
-                    key={item.label}
-                    onClick={() => {
-                      setMenuOpen(false);
+                  const active =
+                    item.action ===
+                    "dashboard";
 
-                      if (
-                        item.href !==
-                        "/affiliate"
-                      ) {
-                        router.push(item.href);
+                  return (
+                    <button
+                      key={item.label}
+                      onClick={() =>
+                        navigateMenu(
+                          item.action
+                        )
                       }
-                    }}
-                    className="group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-white"
-                  >
-                    <Icon
-                      size={18}
-                      className="text-slate-500 transition group-hover:text-cyan-400"
-                    />
+                      className={`group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition ${
+                        active
+                          ? "bg-cyan-400/10 text-cyan-400"
+                          : "text-slate-400 hover:bg-white/5 hover:text-white"
+                      }`}
+                    >
+                      <Icon
+                        size={18}
+                        className={
+                          active
+                            ? "text-cyan-400"
+                            : "text-slate-600 group-hover:text-cyan-400"
+                        }
+                      />
 
-                    <span className="flex-1">
-                      {item.label}
-                    </span>
+                      <span className="flex-1">
+                        {item.label}
+                      </span>
 
-                    <ChevronRight
-                      size={15}
-                      className="text-slate-700 group-hover:text-slate-400"
-                    />
-                  </button>
-                );
-              })}
+                      <ChevronRight
+                        size={15}
+                        className={
+                          active
+                            ? "text-cyan-400/60"
+                            : "text-slate-700"
+                        }
+                      />
+                    </button>
+                  );
+                }
+              )}
             </div>
 
-            <p className="mb-3 mt-7 px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-600">
+            <p className="mb-3 mt-7 px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-600">
               Account
             </p>
 
             <div className="space-y-1">
               <button
-                onClick={() => {
-                  setMenuOpen(false);
-                }}
-                className="group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-white"
+                onClick={() =>
+                  setMenuOpen(false)
+                }
+                className="group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-slate-400 transition hover:bg-white/5 hover:text-white"
               >
                 <User
                   size={18}
-                  className="text-slate-500 group-hover:text-cyan-400"
+                  className="text-slate-600 group-hover:text-cyan-400"
                 />
+
                 <span className="flex-1">
                   My Account
                 </span>
+
+                <ChevronRight size={15} />
+              </button>
+
+              <button
+                onClick={() =>
+                  setMenuOpen(false)
+                }
+                className="group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-slate-400 transition hover:bg-white/5 hover:text-white"
+              >
+                <Settings
+                  size={18}
+                  className="text-slate-600 group-hover:text-cyan-400"
+                />
+
+                <span className="flex-1">
+                  Settings
+                </span>
+
                 <ChevronRight size={15} />
               </button>
 
               <button
                 onClick={() => {
                   setMenuOpen(false);
+                  setManagerOpen(true);
                 }}
-                className="group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-white"
-              >
-                <Settings
-                  size={18}
-                  className="text-slate-500 group-hover:text-cyan-400"
-                />
-                <span className="flex-1">
-                  Settings
-                </span>
-                <ChevronRight size={15} />
-              </button>
-
-              <button
-                onClick={openManagerModal}
-                className="group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-white"
+                className="group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-slate-400 transition hover:bg-white/5 hover:text-white"
               >
                 <MessageCircle
                   size={18}
-                  className="text-slate-500 group-hover:text-cyan-400"
+                  className="text-slate-600 group-hover:text-cyan-400"
                 />
+
                 <span className="flex-1">
                   Contact Manager
                 </span>
+
                 <ChevronRight size={15} />
               </button>
             </div>
@@ -470,14 +570,18 @@ export default function AffiliatePage() {
               className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-red-400 transition hover:bg-red-500/10"
             >
               <LogOut size={18} />
+
               <span>Logout</span>
             </button>
           </div>
         </div>
       </aside>
 
-      {/* MAIN CONTENT */}
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:py-8">
+      {/* ========================================================= */}
+      {/* MAIN */}
+      {/* ========================================================= */}
+
+      <div className="mx-auto max-w-7xl px-4 py-7 sm:px-6 lg:py-9">
         {/* ERROR */}
         {error && (
           <div className="mb-6 rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-300">
@@ -485,150 +589,292 @@ export default function AffiliatePage() {
           </div>
         )}
 
+        {/* ===================================================== */}
         {/* WELCOME */}
+        {/* ===================================================== */}
+
         <section className="mb-7">
-          <p className="text-sm text-cyan-400">
+          <p className="text-sm font-medium text-cyan-400">
             Welcome back 👋
           </p>
 
-          <h1 className="mt-1 text-2xl font-bold sm:text-3xl">
-            {profile?.name || "Affiliate"}
+          <h1 className="mt-1 text-2xl font-extrabold tracking-tight sm:text-3xl">
+            {profile?.name ||
+              "Affiliate Dashboard"}
           </h1>
 
           <p className="mt-2 text-sm text-slate-500">
-            Monitor your affiliate performance,
-            clicks and earnings.
+            Track your traffic, conversions,
+            earnings and affiliate performance.
           </p>
         </section>
 
-        {/* KPI CARDS */}
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
+        {/* ===================================================== */}
+        {/* COLORFUL DASHBOARD FILE CARDS */}
+        {/* ===================================================== */}
+
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <ColorCard
             title="Total Clicks"
             value={totalClicks.toLocaleString()}
-            icon={<MousePointerClick size={20} />}
+            subtitle="All tracked clicks"
+            icon={
+              <MousePointerClick
+                size={21}
+              />
+            }
+            iconBox="bg-blue-500/15 text-blue-400"
+            border="hover:border-blue-400/30"
+            glow="bg-blue-500/5"
           />
 
-          <StatCard
+          <ColorCard
             title="Conversions"
             value={conversions.toLocaleString()}
-            icon={<TrendingUp size={20} />}
+            subtitle="Successful conversions"
+            icon={
+              <TrendingUp size={21} />
+            }
+            iconBox="bg-emerald-500/15 text-emerald-400"
+            border="hover:border-emerald-400/30"
+            glow="bg-emerald-500/5"
           />
 
-          <StatCard
+          <ColorCard
             title="Earnings"
-            value={`$${earnings.toFixed(2)}`}
-            icon={<DollarSign size={20} />}
+            value={`$${earnings.toFixed(
+              2
+            )}`}
+            subtitle="Total affiliate earnings"
+            icon={
+              <DollarSign size={21} />
+            }
+            iconBox="bg-purple-500/15 text-purple-400"
+            border="hover:border-purple-400/30"
+            glow="bg-purple-500/5"
           />
 
-          <StatCard
+          <ColorCard
             title="Conversion Rate"
             value={`${conversionRate}%`}
-            icon={<Activity size={20} />}
+            subtitle="Current conversion rate"
+            icon={<Activity size={21} />}
+            iconBox="bg-orange-500/15 text-orange-400"
+            border="hover:border-orange-400/30"
+            glow="bg-orange-500/5"
           />
         </section>
 
-        {/* SMART LINK */}
-        <section className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-5 shadow-xl">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <h2 className="font-semibold">
-                Your Smart Link
-              </h2>
+        {/* ===================================================== */}
+        {/* COLORFUL FILE SHORTCUTS */}
+        {/* ===================================================== */}
 
-              <p className="mt-1 text-xs text-slate-500">
-                Share this link to track your
-                affiliate traffic.
-              </p>
-            </div>
+        <section className="mt-6">
+          <div className="mb-4">
+            <h2 className="text-lg font-bold">
+              Dashboard Files
+            </h2>
 
-            <div className="rounded-lg bg-cyan-400/10 px-3 py-1 text-xs font-medium text-cyan-400">
-              Active
-            </div>
+            <p className="mt-1 text-xs text-slate-600">
+              Quick access to your affiliate tools.
+            </p>
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <div className="min-w-0 flex-1 overflow-hidden rounded-xl border border-white/10 bg-black/20 px-4 py-3">
-              <p className="truncate font-mono text-xs text-slate-400">
-                {smartLink}
-              </p>
-            </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <FileCard
+              title="Offers"
+              subtitle="Browse available offers"
+              icon={<Target size={20} />}
+              className="border-yellow-500/10 hover:border-yellow-400/30"
+              iconClass="bg-yellow-500/10 text-yellow-400"
+              onClick={() =>
+                router.push(
+                  "/affiliate/offers"
+                )
+              }
+            />
 
-            <button
-              onClick={copySmartLink}
-              className="flex items-center justify-center gap-2 rounded-xl bg-cyan-400 px-5 py-3 text-sm font-bold text-slate-950 transition hover:bg-cyan-300"
-            >
-              {copied ? (
-                <>
-                  <Check size={17} />
-                  Copied
-                </>
-              ) : (
-                <>
-                  <Copy size={17} />
-                  Copy Link
-                </>
-              )}
-            </button>
+            <FileCard
+              title="Smart Links"
+              subtitle="Manage tracking links"
+              icon={<Link2 size={20} />}
+              className="border-cyan-500/10 hover:border-cyan-400/30"
+              iconClass="bg-cyan-500/10 text-cyan-400"
+              onClick={() =>
+                document
+                  .getElementById(
+                    "smart-link"
+                  )
+                  ?.scrollIntoView({
+                    behavior: "smooth",
+                  })
+              }
+            />
+
+            <FileCard
+              title="Statistics"
+              subtitle="Analyze your traffic"
+              icon={
+                <BarChart3 size={20} />
+              }
+              className="border-pink-500/10 hover:border-pink-400/30"
+              iconClass="bg-pink-500/10 text-pink-400"
+              onClick={() =>
+                document
+                  .getElementById(
+                    "statistics"
+                  )
+                  ?.scrollIntoView({
+                    behavior: "smooth",
+                  })
+              }
+            />
+
+            <FileCard
+              title="Payments"
+              subtitle="Payment information"
+              icon={
+                <CreditCard size={20} />
+              }
+              className="border-indigo-500/10 hover:border-indigo-400/30"
+              iconClass="bg-indigo-500/10 text-indigo-400"
+              onClick={() => {}}
+            />
           </div>
         </section>
 
-        {/* PERFORMANCE */}
-        <section className="mt-6 grid gap-6 lg:grid-cols-2">
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-            <div className="mb-6 flex items-center justify-between">
-              <div>
-                <h2 className="font-semibold">
-                  Performance
-                </h2>
+        {/* ===================================================== */}
+        {/* SMART LINK */}
+        {/* ===================================================== */}
 
-                <p className="mt-1 text-xs text-slate-500">
-                  Your current affiliate activity
+        <section
+          id="smart-link"
+          className="mt-6 overflow-hidden rounded-2xl border border-cyan-400/10 bg-cyan-400/[0.025]"
+        >
+          <div className="flex flex-col gap-5 p-5 sm:p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-400">
+                  <Link2 size={21} />
+                </div>
+
+                <div>
+                  <h2 className="font-bold">
+                    Your Smart Link
+                  </h2>
+
+                  <p className="mt-1 text-xs text-slate-500">
+                    Share this link to track your
+                    affiliate traffic.
+                  </p>
+                </div>
+              </div>
+
+              <span className="rounded-full bg-emerald-400/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
+                Active
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+                <p className="truncate font-mono text-xs text-slate-400">
+                  {smartLink}
                 </p>
               </div>
 
-              <BarChart3
-                size={20}
-                className="text-cyan-400"
-              />
+              <button
+                onClick={copySmartLink}
+                className="flex items-center justify-center gap-2 rounded-xl bg-cyan-400 px-5 py-3 text-sm font-bold text-slate-950 transition hover:bg-cyan-300"
+              >
+                {copied ? (
+                  <>
+                    <Check size={17} />
+                    Copied
+                  </>
+                ) : (
+                  <>
+                    <Copy size={17} />
+                    Copy Link
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* ===================================================== */}
+        {/* STATISTICS */}
+        {/* ===================================================== */}
+
+        <section
+          id="statistics"
+          className="mt-6 grid gap-6 lg:grid-cols-2"
+        >
+          {/* PERFORMANCE FILE */}
+          <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-5">
+            <div className="mb-6 flex items-center justify-between">
+              <div>
+                <h2 className="font-bold">
+                  Performance
+                </h2>
+
+                <p className="mt-1 text-xs text-slate-600">
+                  Current affiliate activity
+                </p>
+              </div>
+
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-pink-500/10 text-pink-400">
+                <BarChart3 size={19} />
+              </div>
             </div>
 
             <div className="space-y-5">
               <ProgressRow
                 label="Clicks"
                 value={totalClicks}
-                max={Math.max(totalClicks, 1)}
+                max={Math.max(
+                  totalClicks,
+                  1
+                )}
+                barClass="bg-blue-400"
               />
 
               <ProgressRow
                 label="Conversions"
                 value={conversions}
-                max={Math.max(totalClicks, 1)}
+                max={Math.max(
+                  totalClicks,
+                  1
+                )}
+                barClass="bg-emerald-400"
               />
 
               <ProgressRow
                 label="Conversion Rate"
-                value={Number(conversionRate)}
+                value={Number(
+                  conversionRate
+                )}
                 max={100}
                 suffix="%"
+                barClass="bg-orange-400"
               />
             </div>
           </div>
 
-          {/* ACCOUNT CARD */}
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+          {/* ACCOUNT FILE */}
+          <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-5">
             <div className="mb-5 flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-400">
-                <User size={20} />
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-purple-500/10 text-purple-400">
+                <FileText size={20} />
               </div>
 
               <div>
-                <h2 className="font-semibold">
+                <h2 className="font-bold">
                   Affiliate Account
                 </h2>
 
-                <p className="text-xs text-slate-500">
-                  Your account information
+                <p className="text-xs text-slate-600">
+                  Account information
                 </p>
               </div>
             </div>
@@ -636,12 +882,17 @@ export default function AffiliatePage() {
             <div className="space-y-3">
               <InfoRow
                 label="Name"
-                value={profile?.name || "Affiliate"}
+                value={
+                  profile?.name ||
+                  "Affiliate"
+                }
               />
 
               <InfoRow
                 label="Email"
-                value={profile?.email || "-"}
+                value={
+                  profile?.email || "-"
+                }
               />
 
               <InfoRow
@@ -658,20 +909,65 @@ export default function AffiliatePage() {
           </div>
         </section>
 
-        {/* RECENT CONVERSIONS */}
-        <section className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-          <div className="mb-5 flex items-center justify-between">
-            <div>
-              <h2 className="font-semibold">
-                Recent Activity
-              </h2>
+        {/* ===================================================== */}
+        {/* TRAFFIC OVERVIEW */}
+        {/* ===================================================== */}
 
-              <p className="mt-1 text-xs text-slate-500">
-                Latest tracked affiliate activity
-              </p>
+        <section className="mt-6 grid gap-4 sm:grid-cols-3">
+          <MiniFile
+            icon={<Globe size={19} />}
+            title="Traffic"
+            value={totalClicks.toLocaleString()}
+            subtitle="Tracked visits"
+            iconClass="bg-blue-500/10 text-blue-400"
+          />
+
+          <MiniFile
+            icon={<Smartphone size={19} />}
+            title="Mobile"
+            value={countDevice(
+              clicks,
+              "mobile"
+            ).toLocaleString()}
+            subtitle="Mobile traffic"
+            iconClass="bg-green-500/10 text-green-400"
+          />
+
+          <MiniFile
+            icon={<Monitor size={19} />}
+            title="Desktop"
+            value={countDevice(
+              clicks,
+              "desktop"
+            ).toLocaleString()}
+            subtitle="Desktop traffic"
+            iconClass="bg-purple-500/10 text-purple-400"
+          />
+        </section>
+
+        {/* ===================================================== */}
+        {/* RECENT ACTIVITY */}
+        {/* ===================================================== */}
+
+        <section className="mt-6 rounded-2xl border border-white/10 bg-white/[0.025] p-5">
+          <div className="mb-5 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500/10 text-orange-400">
+                <Clock3 size={19} />
+              </div>
+
+              <div>
+                <h2 className="font-bold">
+                  Recent Activity
+                </h2>
+
+                <p className="mt-1 text-xs text-slate-600">
+                  Latest affiliate activity
+                </p>
+              </div>
             </div>
 
-            <span className="rounded-lg bg-white/5 px-3 py-1.5 text-xs text-slate-400">
+            <span className="rounded-lg bg-white/5 px-3 py-1.5 text-xs text-slate-500">
               {clicks.length} records
             </span>
           </div>
@@ -680,23 +976,23 @@ export default function AffiliatePage() {
             <div className="rounded-xl border border-dashed border-white/10 py-12 text-center">
               <MousePointerClick
                 size={30}
-                className="mx-auto mb-3 text-slate-600"
+                className="mx-auto mb-3 text-slate-700"
               />
 
-              <p className="text-sm text-slate-400">
+              <p className="text-sm text-slate-500">
                 No activity yet
               </p>
 
-              <p className="mt-1 text-xs text-slate-600">
-                Start sharing your smart link to
-                generate traffic.
+              <p className="mt-1 text-xs text-slate-700">
+                Start sharing your smart link
+                to generate traffic.
               </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[650px] text-left text-sm">
+              <table className="w-full min-w-[680px] text-left text-sm">
                 <thead>
-                  <tr className="border-b border-white/10 text-xs text-slate-500">
+                  <tr className="border-b border-white/10 text-xs text-slate-600">
                     <th className="px-3 py-3 font-medium">
                       Date
                     </th>
@@ -720,121 +1016,167 @@ export default function AffiliatePage() {
                 </thead>
 
                 <tbody>
-                  {clicks.slice(0, 10).map(
-                    (row, index) => {
-                      const status = String(
-                        row.status || "click"
-                      );
+                  {clicks
+                    .slice(0, 10)
+                    .map(
+                      (
+                        row,
+                        index
+                      ) => {
+                        const status =
+                          String(
+                            row.status ||
+                              "click"
+                          );
 
-                      const isConverted =
-                        [
-                          "converted",
-                          "conversion",
-                          "approved",
-                          "paid",
-                        ].includes(
-                          status.toLowerCase()
-                        ) ||
-                        Boolean(row.converted_at);
+                        const isConverted =
+                          [
+                            "converted",
+                            "conversion",
+                            "approved",
+                            "paid",
+                          ].includes(
+                            status.toLowerCase()
+                          ) ||
+                          Boolean(
+                            row.converted_at
+                          );
 
-                      return (
-                        <tr
-                          key={
-                            row.click_id ||
-                            `${row.created_at}-${index}`
-                          }
-                          className="border-b border-white/5 last:border-0"
-                        >
-                          <td className="px-3 py-4 text-slate-300">
-                            {formatDate(
-                              row.created_at
-                            )}
-                          </td>
+                        return (
+                          <tr
+                            key={
+                              row.click_id ||
+                              `${row.created_at}-${index}`
+                            }
+                            className="border-b border-white/5 last:border-0"
+                          >
+                            <td className="px-3 py-4 text-slate-400">
+                              {formatDate(
+                                row.created_at
+                              )}
+                            </td>
 
-                          <td className="px-3 py-4 text-slate-400">
-                            {row.country || "-"}
-                          </td>
+                            <td className="px-3 py-4 text-slate-500">
+                              {row.country ||
+                                "-"}
+                            </td>
 
-                          <td className="px-3 py-4 text-slate-400">
-                            {row.device || "-"}
-                          </td>
+                            <td className="px-3 py-4 text-slate-500">
+                              {row.device ||
+                                "-"}
+                            </td>
 
-                          <td className="px-3 py-4">
-                            <span
-                              className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
-                                isConverted
-                                  ? "bg-emerald-400/10 text-emerald-400"
-                                  : "bg-slate-400/10 text-slate-400"
-                              }`}
-                            >
-                              {isConverted
-                                ? "Converted"
-                                : "Click"}
-                            </span>
-                          </td>
+                            <td className="px-3 py-4">
+                              <span
+                                className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                                  isConverted
+                                    ? "bg-emerald-400/10 text-emerald-400"
+                                    : "bg-slate-400/10 text-slate-500"
+                                }`}
+                              >
+                                {isConverted
+                                  ? "Converted"
+                                  : "Click"}
+                              </span>
+                            </td>
 
-                          <td className="px-3 py-4 text-right font-medium text-cyan-400">
-                            $
-                            {Number(
-                              row.payout || 0
-                            ).toFixed(2)}
-                          </td>
-                        </tr>
-                      );
-                    }
-                  )}
+                            <td className="px-3 py-4 text-right font-semibold text-cyan-400">
+                              $
+                              {Number(
+                                row.payout ||
+                                  0
+                              ).toFixed(
+                                2
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      }
+                    )}
                 </tbody>
               </table>
             </div>
           )}
         </section>
 
-        {/* QUICK ACTIONS */}
-        <section className="mt-6 grid gap-4 sm:grid-cols-3">
-          <QuickAction
-            icon={<Target size={20} />}
-            title="Browse Offers"
-            description="Find offers to promote"
-            onClick={() =>
-              router.push(
-                "/affiliate/offers"
-              )
-            }
-          />
+        {/* ===================================================== */}
+        {/* QUICK ACTION FILES */}
+        {/* ===================================================== */}
 
-          <QuickAction
-            icon={<Link2 size={20} />}
-            title="Smart Link"
-            description="Copy your tracking link"
-            onClick={copySmartLink}
-          />
+        <section className="mt-6">
+          <div className="mb-4">
+            <h2 className="text-lg font-bold">
+              Quick Actions
+            </h2>
+          </div>
 
-          <QuickAction
-            icon={<MessageCircle size={20} />}
-            title="Contact Manager"
-            description="Talk with your manager"
-            onClick={() =>
-              setManagerOpen(true)
-            }
-          />
+          <div className="grid gap-4 sm:grid-cols-3">
+            <FileCard
+              title="Browse Offers"
+              subtitle="Find offers to promote"
+              icon={<Target size={20} />}
+              className="border-yellow-500/10 hover:border-yellow-400/30"
+              iconClass="bg-yellow-500/10 text-yellow-400"
+              onClick={() =>
+                router.push(
+                  "/affiliate/offers"
+                )
+              }
+            />
+
+            <FileCard
+              title="Copy Smart Link"
+              subtitle="Copy your tracking link"
+              icon={<Link2 size={20} />}
+              className="border-cyan-500/10 hover:border-cyan-400/30"
+              iconClass="bg-cyan-500/10 text-cyan-400"
+              onClick={copySmartLink}
+            />
+
+            <FileCard
+              title="Contact Manager"
+              subtitle="Talk with your manager"
+              icon={
+                <MessageCircle
+                  size={20}
+                />
+              }
+              className="border-green-500/10 hover:border-green-400/30"
+              iconClass="bg-green-500/10 text-green-400"
+              onClick={() =>
+                setManagerOpen(true)
+              }
+            />
+          </div>
         </section>
 
+        {/* ===================================================== */}
         {/* FOOTER */}
-        <footer className="py-8 text-center text-xs text-slate-600">
-          © {new Date().getFullYear()} UpNetworkCPA
-          {" • "}
+        {/* ===================================================== */}
+
+        <footer className="py-10 text-center text-xs text-slate-700">
+          © {new Date().getFullYear()}{" "}
+          UpNetworkCPA
+          <span className="mx-2">
+            •
+          </span>
           Affiliate Panel
         </footer>
       </div>
 
+      {/* ========================================================= */}
       {/* MANAGER MODAL */}
+      {/* ========================================================= */}
+
       {managerOpen && (
         <div
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
-          onClick={() => setManagerOpen(false)}
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm"
+          onClick={() =>
+            setManagerOpen(false)
+          }
         >
           <div
-            className="w-full max-w-md rounded-2xl border border-white/10 bg-slate-950 p-5 shadow-2xl"
+            className="w-full max-w-md rounded-2xl border border-white/10 bg-[#090d17] p-5 shadow-2xl"
             onClick={(event) =>
               event.stopPropagation()
             }
@@ -845,8 +1187,9 @@ export default function AffiliatePage() {
                   Contact Manager
                 </h2>
 
-                <p className="mt-1 text-xs text-slate-500">
-                  Choose a panel manager on Telegram.
+                <p className="mt-1 text-xs text-slate-600">
+                  Choose a panel manager on
+                  Telegram.
                 </p>
               </div>
 
@@ -865,12 +1208,14 @@ export default function AffiliatePage() {
                 (manager, index) => (
                   <a
                     key={manager.id}
-                    href={manager.telegramUrl}
+                    href={
+                      manager.telegramUrl
+                    }
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4 transition hover:border-cyan-400/30 hover:bg-cyan-400/5"
+                    className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.025] p-4 transition hover:border-cyan-400/30 hover:bg-cyan-400/5"
                   >
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-500/10 text-cyan-400">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-400">
                       <MessageCircle
                         size={19}
                       />
@@ -878,17 +1223,20 @@ export default function AffiliatePage() {
 
                     <div className="flex-1">
                       <p className="text-sm font-semibold">
-                        Manager {index + 1}
+                        Manager{" "}
+                        {index + 1}
                       </p>
 
                       <p className="mt-0.5 text-xs text-cyan-400">
-                        {manager.telegram}
+                        {
+                          manager.telegram
+                        }
                       </p>
                     </div>
 
                     <ChevronRight
                       size={17}
-                      className="text-slate-600"
+                      className="text-slate-700"
                     />
                   </a>
                 )
@@ -901,63 +1249,193 @@ export default function AffiliatePage() {
   );
 }
 
-/* ---------------- COMPONENTS ---------------- */
+/* ============================================================= */
+/* COLOR CARD */
+/* ============================================================= */
 
-function StatCard({
+function ColorCard({
   title,
   value,
+  subtitle,
   icon,
+  iconBox,
+  border,
+  glow,
 }: {
   title: string;
   value: string;
+  subtitle: string;
   icon: React.ReactNode;
+  iconBox: string;
+  border: string;
+  glow: string;
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 transition hover:border-cyan-400/20">
-      <div className="mb-4 flex items-center justify-between">
-        <span className="text-xs font-medium uppercase tracking-wider text-slate-500">
-          {title}
-        </span>
+    <div
+      className={`group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025] p-5 transition duration-300 ${border}`}
+    >
+      <div
+        className={`absolute -right-8 -top-8 h-28 w-28 rounded-full blur-3xl ${glow}`}
+      />
 
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-400">
+      <div className="relative">
+        <div className="mb-5 flex items-center justify-between">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            {title}
+          </span>
+
+          <div
+            className={`flex h-10 w-10 items-center justify-center rounded-xl ${iconBox}`}
+          >
+            {icon}
+          </div>
+        </div>
+
+        <p className="text-2xl font-extrabold tracking-tight">
+          {value}
+        </p>
+
+        <p className="mt-2 text-xs text-slate-600">
+          {subtitle}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================= */
+/* FILE CARD */
+/* ============================================================= */
+
+function FileCard({
+  title,
+  subtitle,
+  icon,
+  className,
+  iconClass,
+  onClick,
+}: {
+  title: string;
+  subtitle: string;
+  icon: React.ReactNode;
+  className?: string;
+  iconClass?: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`group w-full rounded-2xl border bg-white/[0.02] p-5 text-left transition duration-300 hover:bg-white/[0.045] ${className || ""}`}
+    >
+      <div className="flex items-center gap-4">
+        <div
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+            iconClass ||
+            "bg-white/5 text-slate-400"
+          }`}
+        >
           {icon}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-slate-200">
+            {title}
+          </p>
+
+          <p className="mt-1 truncate text-xs text-slate-600">
+            {subtitle}
+          </p>
+        </div>
+
+        <ChevronRight
+          size={17}
+          className="text-slate-700 transition group-hover:translate-x-1 group-hover:text-slate-400"
+        />
+      </div>
+    </button>
+  );
+}
+
+/* ============================================================= */
+/* MINI FILE */
+/* ============================================================= */
+
+function MiniFile({
+  icon,
+  title,
+  value,
+  subtitle,
+  iconClass,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  value: string;
+  subtitle: string;
+  iconClass: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-5">
+      <div className="flex items-center gap-3">
+        <div
+          className={`flex h-10 w-10 items-center justify-center rounded-xl ${iconClass}`}
+        >
+          {icon}
+        </div>
+
+        <div>
+          <p className="text-xs text-slate-600">
+            {title}
+          </p>
+
+          <p className="text-xl font-bold">
+            {value}
+          </p>
         </div>
       </div>
 
-      <p className="text-2xl font-bold">
-        {value}
+      <p className="mt-3 text-xs text-slate-700">
+        {subtitle}
       </p>
     </div>
   );
 }
+
+/* ============================================================= */
+/* PROGRESS */
+/* ============================================================= */
 
 function ProgressRow({
   label,
   value,
   max,
   suffix = "",
+  barClass,
 }: {
   label: string;
   value: number;
   max: number;
   suffix?: string;
+  barClass: string;
 }) {
   const percentage =
     max > 0
       ? Math.min(
           100,
-          Math.max(0, (value / max) * 100)
+          Math.max(
+            0,
+            (value / max) * 100
+          )
         )
       : 0;
 
   return (
     <div>
       <div className="mb-2 flex items-center justify-between text-xs">
-        <span className="text-slate-400">
+        <span className="text-slate-500">
           {label}
         </span>
 
-        <span className="font-medium text-slate-300">
+        <span className="font-semibold text-slate-300">
           {value.toLocaleString()}
           {suffix}
         </span>
@@ -965,7 +1443,7 @@ function ProgressRow({
 
       <div className="h-2 overflow-hidden rounded-full bg-white/5">
         <div
-          className="h-full rounded-full bg-cyan-400 transition-all duration-500"
+          className={`h-full rounded-full transition-all duration-700 ${barClass}`}
           style={{
             width: `${percentage}%`,
           }}
@@ -974,6 +1452,10 @@ function ProgressRow({
     </div>
   );
 }
+
+/* ============================================================= */
+/* INFO ROW */
+/* ============================================================= */
 
 function InfoRow({
   label,
@@ -985,13 +1467,13 @@ function InfoRow({
   valueClass?: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-xl bg-white/[0.025] px-3 py-3">
-      <span className="text-xs text-slate-500">
+    <div className="flex items-center justify-between gap-4 rounded-xl bg-white/[0.02] px-3 py-3">
+      <span className="text-xs text-slate-600">
         {label}
       </span>
 
       <span
-        className={`max-w-[65%] truncate text-right text-xs font-medium ${valueClass}`}
+        className={`max-w-[65%] truncate text-right text-xs font-semibold ${valueClass}`}
       >
         {value}
       </span>
@@ -999,36 +1481,26 @@ function InfoRow({
   );
 }
 
-function QuickAction({
-  icon,
-  title,
-  description,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="group rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-left transition hover:border-cyan-400/20 hover:bg-white/[0.05]"
-    >
-      <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-400 transition group-hover:bg-cyan-400/15">
-        {icon}
-      </div>
+/* ============================================================= */
+/* DEVICE COUNTER */
+/* ============================================================= */
 
-      <p className="font-semibold">
-        {title}
-      </p>
+function countDevice(
+  clicks: ClickRow[],
+  type: string
+) {
+  return clicks.filter((row) => {
+    const device = String(
+      row.device || ""
+    ).toLowerCase();
 
-      <p className="mt-1 text-xs text-slate-500">
-        {description}
-      </p>
-    </button>
-  );
+    return device.includes(type);
+  }).length;
 }
+
+/* ============================================================= */
+/* DATE FORMAT */
+/* ============================================================= */
 
 function formatDate(value?: string) {
   if (!value) return "-";
@@ -1039,11 +1511,14 @@ function formatDate(value?: string) {
     return "-";
   }
 
-  return date.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-          }
+  return date.toLocaleString(
+    "en-US",
+    {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }
+  );
+        }
