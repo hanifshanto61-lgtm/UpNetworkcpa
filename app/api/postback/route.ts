@@ -8,7 +8,9 @@ export async function GET(req: NextRequest) {
     const searchParams = req.nextUrl.searchParams;
 
     const click_id =
-      searchParams.get("click_id") || searchParams.get("s1");
+      searchParams.get("click_id") ||
+      searchParams.get("s1") ||
+      searchParams.get("sub1");
 
     const payout = searchParams.get("payout") || "0";
 
