@@ -78,6 +78,10 @@ export default function AffiliatePage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [referralCopied, setReferralCopied] = useState(false);
+  const [referrals, setReferrals] = useState<any[]>([]);
+  const [referralLoading, setReferralLoading] = useState(false);
+  const [referralError, setReferralError] = useState("");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [profile, setProfile] = useState<{
     id: string;
@@ -124,11 +128,42 @@ export default function AffiliatePage() {
       if (!response.ok) throw new Error(data?.error || "Unable to load dashboard.");
       setProfile(data.profile || null);
       setClicks(data.clicks || []);
+
+      await loadReferrals(sessionData.session.access_token);
     } catch (err: any) {
       console.error(err);
       setError(err?.message || "Unable to load affiliate dashboard.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadReferrals(accessToken: string) {
+    try {
+      setReferralLoading(true);
+      setReferralError("");
+
+      const response = await fetch("/api/affiliate/referrals", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        cache: "no-store",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.error || "Unable to load referrals.");
+      }
+
+      setReferrals(Array.isArray(data.referrals) ? data.referrals : []);
+    } catch (err: any) {
+      console.error("Referral loading error:", err);
+      setReferralError(err?.message || "Unable to load referrals.");
+      setReferrals([]);
+    } finally {
+      setReferralLoading(false);
     }
   }
 
@@ -166,6 +201,21 @@ export default function AffiliatePage() {
     typeof window !== "undefined"
       ? `${window.location.origin}/api/track?aid=${encodeURIComponent(affiliateId)}&sl=default-smartlink`
       : `/api/track?aid=${encodeURIComponent(affiliateId)}&sl=default-smartlink`;
+
+  const referralLink =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/signup?ref=${encodeURIComponent(affiliateId)}`
+      : `/signup?ref=${encodeURIComponent(affiliateId)}`;
+
+  async function copyReferralLink() {
+    try {
+      await navigator.clipboard.writeText(referralLink);
+      setReferralCopied(true);
+      setTimeout(() => setReferralCopied(false), 2000);
+    } catch (err) {
+      console.error(err);
+    }
+  }
 
   async function copySmartLink() {
     try {
@@ -374,8 +424,58 @@ export default function AffiliatePage() {
           </section>
 
           <section id="referrals" className={`mt-6 scroll-mt-24 rounded-2xl border p-5 sm:p-6 ${dark ? "border-violet-400/10 bg-white/[0.025]" : "border-violet-200 bg-white shadow-sm"}`}>
-            <div className="flex items-center gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-400/10 text-violet-500"><Users size={20} /></div><div><h2 className="font-bold">Referrals</h2><p className={`text-xs ${faint}`}>Your affiliate referral information</p></div></div>
-            <div className="mt-5 rounded-2xl bg-violet-400/10 p-5"><p className="text-xs text-violet-500">Affiliate ID</p><p className="mt-1 break-all font-mono text-lg font-bold text-violet-500">{affiliateId}</p><p className={`mt-2 text-xs ${faint}`}>Referral tracking will be connected when the referral database module is enabled.</p></div>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-400/10 text-violet-500"><Users size={20} /></div>
+                <div>
+                  <h2 className="font-bold">Referrals</h2>
+                  <p className={`text-xs ${faint}`}>Invite affiliates using your personal referral link.</p>
+                </div>
+              </div>
+              <div className="rounded-xl bg-violet-400/10 px-4 py-2 text-center">
+                <p className="text-[10px] uppercase tracking-wider text-violet-500">Referred Affiliates</p>
+                <p className="text-xl font-extrabold text-violet-500">{referrals.length}</p>
+              </div>
+            </div>
+
+            <div className="mt-5">
+              <p className={`mb-2 text-xs font-semibold ${muted}`}>Your Referral Link</p>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <div className={`min-w-0 flex-1 rounded-xl border px-4 py-3 ${dark ? "border-white/10 bg-black/20" : "border-slate-200 bg-slate-50"}`}>
+                  <p className={`truncate font-mono text-xs ${muted}`}>{referralLink}</p>
+                </div>
+                <button onClick={copyReferralLink} className="flex items-center justify-center gap-2 rounded-xl bg-violet-500 px-5 py-3 text-sm font-bold text-white hover:bg-violet-600">
+                  {referralCopied ? <><Check size={17} />Copied</> : <><Copy size={17} />Copy Referral</>}
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-5">
+              <p className={`mb-3 text-xs font-semibold ${muted}`}>Referred Affiliates</p>
+              {referralLoading ? (
+                <div className={`rounded-xl border p-5 text-center text-sm ${border} ${faint}`}>Loading referrals...</div>
+              ) : referralError ? (
+                <div className="rounded-xl border border-amber-300/30 bg-amber-400/10 p-4 text-xs text-amber-600">{referralError}</div>
+              ) : referrals.length === 0 ? (
+                <div className={`rounded-xl border border-dashed p-6 text-center ${dark ? "border-white/10" : "border-slate-200"}`}>
+                  <Users size={28} className="mx-auto mb-2 text-violet-400" />
+                  <p className={`text-sm ${muted}`}>No referred affiliates yet.</p>
+                  <p className={`mt-1 text-xs ${faint}`}>Share your referral link to invite new affiliates.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {referrals.slice(0, 20).map((referral) => (
+                    <div key={referral.id} className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${dark ? "border-white/10 bg-white/[0.02]" : "border-slate-200 bg-slate-50"}`}>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold">{referral.name || "Affiliate"}</p>
+                        <p className={`truncate text-xs ${faint}`}>{referral.affiliateId}</p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-emerald-400/10 px-2.5 py-1 text-[10px] font-semibold text-emerald-500">Referred</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </section>
 
           <section id="payments" className={`mt-6 scroll-mt-24 rounded-2xl border p-5 sm:p-6 ${dark ? "border-indigo-400/10 bg-white/[0.025]" : "border-indigo-200 bg-white shadow-sm"}`}>
@@ -429,4 +529,4 @@ function formatDate(value?: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
   return date.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
-              }
+}
