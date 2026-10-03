@@ -19,7 +19,6 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = createClient(supabaseUrl, serviceRoleKey);
-
   const { searchParams } = new URL(request.url);
 
   const affiliateId =
@@ -80,5 +79,8 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  return NextResponse.redirect(smartLink);
+  const redirectUrl = new URL(smartLink);
+  redirectUrl.searchParams.set("sub1", clickId);
+
+  return NextResponse.redirect(redirectUrl.toString());
 }
