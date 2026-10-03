@@ -40,17 +40,11 @@ export default function LoginPage() {
       }
 
       const signedInEmail = data.user.email?.toLowerCase();
-      const accountType = data.user.user_metadata?.account_type;
 
       if (signedInEmail === ADMIN_EMAIL.toLowerCase()) {
         router.replace("/admin");
-      } else if (accountType === "affiliate") {
-        router.replace("/affiliate");
       } else {
-        await supabase.auth.signOut();
-        setMessage(
-          "Your account role is not set. Please contact the administrator."
-        );
+        router.replace("/affiliate");
       }
     } catch {
       setMessage("Something went wrong. Please try again.");
