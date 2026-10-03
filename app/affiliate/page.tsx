@@ -279,7 +279,8 @@ export default function AffiliatePage() {
         <div
           className="absolute inset-0 bg-center bg-no-repeat"
           style={{
-            backgroundImage: "url('/upnetwork-logo.png')",
+            backgroundImage:
+              "url('/file_000000013688207a03d42a2550c1954.png')",
             backgroundSize: "min(720px, 82vw)",
             opacity: 0.08,
           }}
@@ -321,11 +322,7 @@ export default function AffiliatePage() {
 
             </div>
 
-            {/* TOP RIGHT */}
-
             <div className="flex items-center gap-2">
-
-              {/* Affiliate ID */}
 
               <div className="hidden rounded-xl border border-cyan-400/10 bg-cyan-400/[0.04] px-3 py-2 md:block">
                 <p className="text-[9px] uppercase tracking-wider text-slate-600">
@@ -336,8 +333,6 @@ export default function AffiliatePage() {
                   {affiliateId}
                 </p>
               </div>
-
-              {/* Profile */}
 
               <button
                 onClick={() => {
@@ -355,8 +350,6 @@ export default function AffiliatePage() {
                 </span>
               </button>
 
-              {/* Settings */}
-
               <button
                 onClick={() => {
                   setSettingsOpen(!settingsOpen);
@@ -368,8 +361,6 @@ export default function AffiliatePage() {
                 <Settings size={18} />
               </button>
 
-              {/* Logout */}
-
               <button
                 onClick={handleLogout}
                 className="hidden h-10 items-center gap-2 rounded-xl border border-red-500/10 bg-red-500/[0.04] px-3 text-xs font-semibold text-red-400 transition hover:bg-red-500/10 sm:flex"
@@ -380,8 +371,6 @@ export default function AffiliatePage() {
 
             </div>
           </div>
-
-          {/* PROFILE DROPDOWN */}
 
           {profileOpen && (
             <div className="absolute right-4 top-[70px] z-50 w-64 rounded-2xl border border-white/10 bg-[#090d17] p-4 shadow-2xl sm:right-6">
@@ -436,8 +425,6 @@ export default function AffiliatePage() {
             </div>
           )}
 
-          {/* SETTINGS */}
-
           {settingsOpen && (
             <div className="absolute right-4 top-[70px] z-50 w-64 rounded-2xl border border-white/10 bg-[#090d17] p-4 shadow-2xl sm:right-6">
 
@@ -476,20 +463,12 @@ export default function AffiliatePage() {
 
         </header>
 
-        {/* ================================================= */}
-        {/* SIDEBAR OVERLAY */}
-        {/* ================================================= */}
-
         {menuOpen && (
           <div
             className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm"
             onClick={() => setMenuOpen(false)}
           />
         )}
-
-        {/* ================================================= */}
-        {/* SIDEBAR */}
-        {/* ================================================= */}
 
         <aside
           className={`fixed left-0 top-0 z-[60] h-full w-[290px] max-w-[88vw] border-r border-white/10 bg-[#090d17] shadow-2xl transition-transform duration-300 ${
@@ -519,8 +498,6 @@ export default function AffiliatePage() {
 
             </div>
 
-            {/* SIDEBAR PROFILE */}
-
             <div className="border-b border-white/10 p-5">
 
               <div className="flex items-center gap-3 rounded-2xl border border-white/5 bg-white/[0.03] p-3">
@@ -542,8 +519,6 @@ export default function AffiliatePage() {
               </div>
 
             </div>
-
-            {/* NAVIGATION */}
 
             <nav className="flex-1 overflow-y-auto p-4">
 
@@ -675,10 +650,6 @@ export default function AffiliatePage() {
           </div>
         </aside>
 
-        {/* ================================================= */}
-        {/* MAIN */}
-        {/* ================================================= */}
-
         <div className="mx-auto max-w-7xl px-4 py-7 sm:px-6 lg:py-9">
 
           {error && (
@@ -686,8 +657,6 @@ export default function AffiliatePage() {
               {error}
             </div>
           )}
-
-          {/* WELCOME */}
 
           <section className="mb-7">
 
@@ -705,8 +674,6 @@ export default function AffiliatePage() {
             </p>
 
           </section>
-
-          {/* COLORFUL KPI CARDS */}
 
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
 
@@ -751,8 +718,6 @@ export default function AffiliatePage() {
             />
 
           </section>
-
-          {/* DASHBOARD FILES */}
 
           <section className="mt-6">
 
@@ -822,8 +787,6 @@ export default function AffiliatePage() {
 
           </section>
 
-          {/* SMART LINK */}
-
           <section
             id="smart-link"
             className="mt-6 overflow-hidden rounded-2xl border border-cyan-400/10 bg-cyan-400/[0.025]"
@@ -888,8 +851,6 @@ export default function AffiliatePage() {
             </div>
 
           </section>
-
-          {/* STATISTICS */}
 
           <section
             id="statistics"
@@ -993,8 +954,6 @@ export default function AffiliatePage() {
 
           </section>
 
-          {/* TRAFFIC FILES */}
-
           <section className="mt-6 grid gap-4 sm:grid-cols-3">
 
             <MiniFile
@@ -1028,8 +987,6 @@ export default function AffiliatePage() {
             />
 
           </section>
-
-          {/* RECENT ACTIVITY */}
 
           <section className="mt-6 rounded-2xl border border-white/10 bg-white/[0.025] p-5">
 
@@ -1188,8 +1145,6 @@ export default function AffiliatePage() {
 
           </section>
 
-          {/* QUICK ACTIONS */}
-
           <section className="mt-6">
 
             <div className="mb-4">
@@ -1240,10 +1195,6 @@ export default function AffiliatePage() {
           </footer>
 
         </div>
-
-        {/* ================================================= */}
-        {/* MANAGER MODAL */}
-        {/* ================================================= */}
 
         {managerOpen && (
           <div
@@ -1328,10 +1279,6 @@ export default function AffiliatePage() {
   );
 }
 
-/* ============================================================= */
-/* COLOR CARD */
-/* ============================================================= */
-
 function ColorCard({
   title,
   value,
@@ -1387,10 +1334,6 @@ function ColorCard({
   );
 }
 
-/* ============================================================= */
-/* FILE CARD */
-/* ============================================================= */
-
 function FileCard({
   title,
   subtitle,
@@ -1444,10 +1387,6 @@ function FileCard({
   );
 }
 
-/* ============================================================= */
-/* MINI FILE */
-/* ============================================================= */
-
 function MiniFile({
   icon,
   title,
@@ -1493,10 +1432,6 @@ function MiniFile({
     </div>
   );
 }
-
-/* ============================================================= */
-/* PROGRESS ROW */
-/* ============================================================= */
 
 function ProgressRow({
   label,
@@ -1550,10 +1485,6 @@ function ProgressRow({
   );
 }
 
-/* ============================================================= */
-/* INFO ROW */
-/* ============================================================= */
-
 function InfoRow({
   label,
   value,
@@ -1580,10 +1511,6 @@ function InfoRow({
   );
 }
 
-/* ============================================================= */
-/* DEVICE COUNT */
-/* ============================================================= */
-
 function countDevice(
   clicks: ClickRow[],
   type: string
@@ -1596,10 +1523,6 @@ function countDevice(
     return device.includes(type);
   }).length;
 }
-
-/* ============================================================= */
-/* DATE FORMAT */
-/* ============================================================= */
 
 function formatDate(value?: string) {
   if (!value) return "-";
@@ -1617,4 +1540,4 @@ function formatDate(value?: string) {
     hour: "numeric",
     minute: "2-digit",
   });
-        }
+      }
