@@ -269,32 +269,51 @@ export default function AffiliatePage() {
     <main className="relative min-h-screen overflow-x-hidden bg-[#05070c] text-white">
 
       {/* ================================================= */}
-      {/* UPNETWORK CPA LOGO BACKGROUND */}
+      {/* UPNETWORK CPA WATERMARK BACKGROUND */}
       {/* ================================================= */}
 
       <div
         className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
         aria-hidden="true"
       >
+        {/* Base background */}
         <div className="absolute inset-0 bg-[#05070c]" />
 
+        {/* Large visible logo watermark */}
         <div
-          className="absolute inset-0 bg-center bg-no-repeat"
+          className="absolute left-1/2 top-1/2 h-[620px] w-[620px] -translate-x-1/2 -translate-y-1/2 bg-center bg-contain bg-no-repeat sm:h-[760px] sm:w-[760px] lg:h-[900px] lg:w-[900px]"
           style={{
             backgroundImage:
               "url('/file_000000013688207a03d42a2550c1954.png')",
-            backgroundSize: "min(680px, 82vw)",
-            opacity: 0.20,
+            opacity: 0.30,
+            filter: "drop-shadow(0 0 35px rgba(245,158,11,0.08))",
           }}
         />
 
-        <div className="absolute inset-0 bg-[#05070c]/25" />
+        {/* Soft center glow */}
+        <div
+          className="absolute left-1/2 top-1/2 h-[520px] w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
+          style={{
+            background:
+              "radial-gradient(circle, rgba(245,158,11,0.07) 0%, rgba(5,7,12,0) 72%)",
+          }}
+        />
 
+        {/* Keep dashboard content readable */}
         <div
           className="absolute inset-0"
           style={{
             background:
-              "radial-gradient(circle at center, transparent 20%, rgba(5,7,12,0.45) 100%)",
+              "linear-gradient(180deg, rgba(5,7,12,0.48) 0%, rgba(5,7,12,0.30) 45%, rgba(5,7,12,0.58) 100%)",
+          }}
+        />
+
+        {/* Edge vignette */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(circle at center, transparent 18%, rgba(5,7,12,0.22) 58%, rgba(5,7,12,0.72) 100%)",
           }}
         />
       </div>
@@ -695,6 +714,8 @@ export default function AffiliatePage() {
               iconBox="bg-cyan-500/15 text-cyan-400"
               border="hover:border-cyan-400/40"
               glow="bg-cyan-500/10"
+              valueClass="text-cyan-400"
+              accent="bg-cyan-400"
             />
 
             <ColorCard
@@ -705,6 +726,8 @@ export default function AffiliatePage() {
               iconBox="bg-emerald-500/15 text-emerald-400"
               border="hover:border-emerald-400/40"
               glow="bg-emerald-500/10"
+              valueClass="text-emerald-400"
+              accent="bg-emerald-400"
             />
 
             <ColorCard
@@ -715,6 +738,8 @@ export default function AffiliatePage() {
               iconBox="bg-amber-500/15 text-amber-400"
               border="hover:border-amber-400/40"
               glow="bg-amber-500/10"
+              valueClass="text-amber-400"
+              accent="bg-amber-400"
             />
 
             <ColorCard
@@ -725,6 +750,8 @@ export default function AffiliatePage() {
               iconBox="bg-violet-500/15 text-violet-400"
               border="hover:border-violet-400/40"
               glow="bg-violet-500/10"
+              valueClass="text-violet-400"
+              accent="bg-violet-400"
             />
 
           </section>
@@ -1297,6 +1324,8 @@ function ColorCard({
   iconBox,
   border,
   glow,
+  valueClass,
+  accent,
 }: {
   title: string;
   value: string;
@@ -1305,11 +1334,17 @@ function ColorCard({
   iconBox: string;
   border: string;
   glow: string;
+  valueClass: string;
+  accent: string;
 }) {
   return (
     <div
       className={`group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025] p-5 transition duration-300 ${border}`}
     >
+
+      <div
+        className={`absolute left-0 right-0 top-0 h-[3px] ${accent}`}
+      />
 
       <div
         className={`absolute -right-8 -top-8 h-28 w-28 rounded-full blur-3xl ${glow}`}
@@ -1331,7 +1366,9 @@ function ColorCard({
 
         </div>
 
-        <p className="text-2xl font-extrabold tracking-tight">
+        <p
+          className={`text-2xl font-extrabold tracking-tight ${valueClass}`}
+        >
           {value}
         </p>
 
@@ -1550,4 +1587,4 @@ function formatDate(value?: string) {
     hour: "numeric",
     minute: "2-digit",
   });
-                                }
+    }
