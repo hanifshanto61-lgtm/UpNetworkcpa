@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "crypto";
 
 // ==========================================
-// UP NETWORK CPA — SMARTLINKS
+// UP NETWORK CPA — TRACKING
 // ==========================================
 
 const SMARTLINKS = [
@@ -11,19 +11,19 @@ const SMARTLINKS = [
   "https://datesdreamy.com/qw3y42Vq?aid=pkkfxdhdk&kid=hhkbkaaxpzg",
 ];
 
-// ==========================================
-// GET /api/track
-// ==========================================
-
 export async function GET(request: NextRequest) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseUrl =
+      process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+    const serviceRoleKey =
+      process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !serviceRoleKey) {
       return NextResponse.json(
         {
-          error: "Supabase server configuration is missing.",
+          error:
+            "Supabase server configuration is missing.",
         },
         { status: 500 }
       );
@@ -40,21 +40,20 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    const { searchParams } = new URL(request.url);
+    const { searchParams } =
+      new URL(request.url);
 
-    // Affiliate ID
     const affiliateId =
       searchParams.get("aid") ||
       searchParams.get("affiliate_id");
 
-    // Smartlink ID
+    const offerId =
+      searchParams.get("offerId") ||
+      searchParams.get("offer_id");
+
     const smartlinkId =
       searchParams.get("sl") ||
       "rotating-smartlink";
-
-    // ------------------------------------------
-    // Validate affiliate
-    // ------------------------------------------
 
     if (!affiliateId) {
       return NextResponse.json(
@@ -65,12 +64,18 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { data: affiliate, error: affiliateError } =
-      await supabase
-        .from("profiles")
-        .select("id, affiliate_id")
-        .eq("affiliate_id", affiliateId)
-        .maybeSingle();
+    // ==========================================
+    // Validate affiliate
+    // ==========================================
+
+    const {
+      data: affiliate,
+      error: affiliateError,
+    } = await supabase
+      .from("profiles")
+      .select("id, affiliate_id")
+      .eq("affiliate_id", affiliateId)
+      .maybeSingle();
 
     if (affiliateError) {
       console.error(
@@ -80,7 +85,8 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json(
         {
-          error: "Unable to validate affiliate.",
+          error:
+            "Unable to validate affiliate.",
         },
         { status: 500 }
       );
@@ -95,15 +101,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // ------------------------------------------
-    // Generate unique click ID
-    // ------------------------------------------
+    // ==========================================
+    // Generate click ID
+    // ==========================================
 
     const clickId = randomUUID();
 
-    // ------------------------------------------
+    // ==========================================
     // Request information
-    // ------------------------------------------
+    // ==========================================
 
     const userAgent =
       request.headers.get("user-agent") || "";
@@ -112,25 +118,31 @@ export async function GET(request: NextRequest) {
       request.headers.get("referer") || "";
 
     const country =
-      request.headers.get("x-vercel-ip-country") ||
-      request.headers.get("cf-ipcountry") ||
+      request.headers.get(
+        "x-vercel-ip-country"
+      ) ||
+      request.headers.get(
+        "cf-ipcountry"
+      ) ||
       null;
 
-    // ------------------------------------------
-    // Detect device
-    // ------------------------------------------
+    // ==========================================
+    // Device
+    // ==========================================
 
     let device = "Desktop";
 
     if (/tablet|ipad/i.test(userAgent)) {
       device = "Tablet";
-    } else if (/mobile|android|iphone/i.test(userAgent)) {
+    } else if (
+      /mobile|android|iphone/i.test(userAgent)
+    ) {
       device = "Mobile";
     }
 
-    // ------------------------------------------
-    // Detect browser
-    // ------------------------------------------
+    // ==========================================
+    // Browser
+    // ==========================================
 
     let browser = "Other";
 
@@ -144,11 +156,110 @@ export async function GET(request: NextRequest) {
       browser = "Safari";
     }
 
-    // ------------------------------------------
-    // Save click
-    // ------------------------------------------
+    // ==========================================
+    // OFFER TRACKING
+    // ==========================================
 
-    const { error: clickError } = await supabase
+    if (offerId) {
+      const {
+        data: offer,
+        error: offerError,
+      } = await supabase
+        .from("offers")
+        .select("id, offer_url, status")
+        .eq("id", offerId)
+        .eq("status", "active")
+        .maybeSingle();
+
+      if (offerError) {
+        console.error(
+          "Offer validation error:",
+          offerError
+        );
+
+        return NextResponse.json(
+          {
+            error:
+              "Unable to validate offer.",
+          },
+          { status: 500 }
+        );
+      }
+
+      if (!offer) {
+        return NextResponse.json(
+          {
+            error:
+              "Offer is unavailable or paused.",
+          },
+          { status: 404 }
+        );
+      }
+
+      // Save offer click
+      const {
+        error: clickError,
+      } = await supabase
+        .from("clicks")
+        .insert({
+          click_id: clickId,
+          affiliate_id: affiliateId,
+          offer_id: offer.id,
+          smartlink_id: `offer-${offer.id}`,
+          country,
+          device,
+          browser,
+          referer,
+        });
+
+      if (clickError) {
+        console.error(
+          "Offer click tracking error:",
+          clickError
+        );
+
+        return NextResponse.json(
+          {
+            error:
+              "Unable to record click.",
+          },
+          { status: 500 }
+        );
+      }
+
+      // Add click ID to offer URL
+      const redirectUrl = new URL(
+        offer.offer_url
+      );
+
+      redirectUrl.searchParams.set(
+        "sub1",
+        clickId
+      );
+
+      redirectUrl.searchParams.set(
+        "sub2",
+        affiliateId
+      );
+
+      redirectUrl.searchParams.set(
+        "offer_id",
+        offer.id
+      );
+
+      return NextResponse.redirect(
+        redirectUrl.toString(),
+        302
+      );
+    }
+
+    // ==========================================
+    // EXISTING SMARTLINK TRACKING
+    // ==========================================
+
+    const {
+      error: clickError,
+    } = await supabase
       .from("clicks")
       .insert({
         click_id: clickId,
@@ -168,44 +279,39 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json(
         {
-          error: "Unable to record click.",
+          error:
+            "Unable to record click.",
         },
         { status: 500 }
       );
     }
 
-    // ------------------------------------------
-    // Rotate between the two Smartlinks
-    // ------------------------------------------
-
-    const firstByte = Number.parseInt(
-      clickId.replace(/-/g, "").slice(0, 2),
-      16
-    );
+    const firstByte =
+      Number.parseInt(
+        clickId
+          .replace(/-/g, "")
+          .slice(0, 2),
+        16
+      );
 
     const smartlink =
-      SMARTLINKS[firstByte % SMARTLINKS.length];
+      SMARTLINKS[
+        firstByte % SMARTLINKS.length
+      ];
 
-    // ------------------------------------------
-    // Add click ID to external Smartlink
-    // ------------------------------------------
-
-    const redirectUrl = new URL(smartlink);
+    const redirectUrl = new URL(
+      smartlink
+    );
 
     redirectUrl.searchParams.set(
       "sub1",
       clickId
     );
 
-    // Optional tracking information
     redirectUrl.searchParams.set(
       "sub2",
       affiliateId
     );
-
-    // ------------------------------------------
-    // Redirect visitor
-    // ------------------------------------------
 
     return NextResponse.redirect(
       redirectUrl.toString(),
