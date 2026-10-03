@@ -51,7 +51,6 @@ const stats = [
 
 export default function AffiliatePage() {
   const router = useRouter();
-
   const [loggingOut, setLoggingOut] = useState(false);
   const [activePage, setActivePage] = useState("Dashboard");
   const [copied, setCopied] = useState(false);
@@ -151,9 +150,4 @@ export default function AffiliatePage() {
                 { label: "Browse Offers", page: "Offers", icon: "▣" },
                 { label: "Tracking Links", page: "Tracking Links", icon: "↗" },
                 { label: "View Conversions", page: "Conversions", icon: "✓" },
-                { label: "View Earnings", page: "Earnings", icon: "$" },
-              ].map((action) => (
-                <button
-                  key={action.page}
-                  type="button"
-                  onClick={() => setActivePage(action.page)}
+                { label: "View Earnings", page: "Earnings", icon
