@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -58,6 +58,73 @@ export default function AffiliatePage() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [period, setPeriod] = useState("Last 30 days");
 
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileMessage, setProfileMessage] = useState("");
+
+  const [profile, setProfile] = useState({
+    fullName: "",
+    email: "",
+    phone: "",
+    country: "",
+    affiliateId: "",
+  });
+
+  useEffect(() => {
+    async function loadProfile() {
+      if (!supabase) {
+        setProfileLoading(false);
+        return;
+      }
+
+      const { data } = await supabase.auth.getUser();
+      const user = data.user;
+
+      if (user) {
+        setProfile({
+          fullName:
+            user.user_metadata?.full_name ||
+            user.user_metadata?.name ||
+            "",
+          email: user.email || "",
+          phone: user.user_metadata?.phone || "",
+          country: user.user_metadata?.country || "",
+          affiliateId:
+            user.user_metadata?.affiliate_id ||
+            user.id.slice(0, 8).toUpperCase(),
+        });
+      }
+
+      setProfileLoading(false);
+    }
+
+    loadProfile();
+  }, []);
+
+  async function saveProfile() {
+    if (!supabase) return;
+
+    setProfileSaving(true);
+    setProfileMessage("");
+
+    const { error } = await supabase.auth.updateUser({
+      data: {
+        full_name: profile.fullName,
+        phone: profile.phone,
+        country: profile.country,
+        affiliate_id: profile.affiliateId,
+      },
+    });
+
+    setProfileSaving(false);
+
+    if (error) {
+      setProfileMessage(error.message);
+    } else {
+      setProfileMessage("Profile updated successfully.");
+    }
+  }
+
   async function copySmartLink() {
     try {
       await navigator.clipboard.writeText(SMART_LINK);
@@ -99,6 +166,7 @@ export default function AffiliatePage() {
             <h1 className="text-2xl font-bold text-slate-900">
               Welcome back 👋
             </h1>
+
             <p className="mt-1 text-sm text-slate-500">
               Monitor your affiliate performance and earnings.
             </p>
@@ -154,6 +222,7 @@ export default function AffiliatePage() {
                 <h2 className="text-lg font-bold text-slate-900">
                   Performance
                 </h2>
+
                 <p className="text-sm text-slate-500">
                   Clicks and conversions
                 </p>
@@ -191,7 +260,10 @@ export default function AffiliatePage() {
                 <span className="text-sm text-slate-500">
                   Conversion Rate
                 </span>
-                <span className="font-bold text-slate-900">0%</span>
+
+                <span className="font-bold text-slate-900">
+                  0%
+                </span>
               </div>
 
               <div className="h-2 overflow-hidden rounded-full bg-slate-100">
@@ -202,6 +274,7 @@ export default function AffiliatePage() {
                 <span className="text-sm text-slate-500">
                   Pending Earnings
                 </span>
+
                 <span className="font-bold text-slate-900">
                   $0.00
                 </span>
@@ -211,6 +284,7 @@ export default function AffiliatePage() {
                 <span className="text-sm text-slate-500">
                   Available Payout
                 </span>
+
                 <span className="font-bold text-slate-900">
                   $0.00
                 </span>
@@ -257,7 +331,7 @@ export default function AffiliatePage() {
               ["Offers", "▣"],
               ["Tracking Links", "↗"],
               ["Statistics", "▤"],
-              ["Earnings", "$"],
+              ["Profile", "♙"],
             ].map(([label, icon]) => (
               <button
                 key={label}
@@ -407,56 +481,205 @@ export default function AffiliatePage() {
   }
 
   function renderProfile() {
+    const initial =
+      profile.fullName?.charAt(0).toUpperCase() ||
+      profile.email?.charAt(0).toUpperCase() ||
+      "A";
+
     return (
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
-            Profile
+            My Profile
           </h1>
 
           <p className="mt-1 text-sm text-slate-500">
-            Manage your affiliate account information.
+            Manage your own affiliate account information.
           </p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex items-center gap-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 text-2xl font-bold text-blue-600">
-              A
-            </div>
+        <div className="grid gap-6 xl:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="text-center">
+              <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-blue-100 text-3xl font-extrabold text-blue-600">
+                {initial}
+              </div>
 
-            <div>
-              <h2 className="font-bold text-slate-900">
-                Affiliate Account
+              <h2 className="mt-4 text-lg font-bold text-slate-900">
+                {profile.fullName || "Affiliate"}
               </h2>
 
-              <p className="text-sm text-slate-500">
-                UP Network Affiliate
+              <p className="mt-1 break-all text-sm text-slate-500">
+                {profile.email || "Loading..."}
+              </p>
+
+              <div className="mt-4 inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-600">
+                Active Affiliate
+              </div>
+            </div>
+
+            <div className="mt-6 border-t border-slate-100 pt-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Affiliate ID
+              </p>
+
+              <p className="mt-2 break-all rounded-xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">
+                {profile.affiliateId || "Loading..."}
               </p>
             </div>
           </div>
 
-          <div className="mt-8 grid gap-5 md:grid-cols-2">
-            <div>
-              <label className="text-xs font-semibold text-slate-500">
-                Account Status
-              </label>
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm xl:col-span-2">
+            <h2 className="text-lg font-bold text-slate-900">
+              Personal Information
+            </h2>
 
-              <div className="mt-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-600">
-                Active
+            <p className="mt-1 text-sm text-slate-500">
+              This profile belongs to the currently logged-in affiliate.
+            </p>
+
+            {profileLoading ? (
+              <div className="mt-8 rounded-xl bg-slate-50 p-6 text-center text-sm text-slate-500">
+                Loading your profile...
               </div>
-            </div>
+            ) : (
+              <div className="mt-6 grid gap-5 md:grid-cols-2">
+                <div>
+                  <label className="text-xs font-semibold text-slate-500">
+                    Full Name
+                  </label>
 
-            <div>
-              <label className="text-xs font-semibold text-slate-500">
-                Account Type
-              </label>
+                  <input
+                    value={profile.fullName}
+                    onChange={(e) =>
+                      setProfile({
+                        ...profile,
+                        fullName: e.target.value,
+                      })
+                    }
+                    placeholder="Your full name"
+                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none focus:border-blue-500"
+                  />
+                </div>
 
-              <div className="mt-2 rounded-xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
-                Affiliate
+                <div>
+                  <label className="text-xs font-semibold text-slate-500">
+                    Email
+                  </label>
+
+                  <input
+                    value={profile.email}
+                    readOnly
+                    className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-500">
+                    Phone
+                  </label>
+
+                  <input
+                    value={profile.phone}
+                    onChange={(e) =>
+                      setProfile({
+                        ...profile,
+                        phone: e.target.value,
+                      })
+                    }
+                    placeholder="+880"
+                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-500">
+                    Country
+                  </label>
+
+                  <input
+                    value={profile.country}
+                    onChange={(e) =>
+                      setProfile({
+                        ...profile,
+                        country: e.target.value,
+                      })
+                    }
+                    placeholder="Bangladesh"
+                    className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="text-xs font-semibold text-slate-500">
+                    Affiliate ID
+                  </label>
+
+                  <input
+                    value={profile.affiliateId}
+                    readOnly
+                    className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-600 outline-none"
+                  />
+                </div>
               </div>
+            )}
+
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p
+                className={`text-sm ${
+                  profileMessage.includes("successfully")
+                    ? "text-emerald-600"
+                    : "text-red-500"
+                }`}
+              >
+                {profileMessage}
+              </p>
+
+              <button
+                type="button"
+                onClick={saveProfile}
+                disabled={profileSaving || profileLoading}
+                className="rounded-xl bg-blue-600 px-6 py-3 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {profileSaving ? "Saving..." : "Save Profile"}
+              </button>
             </div>
           </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-bold text-slate-900">
+            Account Security
+          </h2>
+
+          <p className="mt-1 text-sm text-slate-500">
+            Send a password reset email to your account email.
+          </p>
+
+          <button
+            type="button"
+            onClick={async () => {
+              if (!supabase || !profile.email) return;
+
+              const { error } =
+                await supabase.auth.resetPasswordForEmail(
+                  profile.email,
+                  {
+                    redirectTo:
+                      window.location.origin + "/login",
+                  }
+                );
+
+              setProfileMessage(
+                error
+                  ? error.message
+                  : "Password reset email requested."
+              );
+            }}
+            className="mt-5 rounded-xl border border-slate-200 px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
+          >
+            Send Password Reset Email
+          </button>
         </div>
       </div>
     );
@@ -524,7 +747,6 @@ export default function AffiliatePage() {
 
   return (
     <div className="min-h-screen bg-slate-50 md:flex">
-      {/* Desktop Sidebar */}
       <aside className="hidden w-64 shrink-0 flex-col bg-slate-950 text-white md:flex">
         <div className="border-b border-slate-800 px-6 py-6">
           <div className="flex items-center gap-3">
@@ -533,7 +755,10 @@ export default function AffiliatePage() {
             </div>
 
             <div>
-              <h1 className="font-extrabold">UP Network</h1>
+              <h1 className="font-extrabold">
+                UP Network
+              </h1>
+
               <p className="text-xs text-slate-400">
                 Affiliate Platform
               </p>
@@ -581,9 +806,7 @@ export default function AffiliatePage() {
         </div>
       </aside>
 
-      {/* Main */}
       <div className="min-w-0 flex-1">
-        {/* Header */}
         <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
           <div className="flex min-h-[76px] items-center justify-between px-5 md:px-8">
             <div>
@@ -599,17 +822,25 @@ export default function AffiliatePage() {
             <div className="flex items-center gap-3">
               <div className="hidden text-right sm:block">
                 <p className="text-sm font-semibold text-slate-800">
-                  Affiliate
+                  {profile.fullName || "Affiliate"}
                 </p>
 
                 <p className="text-xs text-slate-500">
-                  Active account
+                  {profile.affiliateId
+                    ? `ID: ${profile.affiliateId}`
+                    : "Active account"}
                 </p>
               </div>
 
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 font-bold text-blue-600">
-                A
-              </div>
+              <button
+                type="button"
+                onClick={() => setActivePage("Profile")}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 font-bold text-blue-600"
+              >
+                {(profile.fullName || profile.email || "A")
+                  .charAt(0)
+                  .toUpperCase()}
+              </button>
 
               <button
                 type="button"
@@ -623,12 +854,10 @@ export default function AffiliatePage() {
           </div>
         </header>
 
-        {/* Content */}
         <main className="p-5 pb-24 md:p-8 md:pb-10">
           {renderPage()}
         </main>
 
-        {/* Mobile Bottom Navigation */}
         <nav className="fixed bottom-0 left-0 right-0 z-30 grid grid-cols-4 border-t border-slate-200 bg-white md:hidden">
           {menu.slice(0, 4).map((item) => (
             <button
