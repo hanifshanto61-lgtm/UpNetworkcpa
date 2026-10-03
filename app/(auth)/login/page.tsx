@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
+const ADMIN_EMAIL = "islamhanif122@gmail.com";
+
 export default function LoginPage() {
   const router = useRouter();
 
@@ -27,7 +29,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
@@ -37,7 +39,19 @@ export default function LoginPage() {
         return;
       }
 
-      router.push("/admin");
+      const signedInEmail = data.user.email?.toLowerCase();
+      const accountType = data.user.user_metadata?.account_type;
+
+      if (signedInEmail === ADMIN_EMAIL.toLowerCase()) {
+        router.replace("/admin");
+      } else if (accountType === "affiliate") {
+        router.replace("/affiliate");
+      } else {
+        await supabase.auth.signOut();
+        setMessage(
+          "Your account role is not set. Please contact the administrator."
+        );
+      }
     } catch {
       setMessage("Something went wrong. Please try again.");
     } finally {
@@ -48,10 +62,8 @@ export default function LoginPage() {
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-950 flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-md">
-
         {/* Logo & Brand */}
         <div className="text-center mb-8">
-
           {/* Network Growth Logo */}
           <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-2xl bg-white/10 border border-white/20 shadow-2xl backdrop-blur">
             <svg
@@ -93,7 +105,6 @@ export default function LoginPage() {
 
         {/* Login Card */}
         <div className="rounded-2xl bg-white p-8 shadow-2xl">
-
           <div className="mb-7">
             <h2 className="text-2xl font-bold text-gray-900">
               Welcome Back
@@ -105,7 +116,6 @@ export default function LoginPage() {
           </div>
 
           <form onSubmit={handleLogin} className="space-y-5">
-
             {/* Email */}
             <div>
               <label className="mb-2 block text-sm font-semibold text-gray-700">
