@@ -3,6 +3,86 @@ import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 
+type AnyRecord = Record<string, any>;
+
+function makeAffiliateId(userId: string) {
+  return `UP${userId.replace(/-/g, "").slice(0, 10).toUpperCase()}`;
+}
+
+async function findProfile(supabaseAdmin: any, user: any) {
+  const lookups = [
+    { column: "id", value: user.id },
+    { column: "user_id", value: user.id },
+    { column: "auth_id", value: user.id },
+    { column: "email", value: user.email },
+  ];
+
+  for (const lookup of lookups) {
+    if (!lookup.value) continue;
+
+    try {
+      const result = await supabaseAdmin
+        .from("profiles")
+        .select("*")
+        .eq(lookup.column, lookup.value)
+        .maybeSingle();
+
+      if (!result.error && result.data) {
+        return {
+          profile: result.data as AnyRecord,
+          lookupColumn: lookup.column,
+        };
+      }
+    } catch (error) {
+      console.warn("Profile lookup error:", error);
+    }
+  }
+
+  return {
+    profile: null,
+    lookupColumn: null,
+  };
+}
+
+async function createProfile(
+  supabaseAdmin: any,
+  user: any,
+  affiliateId: string
+) {
+  const attempts = [
+    {
+      id: user.id,
+      affiliate_id: affiliateId,
+    },
+    {
+      user_id: user.id,
+      affiliate_id: affiliateId,
+    },
+    {
+      auth_id: user.id,
+      affiliate_id: affiliateId,
+    },
+  ];
+
+  for (const payload of attempts) {
+    try {
+      const result = await supabaseAdmin
+        .from("profiles")
+        .insert(payload)
+        .select("*")
+        .maybeSingle();
+
+      if (!result.error && result.data) {
+        return result.data as AnyRecord;
+      }
+    } catch (error) {
+      console.warn("Profile creation error:", error);
+    }
+  }
+
+  return null;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabaseUrl =
@@ -21,10 +101,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // ------------------------------------------
-    // GET USER ACCESS TOKEN
-    // ------------------------------------------
-
     const authorization =
       request.headers.get("authorization");
 
@@ -40,19 +116,6 @@ export async function GET(request: NextRequest) {
     const accessToken =
       authorization.replace("Bearer ", "").trim();
 
-    if (!accessToken) {
-      return NextResponse.json(
-        {
-          error: "Invalid authentication token.",
-        },
-        { status: 401 }
-      );
-    }
-
-    // ------------------------------------------
-    // SERVER-ONLY SUPABASE CLIENT
-    // ------------------------------------------
-
     const supabaseAdmin = createClient(
       supabaseUrl,
       serviceRoleKey,
@@ -64,246 +127,199 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    // ------------------------------------------
-    // VERIFY AUTHENTICATED USER
-    // ------------------------------------------
-
     const {
-      data: { user },
-      error: userError,
-    } = await supabaseAdmin.auth.getUser(
-      accessToken
-    );
-
-    if (userError || !user) {
-      console.error(
-        "User authentication error:",
-        userError
+      data: authData,
+      error: authError,
+    } =
+      await supabaseAdmin.auth.getUser(
+        accessToken
       );
 
+    const user = authData?.user;
+
+    if (authError || !user) {
       return NextResponse.json(
         {
-          error: "Your login session is invalid or expired.",
+          error:
+            "Your login session is invalid or expired.",
         },
         { status: 401 }
       );
     }
 
-    // ------------------------------------------
-    // LOAD PROFILE
-    // ------------------------------------------
-
-    let { data: profile, error: profileError } =
-      await supabaseAdmin
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .maybeSingle();
-
-    if (profileError) {
-      console.error(
-        "Profile loading error:",
-        profileError
+    let profileResult =
+      await findProfile(
+        supabaseAdmin,
+        user
       );
 
-      return NextResponse.json(
-        {
-          error:
-            "Unable to read the affiliate profile.",
-          details: profileError.message,
-        },
-        { status: 500 }
-      );
+    let profile =
+      profileResult.profile;
+
+    let affiliateId = "";
+
+    if (profile) {
+      affiliateId =
+        profile.affiliate_id ||
+        profile.affiliateId ||
+        profile.affiliate_code ||
+        profile.code ||
+        "";
     }
 
-    // ------------------------------------------
-    // CREATE PROFILE IF MISSING
-    // ------------------------------------------
+    if (profile && !affiliateId) {
+      affiliateId =
+        makeAffiliateId(user.id);
+
+      const lookupColumn =
+        profileResult.lookupColumn;
+
+      if (lookupColumn) {
+        try {
+          const updateResult =
+            await supabaseAdmin
+              .from("profiles")
+              .update({
+                affiliate_id:
+                  affiliateId,
+              })
+              .eq(
+                lookupColumn,
+                lookupColumn === "email"
+                  ? user.email
+                  : user.id
+              )
+              .select("*")
+              .maybeSingle();
+
+          if (
+            !updateResult.error &&
+            updateResult.data
+          ) {
+            profile =
+              updateResult.data;
+          }
+        } catch (error) {
+          console.warn(
+            "Affiliate ID update error:",
+            error
+          );
+        }
+      }
+    }
 
     if (!profile) {
-      const generatedAffiliateId =
-        `UP${user.id
-          .replace(/-/g, "")
-          .slice(0, 10)
-          .toUpperCase()}`;
+      affiliateId =
+        makeAffiliateId(user.id);
 
-      const {
-        data: createdProfile,
-        error: createProfileError,
-      } = await supabaseAdmin
-        .from("profiles")
-        .insert({
-          id: user.id,
-          affiliate_id: generatedAffiliateId,
-        })
-        .select("*")
-        .maybeSingle();
-
-      if (createProfileError) {
-        console.error(
-          "Profile creation error:",
-          createProfileError
+      const createdProfile =
+        await createProfile(
+          supabaseAdmin,
+          user,
+          affiliateId
         );
 
-        return NextResponse.json(
-          {
-            error:
-              "Your affiliate profile does not exist and could not be created.",
-            details:
-              createProfileError.message,
-          },
-          { status: 500 }
-        );
+      if (createdProfile) {
+        profile =
+          createdProfile;
+
+        affiliateId =
+          createdProfile.affiliate_id ||
+          createdProfile.affiliateId ||
+          affiliateId;
       }
-
-      profile = createdProfile;
     }
 
-    // ------------------------------------------
-    // GET AFFILIATE ID
-    // ------------------------------------------
-
-    let affiliateId =
-      profile?.affiliate_id ||
-      profile?.affiliateId ||
-      profile?.affiliate_code ||
-      profile?.code ||
-      "";
-
-    // ------------------------------------------
-    // GENERATE AFFILIATE ID IF EMPTY
-    // ------------------------------------------
-
     if (!affiliateId) {
-      const generatedAffiliateId =
-        `UP${user.id
-          .replace(/-/g, "")
-          .slice(0, 10)
-          .toUpperCase()}`;
-
-      const {
-        data: updatedProfile,
-        error: updateProfileError,
-      } = await supabaseAdmin
-        .from("profiles")
-        .update({
-          affiliate_id: generatedAffiliateId,
-        })
-        .eq("id", user.id)
-        .select("*")
-        .maybeSingle();
-
-      if (updateProfileError) {
-        console.error(
-          "Affiliate ID update error:",
-          updateProfileError
-        );
-
-        return NextResponse.json(
-          {
-            error:
-              "Affiliate ID could not be created.",
-            details:
-              updateProfileError.message,
-          },
-          { status: 500 }
-        );
-      }
-
-      profile =
-        updatedProfile || profile;
-
-      affiliateId = generatedAffiliateId;
+      affiliateId =
+        makeAffiliateId(user.id);
     }
 
     affiliateId =
       String(affiliateId).trim();
 
-    if (!affiliateId) {
-      return NextResponse.json(
-        {
-          error:
-            "Affiliate ID is unavailable.",
-        },
-        { status: 500 }
-      );
-    }
-
-    // ------------------------------------------
-    // LOAD CLICKS
-    // ------------------------------------------
-
-    const {
-      data: clicks,
-      error: clicksError,
-    } = await supabaseAdmin
-      .from("clicks")
-      .select(
-        "click_id, affiliate_id, smartlink_id, country, device, browser, referer, status, payout, converted_at, created_at"
-      )
-      .eq(
-        "affiliate_id",
-        affiliateId
-      )
-      .order("created_at", {
-        ascending: false,
-      });
-
-    if (clicksError) {
-      console.error(
-        "Clicks loading error:",
-        clicksError
-      );
-
-      return NextResponse.json(
-        {
-          error:
-            "Unable to load click statistics.",
-          details:
-            clicksError.message,
-        },
-        { status: 500 }
-      );
-    }
-
-    // ------------------------------------------
-    // PROFILE NAME
-    // ------------------------------------------
-
-    const affiliateName =
+    const profileName =
       profile?.full_name ||
       profile?.name ||
+      profile?.username ||
+      profile?.display_name ||
       user.user_metadata?.full_name ||
+      user.user_metadata?.name ||
       user.email?.split("@")[0] ||
       "Affiliate";
 
-    // ------------------------------------------
-    // RESPONSE
-    // ------------------------------------------
+    let clicks: AnyRecord[] = [];
 
-    return NextResponse.json({
-      success: true,
+    try {
+      const clicksResult =
+        await supabaseAdmin
+          .from("clicks")
+          .select(
+            "click_id, affiliate_id, smartlink_id, country, device, browser, referer, status, payout, converted_at, created_at"
+          )
+          .eq(
+            "affiliate_id",
+            affiliateId
+          )
+          .order(
+            "created_at",
+            {
+              ascending: false,
+            }
+          );
 
-      profile: {
-        id: user.id,
-        affiliateId,
-        email: user.email || null,
-        name: affiliateName,
+      if (!clicksResult.error) {
+        clicks =
+          clicksResult.data || [];
+      }
+    } catch (error) {
+      console.error(
+        "Clicks loading error:",
+        error
+      );
+    }
+
+    return NextResponse.json(
+      {
+        success: true,
+
+        profile: {
+          id: user.id,
+          affiliateId,
+          email:
+            user.email || null,
+          name: profileName,
+        },
+
+        clicks,
+
+        meta: {
+          profileFound:
+            Boolean(profile),
+
+          profileLookup:
+            profileResult.lookupColumn ||
+            "generated",
+        },
       },
-
-      clicks: clicks || [],
-    });
-  } catch (error: any) {
+      {
+        status: 200,
+        headers: {
+          "Cache-Control":
+            "no-store, no-cache, must-revalidate",
+        },
+      }
+    );
+  } catch (error) {
     console.error(
-      "Affiliate dashboard API error:",
+      "Affiliate dashboard error:",
       error
     );
 
     return NextResponse.json(
       {
         error:
-          error?.message ||
-          "Internal server error.",
+          "Affiliate dashboard could not be loaded.",
       },
       { status: 500 }
     );
