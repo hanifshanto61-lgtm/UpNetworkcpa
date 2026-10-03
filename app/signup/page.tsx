@@ -55,14 +55,15 @@ const initialForm: FormState = {
 
 export default function SignupPage() {
   const [form, setForm] = useState<FormState>(initialForm);
+
+  const [referralCode, setReferralCode] = useState("");
+
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [agreeAccuracy, setAgreeAccuracy] = useState(false);
+
   const [message, setMessage] = useState("");
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
-
-  // Referral code from /signup?ref=XXXXXXXX
-  const [referralCode, setReferralCode] = useState("");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -88,6 +89,7 @@ export default function SignupPage() {
 
   async function handleSignup(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+
     setMessage("");
     setSuccess(false);
 
@@ -121,13 +123,13 @@ export default function SignupPage() {
       const { error } = await supabase.auth.signUp({
         email: form.email.trim(),
         password: form.password,
+
         options: {
           data: {
             account_type: "affiliate",
 
             first_name: form.firstName.trim(),
             last_name: form.lastName.trim(),
-
             username: form.username.trim(),
 
             phone: form.phone.trim(),
@@ -138,11 +140,10 @@ export default function SignupPage() {
             traffic_source: form.trafficSource,
             traffic_url: form.trafficUrl.trim(),
             social_profile: form.socialProfile.trim(),
-
             monthly_traffic: form.monthlyTraffic,
+
             promotion_method: form.promotionMethod,
             experience: form.experience,
-
             previous_networks: form.previousNetworks.trim(),
 
             company_name: form.companyName.trim(),
@@ -150,7 +151,17 @@ export default function SignupPage() {
 
             application_status: "pending",
 
-            // Referral relationship
+            /*
+             * Referral attribution.
+             *
+             * If the user opened:
+             * /signup?ref=UPXXXXXXXXXX
+             *
+             * this value is stored in Supabase Auth metadata.
+             *
+             * The database trigger created earlier reads:
+             * new.raw_user_meta_data->>'referred_by'
+             */
             referred_by: referralCode || null,
           },
         },
@@ -163,15 +174,11 @@ export default function SignupPage() {
 
       setSuccess(true);
 
-      if (referralCode) {
-        setMessage(
-          "Application submitted successfully. Your referral was recorded. Please check your email to verify your account. Your affiliate application is now pending admin approval."
-        );
-      } else {
-        setMessage(
-          "Application submitted successfully. Please check your email to verify your account. Your affiliate application is now pending admin approval."
-        );
-      }
+      setMessage(
+        referralCode
+          ? "Application submitted successfully with referral attribution. Please check your email to verify your account. Your affiliate application is now pending admin approval."
+          : "Application submitted successfully. Please check your email to verify your account. Your affiliate application is now pending admin approval."
+      );
 
       setForm((prev) => ({
         ...prev,
@@ -180,6 +187,7 @@ export default function SignupPage() {
       }));
     } catch (error) {
       console.error("Signup error:", error);
+
       setMessage("Something went wrong. Please try again.");
     } finally {
       setLoading(false);
@@ -201,46 +209,28 @@ export default function SignupPage() {
           <p className="mt-2 text-sm text-slate-500">
             Create your affiliate publisher account
           </p>
+
+          {referralCode && (
+            <div className="mx-auto mt-4 max-w-md rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-left">
+              <p className="text-xs font-semibold uppercase tracking-wide text-green-600">
+                Referral Registration
+              </p>
+
+              <p className="mt-1 text-sm text-green-800">
+                You were referred by affiliate:
+              </p>
+
+              <p className="mt-1 break-all font-mono text-sm font-bold text-green-700">
+                {referralCode}
+              </p>
+            </div>
+          )}
         </div>
 
         <form
           onSubmit={handleSignup}
           className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
         >
-          {/* Referral Information */}
-          {referralCode && (
-            <section className="border-b border-slate-200 bg-amber-50 p-6 sm:p-8">
-              <div className="rounded-xl border border-amber-200 bg-white p-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
-                    🔗
-                  </div>
-
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-amber-900">
-                      Referral Registration
-                    </p>
-
-                    <p className="mt-1 text-xs text-amber-700">
-                      You were invited to join UpNetwork CPA by an existing
-                      affiliate.
-                    </p>
-
-                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-600">
-                        Referral Code
-                      </p>
-
-                      <p className="mt-1 break-all font-mono text-sm font-bold text-amber-900">
-                        {referralCode}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
-          )}
-
           {/* Account Information */}
           <section className="border-b border-slate-200 p-6 sm:p-8">
             <SectionHeading
@@ -520,7 +510,9 @@ export default function SignupPage() {
                 <input
                   type="checkbox"
                   checked={agreeTerms}
-                  onChange={(e) => setAgreeTerms(e.target.checked)}
+                  onChange={(e) =>
+                    setAgreeTerms(e.target.checked)
+                  }
                   className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                 />
 
@@ -533,13 +525,15 @@ export default function SignupPage() {
                 <input
                   type="checkbox"
                   checked={agreeAccuracy}
-                  onChange={(e) => setAgreeAccuracy(e.target.checked)}
+                  onChange={(e) =>
+                    setAgreeAccuracy(e.target.checked)
+                  }
                   className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                 />
 
                 <span>
-                  I confirm that the information provided in this application
-                  is accurate and complete.
+                  I confirm that the information provided in this
+                  application is accurate and complete.
                 </span>
               </label>
             </div>
@@ -693,4 +687,4 @@ function SectionHeading({
       </p>
     </div>
   );
-                  }
+        }
