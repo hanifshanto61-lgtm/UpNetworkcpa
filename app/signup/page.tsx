@@ -1,6 +1,11 @@
 "use client";
 
-import { useState, type ChangeEvent, type FormEvent } from "react";
+import {
+  useEffect,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
@@ -56,8 +61,22 @@ export default function SignupPage() {
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Referral code from /signup?ref=XXXXXXXX
+  const [referralCode, setReferralCode] = useState("");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("ref")?.trim() || "";
+
+    if (ref) {
+      setReferralCode(ref);
+    }
+  }, []);
+
   function updateField(
-    e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+    e: ChangeEvent<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >
   ) {
     const { name, value } = e.target;
 
@@ -105,23 +124,34 @@ export default function SignupPage() {
         options: {
           data: {
             account_type: "affiliate",
+
             first_name: form.firstName.trim(),
             last_name: form.lastName.trim(),
+
             username: form.username.trim(),
+
             phone: form.phone.trim(),
             country: form.country.trim(),
             city: form.city.trim(),
             address: form.address.trim(),
+
             traffic_source: form.trafficSource,
             traffic_url: form.trafficUrl.trim(),
             social_profile: form.socialProfile.trim(),
+
             monthly_traffic: form.monthlyTraffic,
             promotion_method: form.promotionMethod,
             experience: form.experience,
+
             previous_networks: form.previousNetworks.trim(),
+
             company_name: form.companyName.trim(),
             payment_method: form.paymentMethod,
+
             application_status: "pending",
+
+            // Referral relationship
+            referred_by: referralCode || null,
           },
         },
       });
@@ -132,9 +162,16 @@ export default function SignupPage() {
       }
 
       setSuccess(true);
-      setMessage(
-        "Application submitted successfully. Please check your email to verify your account. Your affiliate application is now pending admin approval."
-      );
+
+      if (referralCode) {
+        setMessage(
+          "Application submitted successfully. Your referral was recorded. Please check your email to verify your account. Your affiliate application is now pending admin approval."
+        );
+      } else {
+        setMessage(
+          "Application submitted successfully. Please check your email to verify your account. Your affiliate application is now pending admin approval."
+        );
+      }
 
       setForm((prev) => ({
         ...prev,
@@ -170,6 +207,40 @@ export default function SignupPage() {
           onSubmit={handleSignup}
           className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
         >
+          {/* Referral Information */}
+          {referralCode && (
+            <section className="border-b border-slate-200 bg-amber-50 p-6 sm:p-8">
+              <div className="rounded-xl border border-amber-200 bg-white p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                    🔗
+                  </div>
+
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-amber-900">
+                      Referral Registration
+                    </p>
+
+                    <p className="mt-1 text-xs text-amber-700">
+                      You were invited to join UpNetwork CPA by an existing
+                      affiliate.
+                    </p>
+
+                    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-600">
+                        Referral Code
+                      </p>
+
+                      <p className="mt-1 break-all font-mono text-sm font-bold text-amber-900">
+                        {referralCode}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* Account Information */}
           <section className="border-b border-slate-200 p-6 sm:p-8">
             <SectionHeading
@@ -452,6 +523,7 @@ export default function SignupPage() {
                   onChange={(e) => setAgreeTerms(e.target.checked)}
                   className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                 />
+
                 <span>
                   I agree to the terms and conditions of UpNetwork CPA.
                 </span>
@@ -464,6 +536,7 @@ export default function SignupPage() {
                   onChange={(e) => setAgreeAccuracy(e.target.checked)}
                   className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                 />
+
                 <span>
                   I confirm that the information provided in this application
                   is accurate and complete.
@@ -489,7 +562,9 @@ export default function SignupPage() {
               disabled={loading}
               className="mt-7 w-full rounded-xl bg-blue-600 px-6 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {loading ? "Submitting Application..." : "Create Affiliate Account"}
+              {loading
+                ? "Submitting Application..."
+                : "Create Affiliate Account"}
             </button>
 
             <p className="mt-5 text-center text-sm text-slate-500">
@@ -589,6 +664,7 @@ function SelectField({
         className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
       >
         <option value="">Select an option</option>
+
         {options.map((option) => (
           <option key={option} value={option}>
             {option}
@@ -608,8 +684,13 @@ function SectionHeading({
 }) {
   return (
     <div className="mb-6">
-      <h2 className="text-lg font-bold text-slate-900">{title}</h2>
-      <p className="mt-1 text-sm text-slate-500">{description}</p>
+      <h2 className="text-lg font-bold text-slate-900">
+        {title}
+      </h2>
+
+      <p className="mt-1 text-sm text-slate-500">
+        {description}
+      </p>
     </div>
   );
-}
+                  }
