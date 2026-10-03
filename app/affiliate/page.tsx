@@ -34,7 +34,11 @@ export default function AffiliatePage() {
   const [copied, setCopied] = useState(false);
 
   const smartLink =
-    "https://onlyhotdates.com/dTmGzfkC?aid=fzkbxfzxzk&kid=hxxhxzhdpdk";
+    typeof window !== "undefined"
+      ? `${window.location.origin}/api/track?aid=${encodeURIComponent(
+          profile.affiliateId
+        )}&sl=default-smartlink`
+      : "/api/track";
 
   const manager = {
     username: "@tusarislam123",
@@ -161,22 +165,20 @@ export default function AffiliatePage() {
   return (
     <div className="min-h-screen bg-[#f5f7fb] text-slate-800">
       <div className="flex min-h-screen">
-        {/* SIDEBAR */}
         <aside className="hidden w-[250px] flex-shrink-0 border-r border-slate-200 bg-white lg:block">
           <div className="sticky top-0 flex h-screen flex-col">
-            {/* LOGO */}
             <div className="flex h-[76px] items-center border-b border-slate-100 px-6">
               <div>
                 <div className="text-2xl font-black tracking-tight text-slate-900">
                   UP<span className="text-blue-600"> Network</span>
                 </div>
+
                 <div className="text-[10px] font-semibold uppercase tracking-[3px] text-slate-400">
                   CPA Affiliate
                 </div>
               </div>
             </div>
 
-            {/* NAVIGATION */}
             <nav className="flex-1 space-y-1 overflow-y-auto p-4">
               {menuItems.map((item) => {
                 const active = activeMenu === item.key;
@@ -201,7 +203,6 @@ export default function AffiliatePage() {
               })}
             </nav>
 
-            {/* USER */}
             <div className="border-t border-slate-100 p-4">
               <button
                 onClick={() => openMenu("profile")}
@@ -234,9 +235,7 @@ export default function AffiliatePage() {
           </div>
         </aside>
 
-        {/* MAIN */}
         <main className="min-w-0 flex-1">
-          {/* HEADER */}
           <header className="sticky top-0 z-30 flex h-[76px] items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur md:px-8">
             <div>
               <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
@@ -271,10 +270,8 @@ export default function AffiliatePage() {
           </header>
 
           <div className="mx-auto max-w-[1500px] p-4 pb-24 md:p-8">
-            {/* ================= DASHBOARD ================= */}
             {activeMenu === "dashboard" && (
               <div className="space-y-6">
-                {/* WELCOME */}
                 <section className="overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white shadow-xl shadow-blue-100 md:p-8">
                   <div className="max-w-3xl">
                     <div className="mb-2 text-sm font-semibold text-blue-100">
@@ -299,7 +296,6 @@ export default function AffiliatePage() {
                   </div>
                 </section>
 
-                {/* REVENUE CARDS */}
                 <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                   <RevenueCard
                     title="Today"
@@ -330,7 +326,6 @@ export default function AffiliatePage() {
                   />
                 </section>
 
-                {/* TRAFFIC + SMARTLINK */}
                 <section className="grid gap-6 xl:grid-cols-[1.7fr_1fr]">
                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
                     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -369,9 +364,11 @@ export default function AffiliatePage() {
                     <div className="mt-5 flex h-[230px] items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50">
                       <div className="text-center">
                         <div className="text-3xl">📊</div>
+
                         <div className="mt-2 font-bold text-slate-600">
                           No traffic data yet
                         </div>
+
                         <div className="mt-1 text-xs text-slate-400">
                           Your performance chart will appear here
                         </div>
@@ -418,7 +415,6 @@ export default function AffiliatePage() {
                   </div>
                 </section>
 
-                {/* GEO + PLATFORM */}
                 <section className="grid gap-6 xl:grid-cols-2">
                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
                     <div className="flex items-center justify-between">
@@ -461,7 +457,6 @@ export default function AffiliatePage() {
                   </div>
                 </section>
 
-                {/* WHAT'S NEW */}
                 <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
                   <div className="flex flex-col gap-5 md:flex-row">
                     <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-2xl">
@@ -512,7 +507,6 @@ export default function AffiliatePage() {
                   </div>
                 </section>
 
-                {/* PERSONAL MANAGER */}
                 <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                   <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-4">
@@ -555,7 +549,6 @@ export default function AffiliatePage() {
                   </div>
                 </section>
 
-                {/* QUICK ACTIONS */}
                 <section>
                   <h3 className="mb-4 text-lg font-black text-slate-900">
                     Quick Actions
@@ -594,7 +587,6 @@ export default function AffiliatePage() {
               </div>
             )}
 
-            {/* ================= PROFILE ================= */}
             {activeMenu === "profile" && (
               <div className="mx-auto max-w-4xl space-y-6">
                 <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
@@ -690,7 +682,6 @@ export default function AffiliatePage() {
                   )}
                 </section>
 
-                {/* PERSONAL MANAGER */}
                 <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
                   <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-4">
@@ -747,7 +738,6 @@ export default function AffiliatePage() {
               </div>
             )}
 
-            {/* ================= SMARTLINK ================= */}
             {activeMenu === "tracking" && (
               <div className="space-y-6">
                 <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
@@ -784,16 +774,15 @@ export default function AffiliatePage() {
                     {copied ? "✓ Copied" : "Copy Smartlink"}
                   </button>
 
-                  <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-700">
-                    <strong>Tracking note:</strong> For accurate affiliate
-                    attribution, Smartlinks should eventually support unique
-                    affiliate IDs/subIDs.
+                  <div className="mt-6 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm leading-6 text-blue-700">
+                    <strong>Tracking enabled:</strong> Clicks are recorded by
+                    UP Network before the visitor is redirected to the CPA
+                    Smartlink.
                   </div>
                 </section>
               </div>
             )}
 
-            {/* ================= OFFERS ================= */}
             {activeMenu === "offers" && (
               <GenericPage
                 title="Offers"
@@ -803,7 +792,6 @@ export default function AffiliatePage() {
               />
             )}
 
-            {/* ================= STATISTICS ================= */}
             {activeMenu === "statistics" && (
               <GenericPage
                 title="Statistics"
@@ -813,7 +801,6 @@ export default function AffiliatePage() {
               />
             )}
 
-            {/* ================= CONVERSIONS ================= */}
             {activeMenu === "conversions" && (
               <GenericPage
                 title="Conversions"
@@ -823,7 +810,6 @@ export default function AffiliatePage() {
               />
             )}
 
-            {/* ================= EARNINGS ================= */}
             {activeMenu === "earnings" && (
               <GenericPage
                 title="Earnings"
@@ -833,7 +819,6 @@ export default function AffiliatePage() {
               />
             )}
 
-            {/* ================= PAYOUTS ================= */}
             {activeMenu === "payouts" && (
               <GenericPage
                 title="Payouts"
@@ -843,7 +828,6 @@ export default function AffiliatePage() {
               />
             )}
 
-            {/* ================= REPORTS ================= */}
             {activeMenu === "reports" && (
               <GenericPage
                 title="Reports"
@@ -854,7 +838,6 @@ export default function AffiliatePage() {
             )}
           </div>
 
-          {/* MOBILE NAV */}
           <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white px-2 py-2 lg:hidden">
             <div className="grid grid-cols-5 gap-1">
               {[
@@ -904,8 +887,6 @@ export default function AffiliatePage() {
     </div>
   );
 }
-
-/* ================= COMPONENTS ================= */
 
 function RevenueCard({
   title,
@@ -1003,6 +984,7 @@ function Feature({
 
         <div>
           <div className="font-bold text-slate-800">{title}</div>
+
           <div className="mt-1 text-xs leading-5 text-slate-400">
             {text}
           </div>
@@ -1106,4 +1088,4 @@ function GenericPage({
       </section>
     </div>
   );
-                      }
+      }
