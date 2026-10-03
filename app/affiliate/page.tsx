@@ -416,42 +416,43 @@ export default function AffiliatePage() {
   }
 
   function navigateMenu(action: string) {
-    setMenuOpen(false);
+  setMenuOpen(false);
 
-    if (action === "dashboard") {
-      window.scrollTo({
-        top: 0,
-        behavior: "smooth",
-      });
+  if (action === "dashboard") {
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
 
-      return;
-    }
+    return;
+  }
 
-    const sectionMap: Record<
-      string,
-      string
-    > = {
-      offers: "offers",
-      smartlinks: "smart-link",
-      statistics: "statistics",
-      earnings: "earnings",
-      referrals: "referrals",
-      payments: "payments",
-    };
+  // Referrals is now a separate page
+  if (action === "referrals") {
+    router.push("/affiliate/referrals");
+    return;
+  }
 
-    const sectionId =
-      sectionMap[action];
+  const sectionMap: Record<string, string> = {
+    offers: "offers",
+    smartlinks: "smart-link",
+    statistics: "statistics",
+    earnings: "earnings",
+    payments: "payments",
+  };
 
-    if (sectionId) {
-      setTimeout(() => {
-        document
-          .getElementById(sectionId)
-          ?.scrollIntoView({
-            behavior: "smooth",
-            block: "start",
-          });
-      }, 100);
-    }
+  const sectionId = sectionMap[action];
+
+  if (sectionId) {
+    setTimeout(() => {
+      document
+        .getElementById(sectionId)
+        ?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+    }, 100);
+  }
   }
 
   const dark = theme === "dark";
