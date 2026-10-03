@@ -36,6 +36,12 @@ export default function AffiliatePage() {
   const smartLink =
     "https://onlyhotdates.com/dTmGzfkC?aid=fzkbxfzxzk&kid=hxxhxzhdpdk";
 
+  const manager = {
+    username: "@tusarislam123",
+    name: "Personal Manager",
+    status: "Available",
+  };
+
   useEffect(() => {
     async function loadProfile() {
       if (!supabase) {
@@ -506,6 +512,49 @@ export default function AffiliatePage() {
                   </div>
                 </section>
 
+                {/* PERSONAL MANAGER */}
+                <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 text-xl font-black text-white">
+                        T
+                      </div>
+
+                      <div>
+                        <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                          Personal Manager
+                        </div>
+
+                        <div className="mt-1 text-lg font-black text-slate-900">
+                          {manager.username}
+                        </div>
+
+                        <div className="mt-1 text-sm text-slate-400">
+                          {manager.name}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <span className="rounded-full bg-green-50 px-3 py-2 text-xs font-bold text-green-600">
+                        ● {manager.status}
+                      </span>
+
+                      <button
+                        onClick={() =>
+                          window.open(
+                            "https://t.me/tusarislam123",
+                            "_blank"
+                          )
+                        }
+                        className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-100 hover:bg-blue-700"
+                      >
+                        Contact Manager
+                      </button>
+                    </div>
+                  </div>
+                </section>
+
                 {/* QUICK ACTIONS */}
                 <section>
                   <h3 className="mb-4 text-lg font-black text-slate-900">
@@ -641,6 +690,43 @@ export default function AffiliatePage() {
                   )}
                 </section>
 
+                {/* PERSONAL MANAGER */}
+                <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+                  <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 text-xl font-black text-white">
+                        T
+                      </div>
+
+                      <div>
+                        <div className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                          Your Personal Manager
+                        </div>
+
+                        <div className="mt-1 text-lg font-black text-slate-900">
+                          {manager.username}
+                        </div>
+
+                        <div className="mt-1 text-sm text-green-600">
+                          ● {manager.status} for support
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() =>
+                        window.open(
+                          "https://t.me/tusarislam123",
+                          "_blank"
+                        )
+                      }
+                      className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-100 hover:bg-blue-700"
+                    >
+                      Contact
+                    </button>
+                  </div>
+                </section>
+
                 <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-8">
                   <h3 className="text-lg font-black text-slate-900">
                     Account Security
@@ -772,15 +858,31 @@ export default function AffiliatePage() {
           <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white px-2 py-2 lg:hidden">
             <div className="grid grid-cols-5 gap-1">
               {[
-                { key: "dashboard" as MenuKey, label: "Home", icon: "⌂" },
-                { key: "offers" as MenuKey, label: "Offers", icon: "◈" },
-                { key: "tracking" as MenuKey, label: "Links", icon: "↗" },
+                {
+                  key: "dashboard" as MenuKey,
+                  label: "Home",
+                  icon: "⌂",
+                },
+                {
+                  key: "offers" as MenuKey,
+                  label: "Offers",
+                  icon: "◈",
+                },
+                {
+                  key: "tracking" as MenuKey,
+                  label: "Links",
+                  icon: "↗",
+                },
                 {
                   key: "statistics" as MenuKey,
                   label: "Stats",
                   icon: "▥",
                 },
-                { key: "profile" as MenuKey, label: "Profile", icon: "♙" },
+                {
+                  key: "profile" as MenuKey,
+                  label: "Profile",
+                  icon: "♙",
+                },
               ].map((item) => (
                 <button
                   key={item.key}
@@ -1004,4 +1106,4 @@ function GenericPage({
       </section>
     </div>
   );
-    }
+                      }
