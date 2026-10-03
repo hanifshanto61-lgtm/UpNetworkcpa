@@ -51,6 +51,7 @@ const stats = [
 
 export default function AffiliatePage() {
   const router = useRouter();
+
   const [loggingOut, setLoggingOut] = useState(false);
   const [activePage, setActivePage] = useState("Dashboard");
   const [copied, setCopied] = useState(false);
@@ -59,7 +60,7 @@ export default function AffiliatePage() {
     try {
       await navigator.clipboard.writeText(SMART_LINK);
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 2500);
+      window.setTimeout(() => setCopied(false), 2000);
     } catch {
       window.prompt("লিংকটি কপি করুন:", SMART_LINK);
     }
@@ -107,13 +108,52 @@ export default function AffiliatePage() {
                   {stat.icon}
                 </div>
               </div>
+
               <h4 className="mt-5 text-3xl font-extrabold text-slate-900">
                 {stat.value}
               </h4>
+
               <p className="mt-2 text-xs text-slate-500">{stat.note}</p>
             </div>
           ))}
         </div>
 
         <div className="mt-8 grid gap-6 xl:grid-cols-2">
-          <div className="rounded-2xl border border-slate-200 bg
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900">
+                Performance Overview
+              </h3>
+              <span className="rounded-lg bg-slate-100 px-3 py-1 text-xs text-slate-500">
+                Last 30 days
+              </span>
+            </div>
+
+            <div className="mt-8 flex h-48 flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50">
+              <span className="text-4xl text-slate-300">▤</span>
+              <p className="mt-3 text-sm font-medium text-slate-500">
+                No performance data yet
+              </p>
+              <p className="mt-1 text-xs text-slate-400">
+                Your activity will appear here.
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h3 className="text-lg font-bold text-slate-900">Quick Actions</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Quickly access your affiliate tools.
+            </p>
+
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              {[
+                { label: "Browse Offers", page: "Offers", icon: "▣" },
+                { label: "Tracking Links", page: "Tracking Links", icon: "↗" },
+                { label: "View Conversions", page: "Conversions", icon: "✓" },
+                { label: "View Earnings", page: "Earnings", icon: "$" },
+              ].map((action) => (
+                <button
+                  key={action.page}
+                  type="button"
+                  onClick={() => setActivePage(action.page)}
