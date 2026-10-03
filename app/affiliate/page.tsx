@@ -28,6 +28,8 @@ import {
   Smartphone,
   Monitor,
   Clock3,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -90,6 +92,8 @@ export default function AffiliatePage() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
 
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+
   const [profile, setProfile] = useState<{
     id: string;
     affiliateId: string;
@@ -99,6 +103,19 @@ export default function AffiliatePage() {
 
   const [clicks, setClicks] = useState<ClickRow[]>([]);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("affiliate-theme");
+
+    if (savedTheme === "light" || savedTheme === "dark") {
+      setTheme(savedTheme);
+    }
+  }, []);
+
+  function changeTheme(nextTheme: "dark" | "light") {
+    setTheme(nextTheme);
+    localStorage.setItem("affiliate-theme", nextTheme);
+  }
 
   useEffect(() => {
     loadDashboard();
@@ -252,12 +269,47 @@ export default function AffiliatePage() {
     }
   }
 
+  const dark = theme === "dark";
+
+  const pageBg = dark
+    ? "bg-[#05070c] text-white"
+    : "bg-slate-50 text-slate-900";
+
+  const panelBg = dark
+    ? "bg-[#090d17]"
+    : "bg-white";
+
+  const cardBg = dark
+    ? "bg-white/[0.025]"
+    : "bg-white";
+
+  const border = dark
+    ? "border-white/10"
+    : "border-slate-200";
+
+  const mutedText = dark
+    ? "text-slate-500"
+    : "text-slate-500";
+
+  const secondaryText = dark
+    ? "text-slate-600"
+    : "text-slate-400";
+
   if (loading) {
     return (
-      <main className="min-h-screen bg-[#05070c] text-white flex items-center justify-center">
+      <main
+        className={`min-h-screen flex items-center justify-center ${pageBg}`}
+      >
         <div className="text-center">
-          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-slate-700 border-t-cyan-400" />
-          <p className="text-sm text-slate-400">
+          <div
+            className={`mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 ${
+              dark
+                ? "border-slate-700 border-t-cyan-400"
+                : "border-slate-200 border-t-cyan-500"
+            }`}
+          />
+
+          <p className={`text-sm ${mutedText}`}>
             Loading affiliate dashboard...
           </p>
         </div>
@@ -266,54 +318,42 @@ export default function AffiliatePage() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-x-hidden bg-[#05070c] text-white">
+    <main
+      className={`relative min-h-screen overflow-x-hidden transition-colors duration-300 ${pageBg}`}
+    >
 
       {/* ================================================= */}
-      {/* UPNETWORK CPA WATERMARK BACKGROUND */}
+      {/* UPNETWORK CPA WATERMARK */}
       {/* ================================================= */}
 
       <div
         className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
         aria-hidden="true"
       >
-        {/* Base background */}
-        <div className="absolute inset-0 bg-[#05070c]" />
-
-        {/* Large visible logo watermark */}
         <div
-          className="absolute left-1/2 top-1/2 h-[620px] w-[620px] -translate-x-1/2 -translate-y-1/2 bg-center bg-contain bg-no-repeat sm:h-[760px] sm:w-[760px] lg:h-[900px] lg:w-[900px]"
+          className={`absolute inset-0 ${
+            dark ? "bg-[#05070c]" : "bg-slate-50"
+          }`}
+        />
+
+        <div
+          className="absolute left-1/2 top-1/2 h-[560px] w-[560px] -translate-x-1/2 -translate-y-1/2 bg-center bg-contain bg-no-repeat sm:h-[700px] sm:w-[700px] lg:h-[820px] lg:w-[820px]"
           style={{
             backgroundImage:
               "url('/file_000000013688207a03d42a2550c1954.png')",
-            opacity: 0.30,
-            filter: "drop-shadow(0 0 35px rgba(245,158,11,0.08))",
+            opacity: dark ? 0.30 : 0.12,
+            filter: dark
+              ? "drop-shadow(0 0 35px rgba(245,158,11,0.08))"
+              : "drop-shadow(0 0 25px rgba(245,158,11,0.05))",
           }}
         />
 
-        {/* Soft center glow */}
-        <div
-          className="absolute left-1/2 top-1/2 h-[520px] w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
-          style={{
-            background:
-              "radial-gradient(circle, rgba(245,158,11,0.07) 0%, rgba(5,7,12,0) 72%)",
-          }}
-        />
-
-        {/* Keep dashboard content readable */}
         <div
           className="absolute inset-0"
           style={{
-            background:
-              "linear-gradient(180deg, rgba(5,7,12,0.48) 0%, rgba(5,7,12,0.30) 45%, rgba(5,7,12,0.58) 100%)",
-          }}
-        />
-
-        {/* Edge vignette */}
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(circle at center, transparent 18%, rgba(5,7,12,0.22) 58%, rgba(5,7,12,0.72) 100%)",
+            background: dark
+              ? "radial-gradient(circle at center, rgba(5,7,12,0.08) 0%, rgba(5,7,12,0.30) 52%, rgba(5,7,12,0.68) 100%)"
+              : "radial-gradient(circle at center, rgba(248,250,252,0.10) 0%, rgba(248,250,252,0.52) 55%, rgba(248,250,252,0.88) 100%)",
           }}
         />
       </div>
@@ -324,7 +364,13 @@ export default function AffiliatePage() {
         {/* TOP BAR */}
         {/* ================================================= */}
 
-        <header className="sticky top-0 z-40 border-b border-white/10 bg-[#05070c]/90 backdrop-blur-xl">
+        <header
+          className={`sticky top-0 z-40 border-b backdrop-blur-xl ${
+            dark
+              ? "border-white/10 bg-[#05070c]/90"
+              : "border-slate-200 bg-white/90"
+          }`}
+        >
 
           <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
 
@@ -333,7 +379,11 @@ export default function AffiliatePage() {
               <button
                 onClick={() => setMenuOpen(true)}
                 aria-label="Open menu"
-                className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-300 transition hover:border-cyan-400/30 hover:bg-cyan-400/10 hover:text-cyan-400"
+                className={`flex h-10 w-10 items-center justify-center rounded-xl border transition ${
+                  dark
+                    ? "border-white/10 bg-white/[0.04] text-slate-300 hover:border-cyan-400/30 hover:bg-cyan-400/10 hover:text-cyan-400"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-600"
+                }`}
               >
                 <Menu size={21} />
               </button>
@@ -344,7 +394,9 @@ export default function AffiliatePage() {
                   <span className="text-cyan-400">CPA</span>
                 </div>
 
-                <div className="text-[9px] uppercase tracking-[0.22em] text-slate-600">
+                <div
+                  className={`text-[9px] uppercase tracking-[0.22em] ${secondaryText}`}
+                >
                   Affiliate Panel
                 </div>
               </div>
@@ -353,28 +405,66 @@ export default function AffiliatePage() {
 
             <div className="flex items-center gap-2">
 
-              <div className="hidden rounded-xl border border-cyan-400/10 bg-cyan-400/[0.04] px-3 py-2 md:block">
-                <p className="text-[9px] uppercase tracking-wider text-slate-600">
+              <div
+                className={`hidden rounded-xl border px-3 py-2 md:block ${
+                  dark
+                    ? "border-cyan-400/10 bg-cyan-400/[0.04]"
+                    : "border-cyan-100 bg-cyan-50"
+                }`}
+              >
+                <p className={`text-[9px] uppercase tracking-wider ${secondaryText}`}>
                   Affiliate ID
                 </p>
 
-                <p className="mt-0.5 max-w-[140px] truncate font-mono text-xs font-semibold text-cyan-400">
+                <p className="mt-0.5 max-w-[140px] truncate font-mono text-xs font-semibold text-cyan-500">
                   {affiliateId}
                 </p>
               </div>
+
+              {/* Theme Button */}
+
+              <button
+                onClick={() =>
+                  changeTheme(dark ? "light" : "dark")
+                }
+                aria-label={
+                  dark
+                    ? "Switch to light mode"
+                    : "Switch to dark mode"
+                }
+                className={`flex h-10 w-10 items-center justify-center rounded-xl border transition ${
+                  dark
+                    ? "border-white/10 bg-white/[0.04] text-amber-300 hover:bg-amber-400/10"
+                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                {dark ? (
+                  <Sun size={18} />
+                ) : (
+                  <Moon size={18} />
+                )}
+              </button>
 
               <button
                 onClick={() => {
                   setProfileOpen(!profileOpen);
                   setSettingsOpen(false);
                 }}
-                className="flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 transition hover:border-cyan-400/20 hover:bg-white/[0.07]"
+                className={`flex h-10 items-center gap-2 rounded-xl border px-3 transition ${
+                  dark
+                    ? "border-white/10 bg-white/[0.04] hover:border-cyan-400/20 hover:bg-white/[0.07]"
+                    : "border-slate-200 bg-white hover:border-cyan-300 hover:bg-cyan-50"
+                }`}
               >
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-400">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-500">
                   <User size={16} />
                 </div>
 
-                <span className="hidden text-xs font-semibold sm:block">
+                <span
+                  className={`hidden text-xs font-semibold sm:block ${
+                    dark ? "text-white" : "text-slate-700"
+                  }`}
+                >
                   Profile
                 </span>
               </button>
@@ -385,7 +475,11 @@ export default function AffiliatePage() {
                   setProfileOpen(false);
                 }}
                 aria-label="Settings"
-                className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-400 transition hover:border-cyan-400/20 hover:text-cyan-400"
+                className={`flex h-10 w-10 items-center justify-center rounded-xl border transition ${
+                  dark
+                    ? "border-white/10 bg-white/[0.04] text-slate-400 hover:border-cyan-400/20 hover:text-cyan-400"
+                    : "border-slate-200 bg-white text-slate-500 hover:border-cyan-300 hover:text-cyan-500"
+                }`}
               >
                 <Settings size={18} />
               </button>
@@ -401,12 +495,16 @@ export default function AffiliatePage() {
             </div>
           </div>
 
+          {/* PROFILE */}
+
           {profileOpen && (
-            <div className="absolute right-4 top-[70px] z-50 w-64 rounded-2xl border border-white/10 bg-[#090d17] p-4 shadow-2xl sm:right-6">
+            <div
+              className={`absolute right-4 top-[70px] z-50 w-64 rounded-2xl border p-4 shadow-2xl sm:right-6 ${panelBg} ${border}`}
+            >
 
               <div className="mb-4 flex items-center gap-3">
 
-                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-400">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-500">
                   <User size={20} />
                 </div>
 
@@ -415,19 +513,25 @@ export default function AffiliatePage() {
                     {profile?.name || "Affiliate"}
                   </p>
 
-                  <p className="truncate text-xs text-slate-600">
+                  <p className={`truncate text-xs ${secondaryText}`}>
                     {profile?.email || ""}
                   </p>
                 </div>
 
               </div>
 
-              <div className="rounded-xl bg-white/[0.03] p-3">
-                <p className="text-[10px] uppercase tracking-wider text-slate-600">
+              <div
+                className={`rounded-xl p-3 ${
+                  dark
+                    ? "bg-white/[0.03]"
+                    : "bg-slate-50"
+                }`}
+              >
+                <p className={`text-[10px] uppercase tracking-wider ${secondaryText}`}>
                   Affiliate ID
                 </p>
 
-                <p className="mt-1 break-all font-mono text-xs text-cyan-400">
+                <p className="mt-1 break-all font-mono text-xs text-cyan-500">
                   {affiliateId}
                 </p>
               </div>
@@ -437,7 +541,11 @@ export default function AffiliatePage() {
                   setProfileOpen(false);
                   setSettingsOpen(true);
                 }}
-                className="mt-3 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-slate-400 hover:bg-white/5 hover:text-white"
+                className={`mt-3 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm ${
+                  dark
+                    ? "text-slate-400 hover:bg-white/5 hover:text-white"
+                    : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                }`}
               >
                 <Settings size={17} />
                 Profile Settings
@@ -454,12 +562,16 @@ export default function AffiliatePage() {
             </div>
           )}
 
+          {/* SETTINGS */}
+
           {settingsOpen && (
-            <div className="absolute right-4 top-[70px] z-50 w-64 rounded-2xl border border-white/10 bg-[#090d17] p-4 shadow-2xl sm:right-6">
+            <div
+              className={`absolute right-4 top-[70px] z-50 w-72 rounded-2xl border p-4 shadow-2xl sm:right-6 ${panelBg} ${border}`}
+            >
 
-              <div className="mb-3 flex items-center gap-3">
+              <div className="mb-4 flex items-center gap-3">
 
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-500/10 text-purple-400">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-500/10 text-purple-500">
                   <Settings size={18} />
                 </div>
 
@@ -468,21 +580,62 @@ export default function AffiliatePage() {
                     Settings
                   </p>
 
-                  <p className="text-xs text-slate-600">
+                  <p className={`text-xs ${secondaryText}`}>
                     Account preferences
                   </p>
                 </div>
 
               </div>
 
-              <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 text-xs text-slate-500">
-                Profile and account settings are
-                available here.
+              {/* THEME SELECTOR */}
+
+              <div
+                className={`rounded-xl border p-3 ${border}`}
+              >
+                <p className={`mb-3 text-xs font-semibold ${mutedText}`}>
+                  Appearance
+                </p>
+
+                <div className="grid grid-cols-2 gap-2">
+
+                  <button
+                    onClick={() => changeTheme("light")}
+                    className={`flex items-center justify-center gap-2 rounded-xl border py-3 text-xs font-semibold transition ${
+                      theme === "light"
+                        ? "border-cyan-400 bg-cyan-400/10 text-cyan-500"
+                        : dark
+                        ? "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10"
+                        : "border-slate-200 bg-slate-50 text-slate-500"
+                    }`}
+                  >
+                    <Sun size={16} />
+                    Light
+                  </button>
+
+                  <button
+                    onClick={() => changeTheme("dark")}
+                    className={`flex items-center justify-center gap-2 rounded-xl border py-3 text-xs font-semibold transition ${
+                      theme === "dark"
+                        ? "border-cyan-400 bg-cyan-400/10 text-cyan-400"
+                        : dark
+                        ? "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10"
+                        : "border-slate-200 bg-slate-50 text-slate-500"
+                    }`}
+                  >
+                    <Moon size={16} />
+                    Dark
+                  </button>
+
+                </div>
               </div>
 
               <button
                 onClick={() => setSettingsOpen(false)}
-                className="mt-3 w-full rounded-xl bg-white/5 py-2.5 text-xs font-semibold text-slate-300 hover:bg-white/10"
+                className={`mt-3 w-full rounded-xl py-2.5 text-xs font-semibold ${
+                  dark
+                    ? "bg-white/5 text-slate-300 hover:bg-white/10"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
               >
                 Close
               </button>
@@ -492,6 +645,8 @@ export default function AffiliatePage() {
 
         </header>
 
+        {/* MOBILE MENU OVERLAY */}
+
         {menuOpen && (
           <div
             className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm"
@@ -499,39 +654,70 @@ export default function AffiliatePage() {
           />
         )}
 
+        {/* SIDE MENU */}
+
         <aside
-          className={`fixed left-0 top-0 z-[60] h-full w-[290px] max-w-[88vw] border-r border-white/10 bg-[#090d17] shadow-2xl transition-transform duration-300 ${
-            menuOpen ? "translate-x-0" : "-translate-x-full"
+          className={`fixed left-0 top-0 z-[60] h-full w-[290px] max-w-[88vw] border-r shadow-2xl transition-transform duration-300 ${
+            dark
+              ? "border-white/10 bg-[#090d17]"
+              : "border-slate-200 bg-white"
+          } ${
+            menuOpen
+              ? "translate-x-0"
+              : "-translate-x-full"
           }`}
         >
+
           <div className="flex h-full flex-col">
 
-            <div className="flex items-center justify-between border-b border-white/10 px-5 py-5">
+            <div
+              className={`flex items-center justify-between border-b px-5 py-5 ${
+                dark
+                  ? "border-white/10"
+                  : "border-slate-200"
+              }`}
+            >
 
               <div>
                 <p className="font-bold">
                   Affiliate Menu
                 </p>
 
-                <p className="mt-1 text-[10px] uppercase tracking-widest text-slate-600">
+                <p className={`mt-1 text-[10px] uppercase tracking-widest ${secondaryText}`}>
                   UpNetworkCPA
                 </p>
               </div>
 
               <button
                 onClick={() => setMenuOpen(false)}
-                className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+                className={`flex h-9 w-9 items-center justify-center rounded-lg ${
+                  dark
+                    ? "bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+                    : "bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900"
+                }`}
               >
                 <X size={18} />
               </button>
 
             </div>
 
-            <div className="border-b border-white/10 p-5">
+            <div
+              className={`border-b p-5 ${
+                dark
+                  ? "border-white/10"
+                  : "border-slate-200"
+              }`}
+            >
 
-              <div className="flex items-center gap-3 rounded-2xl border border-white/5 bg-white/[0.03] p-3">
+              <div
+                className={`flex items-center gap-3 rounded-2xl border p-3 ${
+                  dark
+                    ? "border-white/5 bg-white/[0.03]"
+                    : "border-slate-200 bg-slate-50"
+                }`}
+              >
 
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-400">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-500">
                   <User size={20} />
                 </div>
 
@@ -540,7 +726,7 @@ export default function AffiliatePage() {
                     {profile?.name || "Affiliate"}
                   </p>
 
-                  <p className="truncate text-xs text-slate-600">
+                  <p className={`truncate text-xs ${secondaryText}`}>
                     {profile?.email || ""}
                   </p>
                 </div>
@@ -551,7 +737,7 @@ export default function AffiliatePage() {
 
             <nav className="flex-1 overflow-y-auto p-4">
 
-              <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-600">
+              <p className={`mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.2em] ${secondaryText}`}>
                 Dashboard
               </p>
 
@@ -570,16 +756,20 @@ export default function AffiliatePage() {
                       }
                       className={`group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition ${
                         active
-                          ? "bg-cyan-400/10 text-cyan-400"
-                          : "text-slate-400 hover:bg-white/5 hover:text-white"
+                          ? "bg-cyan-400/10 text-cyan-500"
+                          : dark
+                          ? "text-slate-400 hover:bg-white/5 hover:text-white"
+                          : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
                       }`}
                     >
                       <Icon
                         size={18}
                         className={
                           active
-                            ? "text-cyan-400"
-                            : "text-slate-600 group-hover:text-cyan-400"
+                            ? "text-cyan-500"
+                            : dark
+                            ? "text-slate-600 group-hover:text-cyan-400"
+                            : "text-slate-400 group-hover:text-cyan-500"
                         }
                       />
 
@@ -587,17 +777,14 @@ export default function AffiliatePage() {
                         {item.label}
                       </span>
 
-                      <ChevronRight
-                        size={15}
-                        className="text-slate-700"
-                      />
+                      <ChevronRight size={15} />
                     </button>
                   );
                 })}
 
               </div>
 
-              <p className="mb-3 mt-7 px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-600">
+              <p className={`mb-3 mt-7 px-3 text-[10px] font-bold uppercase tracking-[0.2em] ${secondaryText}`}>
                 Account
               </p>
 
@@ -608,12 +795,13 @@ export default function AffiliatePage() {
                     setMenuOpen(false);
                     setProfileOpen(true);
                   }}
-                  className="group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-slate-400 hover:bg-white/5 hover:text-white"
+                  className={`group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm ${
+                    dark
+                      ? "text-slate-400 hover:bg-white/5 hover:text-white"
+                      : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                  }`}
                 >
-                  <User
-                    size={18}
-                    className="text-slate-600 group-hover:text-cyan-400"
-                  />
+                  <User size={18} />
 
                   <span className="flex-1">
                     My Account
@@ -627,12 +815,13 @@ export default function AffiliatePage() {
                     setMenuOpen(false);
                     setSettingsOpen(true);
                   }}
-                  className="group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-slate-400 hover:bg-white/5 hover:text-white"
+                  className={`group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm ${
+                    dark
+                      ? "text-slate-400 hover:bg-white/5 hover:text-white"
+                      : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                  }`}
                 >
-                  <Settings
-                    size={18}
-                    className="text-slate-600 group-hover:text-cyan-400"
-                  />
+                  <Settings size={18} />
 
                   <span className="flex-1">
                     Settings
@@ -646,12 +835,13 @@ export default function AffiliatePage() {
                     setMenuOpen(false);
                     setManagerOpen(true);
                   }}
-                  className="group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-slate-400 hover:bg-white/5 hover:text-white"
+                  className={`group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm ${
+                    dark
+                      ? "text-slate-400 hover:bg-white/5 hover:text-white"
+                      : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                  }`}
                 >
-                  <MessageCircle
-                    size={18}
-                    className="text-slate-600 group-hover:text-cyan-400"
-                  />
+                  <MessageCircle size={18} />
 
                   <span className="flex-1">
                     Contact Manager
@@ -664,7 +854,13 @@ export default function AffiliatePage() {
 
             </nav>
 
-            <div className="border-t border-white/10 p-4">
+            <div
+              className={`border-t p-4 ${
+                dark
+                  ? "border-white/10"
+                  : "border-slate-200"
+              }`}
+            >
 
               <button
                 onClick={handleLogout}
@@ -679,17 +875,21 @@ export default function AffiliatePage() {
           </div>
         </aside>
 
+        {/* ================================================= */}
+        {/* MAIN CONTENT */}
+        {/* ================================================= */}
+
         <div className="mx-auto max-w-7xl px-4 py-7 sm:px-6 lg:py-9">
 
           {error && (
-            <div className="mb-6 rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-300">
+            <div className="mb-6 rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400">
               {error}
             </div>
           )}
 
           <section className="mb-7">
 
-            <p className="text-sm font-medium text-cyan-400">
+            <p className="text-sm font-medium text-cyan-500">
               Welcome back 👋
             </p>
 
@@ -697,12 +897,14 @@ export default function AffiliatePage() {
               {profile?.name || "Affiliate Dashboard"}
             </h1>
 
-            <p className="mt-2 text-sm text-slate-500">
+            <p className={`mt-2 text-sm ${mutedText}`}>
               Track your traffic, conversions,
               earnings and affiliate performance.
             </p>
 
           </section>
+
+          {/* KPI CARDS */}
 
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
 
@@ -711,11 +913,12 @@ export default function AffiliatePage() {
               value={totalClicks.toLocaleString()}
               subtitle="All tracked clicks"
               icon={<MousePointerClick size={21} />}
-              iconBox="bg-cyan-500/15 text-cyan-400"
+              iconBox="bg-cyan-500/15 text-cyan-500"
               border="hover:border-cyan-400/40"
               glow="bg-cyan-500/10"
-              valueClass="text-cyan-400"
+              valueClass="text-cyan-500"
               accent="bg-cyan-400"
+              dark={dark}
             />
 
             <ColorCard
@@ -723,11 +926,12 @@ export default function AffiliatePage() {
               value={conversions.toLocaleString()}
               subtitle="Successful conversions"
               icon={<TrendingUp size={21} />}
-              iconBox="bg-emerald-500/15 text-emerald-400"
+              iconBox="bg-emerald-500/15 text-emerald-500"
               border="hover:border-emerald-400/40"
               glow="bg-emerald-500/10"
-              valueClass="text-emerald-400"
+              valueClass="text-emerald-500"
               accent="bg-emerald-400"
+              dark={dark}
             />
 
             <ColorCard
@@ -735,11 +939,12 @@ export default function AffiliatePage() {
               value={`$${earnings.toFixed(2)}`}
               subtitle="Total affiliate earnings"
               icon={<DollarSign size={21} />}
-              iconBox="bg-amber-500/15 text-amber-400"
+              iconBox="bg-amber-500/15 text-amber-500"
               border="hover:border-amber-400/40"
               glow="bg-amber-500/10"
-              valueClass="text-amber-400"
+              valueClass="text-amber-500"
               accent="bg-amber-400"
+              dark={dark}
             />
 
             <ColorCard
@@ -747,14 +952,17 @@ export default function AffiliatePage() {
               value={`${conversionRate}%`}
               subtitle="Current conversion rate"
               icon={<Activity size={21} />}
-              iconBox="bg-violet-500/15 text-violet-400"
+              iconBox="bg-violet-500/15 text-violet-500"
               border="hover:border-violet-400/40"
               glow="bg-violet-500/10"
-              valueClass="text-violet-400"
+              valueClass="text-violet-500"
               accent="bg-violet-400"
+              dark={dark}
             />
 
           </section>
+
+          {/* DASHBOARD FILES */}
 
           <section className="mt-6">
 
@@ -763,7 +971,7 @@ export default function AffiliatePage() {
                 Dashboard Files
               </h2>
 
-              <p className="mt-1 text-xs text-slate-600">
+              <p className={`mt-1 text-xs ${secondaryText}`}>
                 Quick access to your affiliate tools.
               </p>
             </div>
@@ -775,10 +983,11 @@ export default function AffiliatePage() {
                 subtitle="Browse available offers"
                 icon={<Target size={20} />}
                 className="border-yellow-500/10 hover:border-yellow-400/30"
-                iconClass="bg-yellow-500/10 text-yellow-400"
+                iconClass="bg-yellow-500/10 text-yellow-500"
                 onClick={() =>
                   router.push("/affiliate/offers")
                 }
+                dark={dark}
               />
 
               <FileCard
@@ -786,7 +995,7 @@ export default function AffiliatePage() {
                 subtitle="Manage tracking links"
                 icon={<Link2 size={20} />}
                 className="border-cyan-500/10 hover:border-cyan-400/30"
-                iconClass="bg-cyan-500/10 text-cyan-400"
+                iconClass="bg-cyan-500/10 text-cyan-500"
                 onClick={() =>
                   document
                     .getElementById("smart-link")
@@ -794,6 +1003,7 @@ export default function AffiliatePage() {
                       behavior: "smooth",
                     })
                 }
+                dark={dark}
               />
 
               <FileCard
@@ -801,7 +1011,7 @@ export default function AffiliatePage() {
                 subtitle="Analyze your traffic"
                 icon={<BarChart3 size={20} />}
                 className="border-pink-500/10 hover:border-pink-400/30"
-                iconClass="bg-pink-500/10 text-pink-400"
+                iconClass="bg-pink-500/10 text-pink-500"
                 onClick={() =>
                   document
                     .getElementById("statistics")
@@ -809,6 +1019,7 @@ export default function AffiliatePage() {
                       behavior: "smooth",
                     })
                 }
+                dark={dark}
               />
 
               <FileCard
@@ -816,26 +1027,33 @@ export default function AffiliatePage() {
                 subtitle="Payment information"
                 icon={<CreditCard size={20} />}
                 className="border-indigo-500/10 hover:border-indigo-400/30"
-                iconClass="bg-indigo-500/10 text-indigo-400"
+                iconClass="bg-indigo-500/10 text-indigo-500"
                 onClick={() => {}}
+                dark={dark}
               />
 
             </div>
 
           </section>
 
+          {/* SMART LINK */}
+
           <section
             id="smart-link"
-            className="mt-6 overflow-hidden rounded-2xl border border-cyan-400/10 bg-cyan-400/[0.025]"
+            className={`mt-6 overflow-hidden rounded-2xl border p-5 sm:p-6 ${
+              dark
+                ? "border-cyan-400/10 bg-cyan-400/[0.025]"
+                : "border-cyan-100 bg-white"
+            }`}
           >
 
-            <div className="flex flex-col gap-5 p-5 sm:p-6">
+            <div className="flex flex-col gap-5">
 
               <div className="flex items-start justify-between gap-4">
 
                 <div className="flex items-start gap-3">
 
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-400">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-500">
                     <Link2 size={21} />
                   </div>
 
@@ -844,7 +1062,7 @@ export default function AffiliatePage() {
                       Your Smart Link
                     </h2>
 
-                    <p className="mt-1 text-xs text-slate-500">
+                    <p className={`mt-1 text-xs ${mutedText}`}>
                       Share this link to track your
                       affiliate traffic.
                     </p>
@@ -852,7 +1070,7 @@ export default function AffiliatePage() {
 
                 </div>
 
-                <span className="rounded-full bg-emerald-400/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
+                <span className="rounded-full bg-emerald-400/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-500">
                   Active
                 </span>
 
@@ -860,8 +1078,20 @@ export default function AffiliatePage() {
 
               <div className="flex flex-col gap-3 sm:flex-row">
 
-                <div className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
-                  <p className="truncate font-mono text-xs text-slate-400">
+                <div
+                  className={`min-w-0 flex-1 rounded-xl border px-4 py-3 ${
+                    dark
+                      ? "border-white/10 bg-black/20"
+                      : "border-slate-200 bg-slate-50"
+                  }`}
+                >
+                  <p
+                    className={`truncate font-mono text-xs ${
+                      dark
+                        ? "text-slate-400"
+                        : "text-slate-500"
+                    }`}
+                  >
                     {smartLink}
                   </p>
                 </div>
@@ -889,12 +1119,16 @@ export default function AffiliatePage() {
 
           </section>
 
+          {/* STATISTICS */}
+
           <section
             id="statistics"
             className="mt-6 grid gap-6 lg:grid-cols-2"
           >
 
-            <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-5">
+            <div
+              className={`rounded-2xl border p-5 ${border} ${cardBg}`}
+            >
 
               <div className="mb-6 flex items-center justify-between">
 
@@ -903,12 +1137,12 @@ export default function AffiliatePage() {
                     Performance
                   </h2>
 
-                  <p className="mt-1 text-xs text-slate-600">
+                  <p className={`mt-1 text-xs ${secondaryText}`}>
                     Current affiliate activity
                   </p>
                 </div>
 
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-pink-500/10 text-pink-400">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-pink-500/10 text-pink-500">
                   <BarChart3 size={19} />
                 </div>
 
@@ -921,6 +1155,7 @@ export default function AffiliatePage() {
                   value={totalClicks}
                   max={Math.max(totalClicks, 1)}
                   barClass="bg-cyan-400"
+                  dark={dark}
                 />
 
                 <ProgressRow
@@ -928,6 +1163,7 @@ export default function AffiliatePage() {
                   value={conversions}
                   max={Math.max(totalClicks, 1)}
                   barClass="bg-emerald-400"
+                  dark={dark}
                 />
 
                 <ProgressRow
@@ -936,17 +1172,20 @@ export default function AffiliatePage() {
                   max={100}
                   suffix="%"
                   barClass="bg-violet-400"
+                  dark={dark}
                 />
 
               </div>
 
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-5">
+            <div
+              className={`rounded-2xl border p-5 ${border} ${cardBg}`}
+            >
 
               <div className="mb-5 flex items-center gap-3">
 
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-purple-500/10 text-purple-400">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-purple-500/10 text-purple-500">
                   <FileText size={20} />
                 </div>
 
@@ -955,7 +1194,7 @@ export default function AffiliatePage() {
                     Affiliate Account
                   </h2>
 
-                  <p className="text-xs text-slate-600">
+                  <p className={`text-xs ${secondaryText}`}>
                     Account information
                   </p>
                 </div>
@@ -967,22 +1206,26 @@ export default function AffiliatePage() {
                 <InfoRow
                   label="Name"
                   value={profile?.name || "Affiliate"}
+                  dark={dark}
                 />
 
                 <InfoRow
                   label="Email"
                   value={profile?.email || "-"}
+                  dark={dark}
                 />
 
                 <InfoRow
                   label="Affiliate ID"
                   value={affiliateId}
+                  dark={dark}
                 />
 
                 <InfoRow
                   label="Status"
                   value="Active"
-                  valueClass="text-emerald-400"
+                  valueClass="text-emerald-500"
+                  dark={dark}
                 />
 
               </div>
@@ -991,6 +1234,8 @@ export default function AffiliatePage() {
 
           </section>
 
+          {/* MINI STATS */}
+
           <section className="mt-6 grid gap-4 sm:grid-cols-3">
 
             <MiniFile
@@ -998,7 +1243,8 @@ export default function AffiliatePage() {
               title="Traffic"
               value={totalClicks.toLocaleString()}
               subtitle="Tracked visits"
-              iconClass="bg-blue-500/10 text-blue-400"
+              iconClass="bg-blue-500/10 text-blue-500"
+              dark={dark}
             />
 
             <MiniFile
@@ -1009,7 +1255,8 @@ export default function AffiliatePage() {
                 "mobile"
               ).toLocaleString()}
               subtitle="Mobile traffic"
-              iconClass="bg-green-500/10 text-green-400"
+              iconClass="bg-green-500/10 text-green-500"
+              dark={dark}
             />
 
             <MiniFile
@@ -1020,18 +1267,23 @@ export default function AffiliatePage() {
                 "desktop"
               ).toLocaleString()}
               subtitle="Desktop traffic"
-              iconClass="bg-purple-500/10 text-purple-400"
+              iconClass="bg-purple-500/10 text-purple-500"
+              dark={dark}
             />
 
           </section>
 
-          <section className="mt-6 rounded-2xl border border-white/10 bg-white/[0.025] p-5">
+          {/* RECENT ACTIVITY */}
+
+          <section
+            className={`mt-6 rounded-2xl border p-5 ${border} ${cardBg}`}
+          >
 
             <div className="mb-5 flex items-center justify-between">
 
               <div className="flex items-center gap-3">
 
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500/10 text-orange-400">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500/10 text-orange-500">
                   <Clock3 size={19} />
                 </div>
 
@@ -1040,32 +1292,44 @@ export default function AffiliatePage() {
                     Recent Activity
                   </h2>
 
-                  <p className="mt-1 text-xs text-slate-600">
+                  <p className={`mt-1 text-xs ${secondaryText}`}>
                     Latest affiliate activity
                   </p>
                 </div>
 
               </div>
 
-              <span className="rounded-lg bg-white/5 px-3 py-1.5 text-xs text-slate-500">
+              <span
+                className={`rounded-lg px-3 py-1.5 text-xs ${
+                  dark
+                    ? "bg-white/5 text-slate-500"
+                    : "bg-slate-100 text-slate-500"
+                }`}
+              >
                 {clicks.length} records
               </span>
 
             </div>
 
             {clicks.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-white/10 py-12 text-center">
+              <div
+                className={`rounded-xl border border-dashed py-12 text-center ${
+                  dark
+                    ? "border-white/10"
+                    : "border-slate-200"
+                }`}
+              >
 
                 <MousePointerClick
                   size={30}
-                  className="mx-auto mb-3 text-slate-700"
+                  className="mx-auto mb-3 text-slate-400"
                 />
 
-                <p className="text-sm text-slate-500">
+                <p className={`text-sm ${mutedText}`}>
                   No activity yet
                 </p>
 
-                <p className="mt-1 text-xs text-slate-700">
+                <p className={`mt-1 text-xs ${secondaryText}`}>
                   Start sharing your smart link
                   to generate traffic.
                 </p>
@@ -1077,7 +1341,13 @@ export default function AffiliatePage() {
                 <table className="w-full min-w-[680px] text-left text-sm">
 
                   <thead>
-                    <tr className="border-b border-white/10 text-xs text-slate-600">
+                    <tr
+                      className={`border-b text-xs ${
+                        dark
+                          ? "border-white/10 text-slate-600"
+                          : "border-slate-200 text-slate-400"
+                      }`}
+                    >
 
                       <th className="px-3 py-3 font-medium">
                         Date
@@ -1128,20 +1398,42 @@ export default function AffiliatePage() {
                               row.click_id ||
                               `${row.created_at}-${index}`
                             }
-                            className="border-b border-white/5 last:border-0"
+                            className={`border-b last:border-0 ${
+                              dark
+                                ? "border-white/5"
+                                : "border-slate-100"
+                            }`}
                           >
 
-                            <td className="px-3 py-4 text-slate-400">
+                            <td
+                              className={`px-3 py-4 ${
+                                dark
+                                  ? "text-slate-400"
+                                  : "text-slate-600"
+                              }`}
+                            >
                               {formatDate(
                                 row.created_at
                               )}
                             </td>
 
-                            <td className="px-3 py-4 text-slate-500">
+                            <td
+                              className={`px-3 py-4 ${
+                                dark
+                                  ? "text-slate-500"
+                                  : "text-slate-500"
+                              }`}
+                            >
                               {row.country || "-"}
                             </td>
 
-                            <td className="px-3 py-4 text-slate-500">
+                            <td
+                              className={`px-3 py-4 ${
+                                dark
+                                  ? "text-slate-500"
+                                  : "text-slate-500"
+                              }`}
+                            >
                               {row.device || "-"}
                             </td>
 
@@ -1150,8 +1442,10 @@ export default function AffiliatePage() {
                               <span
                                 className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
                                   isConverted
-                                    ? "bg-emerald-400/10 text-emerald-400"
-                                    : "bg-slate-400/10 text-slate-500"
+                                    ? "bg-emerald-400/10 text-emerald-500"
+                                    : dark
+                                    ? "bg-slate-400/10 text-slate-500"
+                                    : "bg-slate-100 text-slate-500"
                                 }`}
                               >
                                 {isConverted
@@ -1161,7 +1455,7 @@ export default function AffiliatePage() {
 
                             </td>
 
-                            <td className="px-3 py-4 text-right font-semibold text-cyan-400">
+                            <td className="px-3 py-4 text-right font-semibold text-cyan-500">
                               $
                               {Number(
                                 row.payout || 0
@@ -1182,6 +1476,8 @@ export default function AffiliatePage() {
 
           </section>
 
+          {/* QUICK ACTIONS */}
+
           <section className="mt-6">
 
             <div className="mb-4">
@@ -1197,10 +1493,11 @@ export default function AffiliatePage() {
                 subtitle="Find offers to promote"
                 icon={<Target size={20} />}
                 className="border-yellow-500/10 hover:border-yellow-400/30"
-                iconClass="bg-yellow-500/10 text-yellow-400"
+                iconClass="bg-yellow-500/10 text-yellow-500"
                 onClick={() =>
                   router.push("/affiliate/offers")
                 }
+                dark={dark}
               />
 
               <FileCard
@@ -1208,8 +1505,9 @@ export default function AffiliatePage() {
                 subtitle="Copy your tracking link"
                 icon={<Link2 size={20} />}
                 className="border-cyan-500/10 hover:border-cyan-400/30"
-                iconClass="bg-cyan-500/10 text-cyan-400"
+                iconClass="bg-cyan-500/10 text-cyan-500"
                 onClick={copySmartLink}
+                dark={dark}
               />
 
               <FileCard
@@ -1217,21 +1515,34 @@ export default function AffiliatePage() {
                 subtitle="Talk with your manager"
                 icon={<MessageCircle size={20} />}
                 className="border-green-500/10 hover:border-green-400/30"
-                iconClass="bg-green-500/10 text-green-400"
-                onClick={() => setManagerOpen(true)}
+                iconClass="bg-green-500/10 text-green-500"
+                onClick={() =>
+                  setManagerOpen(true)
+                }
+                dark={dark}
               />
 
             </div>
 
           </section>
 
-          <footer className="py-10 text-center text-xs text-slate-700">
+          <footer
+            className={`py-10 text-center text-xs ${
+              dark
+                ? "text-slate-700"
+                : "text-slate-400"
+            }`}
+          >
             © {new Date().getFullYear()} UpNetworkCPA
             <span className="mx-2">•</span>
             Affiliate Panel
           </footer>
 
         </div>
+
+        {/* ================================================= */}
+        {/* CONTACT MANAGER */}
+        {/* ================================================= */}
 
         {managerOpen && (
           <div
@@ -1240,7 +1551,7 @@ export default function AffiliatePage() {
           >
 
             <div
-              className="w-full max-w-md rounded-2xl border border-white/10 bg-[#090d17] p-5 shadow-2xl"
+              className={`w-full max-w-md rounded-2xl border p-5 shadow-2xl ${panelBg} ${border}`}
               onClick={(event) =>
                 event.stopPropagation()
               }
@@ -1253,15 +1564,21 @@ export default function AffiliatePage() {
                     Contact Manager
                   </h2>
 
-                  <p className="mt-1 text-xs text-slate-600">
+                  <p className={`mt-1 text-xs ${secondaryText}`}>
                     Choose a panel manager on
                     Telegram.
                   </p>
                 </div>
 
                 <button
-                  onClick={() => setManagerOpen(false)}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+                  onClick={() =>
+                    setManagerOpen(false)
+                  }
+                  className={`flex h-9 w-9 items-center justify-center rounded-lg ${
+                    dark
+                      ? "bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+                      : "bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900"
+                  }`}
                 >
                   <X size={18} />
                 </button>
@@ -1277,10 +1594,14 @@ export default function AffiliatePage() {
                       href={manager.telegramUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.025] p-4 transition hover:border-cyan-400/30 hover:bg-cyan-400/5"
+                      className={`flex items-center gap-3 rounded-xl border p-4 transition ${
+                        dark
+                          ? "border-white/10 bg-white/[0.025] hover:border-cyan-400/30 hover:bg-cyan-400/5"
+                          : "border-slate-200 bg-slate-50 hover:border-cyan-300 hover:bg-cyan-50"
+                      }`}
                     >
 
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-400">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-500">
                         <MessageCircle size={19} />
                       </div>
 
@@ -1290,7 +1611,7 @@ export default function AffiliatePage() {
                           Manager {index + 1}
                         </p>
 
-                        <p className="mt-0.5 text-xs text-cyan-400">
+                        <p className="mt-0.5 text-xs text-cyan-500">
                           {manager.telegram}
                         </p>
 
@@ -1298,7 +1619,11 @@ export default function AffiliatePage() {
 
                       <ChevronRight
                         size={17}
-                        className="text-slate-700"
+                        className={
+                          dark
+                            ? "text-slate-700"
+                            : "text-slate-400"
+                        }
                       />
 
                     </a>
@@ -1316,6 +1641,10 @@ export default function AffiliatePage() {
   );
 }
 
+/* ================================================= */
+/* COLOR CARD */
+/* ================================================= */
+
 function ColorCard({
   title,
   value,
@@ -1326,6 +1655,7 @@ function ColorCard({
   glow,
   valueClass,
   accent,
+  dark,
 }: {
   title: string;
   value: string;
@@ -1336,10 +1666,15 @@ function ColorCard({
   glow: string;
   valueClass: string;
   accent: string;
+  dark: boolean;
 }) {
   return (
     <div
-      className={`group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025] p-5 transition duration-300 ${border}`}
+      className={`group relative overflow-hidden rounded-2xl border p-5 transition duration-300 ${
+        dark
+          ? "border-white/10 bg-white/[0.025]"
+          : "border-slate-200 bg-white shadow-sm"
+      } ${border}`}
     >
 
       <div
@@ -1354,7 +1689,13 @@ function ColorCard({
 
         <div className="mb-5 flex items-center justify-between">
 
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+          <span
+            className={`text-[11px] font-semibold uppercase tracking-wider ${
+              dark
+                ? "text-slate-500"
+                : "text-slate-400"
+            }`}
+          >
             {title}
           </span>
 
@@ -1372,7 +1713,13 @@ function ColorCard({
           {value}
         </p>
 
-        <p className="mt-2 text-xs text-slate-600">
+        <p
+          className={`mt-2 text-xs ${
+            dark
+              ? "text-slate-600"
+              : "text-slate-400"
+          }`}
+        >
           {subtitle}
         </p>
 
@@ -1381,6 +1728,10 @@ function ColorCard({
   );
 }
 
+/* ================================================= */
+/* FILE CARD */
+/* ================================================= */
+
 function FileCard({
   title,
   subtitle,
@@ -1388,6 +1739,7 @@ function FileCard({
   className,
   iconClass,
   onClick,
+  dark,
 }: {
   title: string;
   subtitle: string;
@@ -1395,18 +1747,26 @@ function FileCard({
   className?: string;
   iconClass?: string;
   onClick: () => void;
+  dark: boolean;
 }) {
   return (
     <button
       onClick={onClick}
-      className={`group w-full rounded-2xl border bg-white/[0.02] p-5 text-left transition duration-300 hover:bg-white/[0.045] ${className || ""}`}
+      className={`group w-full rounded-2xl border p-5 text-left transition duration-300 ${
+        dark
+          ? "bg-white/[0.02] hover:bg-white/[0.045]"
+          : "bg-white shadow-sm hover:bg-slate-50"
+      } ${className || ""}`}
     >
 
       <div className="flex items-center gap-4">
 
         <div
           className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
-            iconClass || "bg-white/5 text-slate-400"
+            iconClass ||
+            (dark
+              ? "bg-white/5 text-slate-400"
+              : "bg-slate-100 text-slate-500")
           }`}
         >
           {icon}
@@ -1414,11 +1774,23 @@ function FileCard({
 
         <div className="min-w-0 flex-1">
 
-          <p className="font-semibold text-slate-200">
+          <p
+            className={`font-semibold ${
+              dark
+                ? "text-slate-200"
+                : "text-slate-700"
+            }`}
+          >
             {title}
           </p>
 
-          <p className="mt-1 truncate text-xs text-slate-600">
+          <p
+            className={`mt-1 truncate text-xs ${
+              dark
+                ? "text-slate-600"
+                : "text-slate-400"
+            }`}
+          >
             {subtitle}
           </p>
 
@@ -1426,7 +1798,11 @@ function FileCard({
 
         <ChevronRight
           size={17}
-          className="text-slate-700 transition group-hover:translate-x-1 group-hover:text-slate-400"
+          className={`transition group-hover:translate-x-1 ${
+            dark
+              ? "text-slate-700 group-hover:text-slate-400"
+              : "text-slate-300 group-hover:text-slate-500"
+          }`}
         />
 
       </div>
@@ -1434,21 +1810,33 @@ function FileCard({
   );
 }
 
+/* ================================================= */
+/* MINI FILE */
+/* ================================================= */
+
 function MiniFile({
   icon,
   title,
   value,
   subtitle,
   iconClass,
+  dark,
 }: {
   icon: ReactNode;
   title: string;
   value: string;
   subtitle: string;
   iconClass: string;
+  dark: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-5">
+    <div
+      className={`rounded-2xl border p-5 ${
+        dark
+          ? "border-white/10 bg-white/[0.025]"
+          : "border-slate-200 bg-white shadow-sm"
+      }`}
+    >
 
       <div className="flex items-center gap-3">
 
@@ -1460,7 +1848,13 @@ function MiniFile({
 
         <div>
 
-          <p className="text-xs text-slate-600">
+          <p
+            className={`text-xs ${
+              dark
+                ? "text-slate-600"
+                : "text-slate-400"
+            }`}
+          >
             {title}
           </p>
 
@@ -1472,7 +1866,13 @@ function MiniFile({
 
       </div>
 
-      <p className="mt-3 text-xs text-slate-700">
+      <p
+        className={`mt-3 text-xs ${
+          dark
+            ? "text-slate-700"
+            : "text-slate-400"
+        }`}
+      >
         {subtitle}
       </p>
 
@@ -1480,18 +1880,24 @@ function MiniFile({
   );
 }
 
+/* ================================================= */
+/* PROGRESS ROW */
+/* ================================================= */
+
 function ProgressRow({
   label,
   value,
   max,
   suffix = "",
   barClass,
+  dark,
 }: {
   label: string;
   value: number;
   max: number;
   suffix?: string;
   barClass: string;
+  dark: boolean;
 }) {
   const percentage =
     max > 0
@@ -1506,18 +1912,36 @@ function ProgressRow({
 
       <div className="mb-2 flex items-center justify-between text-xs">
 
-        <span className="text-slate-500">
+        <span
+          className={
+            dark
+              ? "text-slate-500"
+              : "text-slate-400"
+          }
+        >
           {label}
         </span>
 
-        <span className="font-semibold text-slate-300">
+        <span
+          className={`font-semibold ${
+            dark
+              ? "text-slate-300"
+              : "text-slate-600"
+          }`}
+        >
           {value.toLocaleString()}
           {suffix}
         </span>
 
       </div>
 
-      <div className="h-2 overflow-hidden rounded-full bg-white/5">
+      <div
+        className={`h-2 overflow-hidden rounded-full ${
+          dark
+            ? "bg-white/5"
+            : "bg-slate-100"
+        }`}
+      >
 
         <div
           className={`h-full rounded-full transition-all duration-700 ${barClass}`}
@@ -1532,24 +1956,47 @@ function ProgressRow({
   );
 }
 
+/* ================================================= */
+/* INFO ROW */
+/* ================================================= */
+
 function InfoRow({
   label,
   value,
-  valueClass = "text-slate-300",
+  valueClass = "",
+  dark,
 }: {
   label: string;
   value: string;
   valueClass?: string;
+  dark: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-xl bg-white/[0.02] px-3 py-3">
+    <div
+      className={`flex items-center justify-between gap-4 rounded-xl px-3 py-3 ${
+        dark
+          ? "bg-white/[0.02]"
+          : "bg-slate-50"
+      }`}
+    >
 
-      <span className="text-xs text-slate-600">
+      <span
+        className={`text-xs ${
+          dark
+            ? "text-slate-600"
+            : "text-slate-400"
+        }`}
+      >
         {label}
       </span>
 
       <span
-        className={`max-w-[65%] truncate text-right text-xs font-semibold ${valueClass}`}
+        className={`max-w-[65%] truncate text-right text-xs font-semibold ${
+          valueClass ||
+          (dark
+            ? "text-slate-300"
+            : "text-slate-600")
+        }`}
       >
         {value}
       </span>
@@ -1557,6 +2004,10 @@ function InfoRow({
     </div>
   );
 }
+
+/* ================================================= */
+/* DEVICE COUNT */
+/* ================================================= */
 
 function countDevice(
   clicks: ClickRow[],
@@ -1570,6 +2021,10 @@ function countDevice(
     return device.includes(type);
   }).length;
 }
+
+/* ================================================= */
+/* DATE FORMAT */
+/* ================================================= */
 
 function formatDate(value?: string) {
   if (!value) return "-";
@@ -1587,4 +2042,4 @@ function formatDate(value?: string) {
     hour: "numeric",
     minute: "2-digit",
   });
-    }
+        }
