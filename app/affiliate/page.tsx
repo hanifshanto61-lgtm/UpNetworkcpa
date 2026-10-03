@@ -26,7 +26,6 @@ import {
   TrendingUp,
   User,
   Users,
-  Wallet,
   X,
   Zap,
 } from "lucide-react";
@@ -83,33 +82,25 @@ type ClickStats = {
 
 type Manager = {
   id: string;
-  name: string;
   telegram: string;
   telegramUrl: string;
-  role: string;
 };
 
 const PANEL_MANAGERS: Manager[] = [
   {
     id: "manager-1",
-    name: "Panel Manager",
     telegram: "@shuhag1133",
     telegramUrl: "https://t.me/shuhag1133",
-    role: "Panel Manager",
   },
   {
     id: "manager-2",
-    name: "Panel Manager",
     telegram: "@aminruhul9704",
     telegramUrl: "https://t.me/aminruhul9704",
-    role: "Panel Manager",
   },
   {
     id: "manager-3",
-    name: "Panel Manager",
     telegram: "@julianus9",
     telegramUrl: "https://t.me/julianus9",
-    role: "Panel Manager",
   },
 ];
 
@@ -166,56 +157,35 @@ function StatCard({
   subtitle,
   icon,
   className,
-  iconClassName,
-  trend,
-  prefix,
 }: {
   title: string;
   value: string | number;
   subtitle: string;
   icon: React.ReactNode;
   className: string;
-  iconClassName: string;
-  trend?: string;
-  prefix?: string;
 }) {
   return (
     <div
-      className={`group relative overflow-hidden rounded-2xl border border-white/10 p-5 shadow-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl ${className}`}
+      className={`relative overflow-hidden rounded-2xl border border-white/10 p-5 shadow-xl transition hover:-translate-y-1 hover:shadow-2xl ${className}`}
     >
       <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-white/10 blur-2xl" />
 
       <div className="relative flex items-start justify-between">
         <div>
-          <p className="text-sm font-medium text-white/75">{title}</p>
+          <p className="text-sm font-medium text-white/75">
+            {title}
+          </p>
 
-          <div className="mt-3 flex items-baseline gap-1">
-            {prefix && (
-              <span className="text-xl font-bold text-white/80">
-                {prefix}
-              </span>
-            )}
+          <h3 className="mt-3 text-3xl font-bold tracking-tight text-white">
+            {value}
+          </h3>
 
-            <h3 className="text-3xl font-bold tracking-tight text-white">
-              {value}
-            </h3>
-          </div>
-
-          <div className="mt-2 flex items-center gap-2 text-xs text-white/70">
-            {trend && (
-              <span className="flex items-center gap-1 rounded-full bg-white/10 px-2 py-1">
-                <ArrowUpRight size={12} />
-                {trend}
-              </span>
-            )}
-
-            <span>{subtitle}</span>
-          </div>
+          <p className="mt-2 text-xs text-white/70">
+            {subtitle}
+          </p>
         </div>
 
-        <div
-          className={`flex h-12 w-12 items-center justify-center rounded-xl bg-white/15 shadow-inner ${iconClassName}`}
-        >
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/15 text-white">
           {icon}
         </div>
       </div>
@@ -226,9 +196,11 @@ function StatCard({
 export default function AffiliateDashboard() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [stats, setStats] = useState<ClickStats>(emptyStats);
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [copied, setCopied] = useState(false);
+
   const [error, setError] = useState("");
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -237,177 +209,136 @@ export default function AffiliateDashboard() {
 
   const menuRef = useRef<HTMLDivElement | null>(null);
 
+  // ==================================================
+  // LOAD DASHBOARD
+  // ==================================================
+
   const loadDashboard = useCallback(async () => {
     try {
       setError("");
 
       if (!supabase) {
         throw new Error(
-          "Supabase configuration is missing. Please contact the administrator."
+          "Supabase configuration is missing."
         );
       }
 
       const {
-        data: { user },
-      } = await supabase.auth.getUser();
+        data: { session },
+      } = await supabase.auth.getSession();
 
-      if (!user) {
+      if (!session?.access_token) {
         setLoading(false);
         setError("You are not logged in.");
         return;
       }
 
-      // ==========================================
-      // LOAD PROFILE
-      // ==========================================
+      // IMPORTANT:
+      // Profile and clicks are now loaded through
+      // the secure server API.
+      const response = await fetch(
+        "/api/affiliate/dashboard",
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          cache: "no-store",
+        }
+      );
 
-      const { data: affiliateProfile, error: profileError } =
-        await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", user.id)
-          .maybeSingle();
+      const data = await response.json();
 
-      if (profileError) {
-        console.error("Profile loading error:", profileError);
+      if (!response.ok) {
+        console.error(
+          "Affiliate dashboard API error:",
+          data
+        );
 
-        throw new Error("Unable to load your affiliate profile.");
-      }
-
-      if (!affiliateProfile) {
         throw new Error(
-          "Your affiliate profile does not exist in the profiles table."
+          data?.error ||
+            "Unable to load your affiliate profile."
         );
       }
 
-      // ==========================================
-      // FIND AFFILIATE ID
-      // ==========================================
-
-      let affiliateId =
-        affiliateProfile.affiliate_id ||
-        affiliateProfile.affiliateId ||
-        affiliateProfile.affiliate_code ||
-        affiliateProfile.code ||
-        "";
-
-      // ==========================================
-      // CREATE AFFILIATE ID IF MISSING
-      // ==========================================
-
-      if (!affiliateId) {
-        const generatedAffiliateId = `UP${user.id
-          .replace(/-/g, "")
-          .slice(0, 10)
-          .toUpperCase()}`;
-
-        const { data: updatedProfile, error: updateError } =
-          await supabase
-            .from("profiles")
-            .update({
-              affiliate_id: generatedAffiliateId,
-            })
-            .eq("id", user.id)
-            .select("*")
-            .maybeSingle();
-
-        if (updateError) {
-          console.error(
-            "Affiliate ID creation error:",
-            updateError
-          );
-
-          throw new Error(
-            "Affiliate ID could not be created. Please check the profiles table update permission in Supabase."
-          );
-        }
-
-        affiliateId =
-          updatedProfile?.affiliate_id ||
-          generatedAffiliateId;
+      if (!data?.profile?.affiliateId) {
+        throw new Error(
+          "Affiliate ID is unavailable."
+        );
       }
 
-      affiliateId = String(affiliateId).trim();
-
-      if (!affiliateId) {
-        throw new Error("Affiliate ID is still unavailable.");
-      }
-
-      const affiliateName =
-        affiliateProfile.full_name ||
-        affiliateProfile.name ||
-        user.email?.split("@")[0] ||
-        "Affiliate";
+      // ==================================================
+      // PROFILE
+      // ==================================================
 
       const currentProfile: Profile = {
-        id: user.id,
-        affiliateId,
-        email: user.email,
-        name: affiliateName,
+        id: data.profile.id,
+        affiliateId: String(
+          data.profile.affiliateId
+        ),
+        email: data.profile.email || null,
+        name:
+          data.profile.name ||
+          data.profile.email?.split("@")[0] ||
+          "Affiliate",
       };
 
       setProfile(currentProfile);
 
-      // ==========================================
-      // LOAD CLICKS
-      // ==========================================
+      // ==================================================
+      // CLICKS
+      // ==================================================
 
-      const { data: clicks, error: clicksError } = await supabase
-        .from("clicks")
-        .select(
-          "click_id, affiliate_id, smartlink_id, country, device, browser, referer, status, payout, converted_at, created_at"
-        )
-        .eq("affiliate_id", affiliateId)
-        .order("created_at", {
-          ascending: false,
-        });
-
-      if (clicksError) {
-        console.error("Clicks loading error:", clicksError);
-
-        throw new Error("Unable to load click statistics.");
-      }
-
-      const rows = (clicks || []) as ClickRow[];
-
-      // ==========================================
-      // DATE RANGES
-      // ==========================================
+      const rows =
+        (data.clicks || []) as ClickRow[];
 
       const now = new Date();
+
       const todayStart = startOfDay(now);
-
-      const yesterdayStart = new Date(todayStart);
-      yesterdayStart.setDate(yesterdayStart.getDate() - 1);
-
       const monthStart = startOfMonth(now);
 
-      // ==========================================
-      // BASIC STATS
-      // ==========================================
+      const yesterdayStart = new Date(
+        todayStart
+      );
+
+      yesterdayStart.setDate(
+        yesterdayStart.getDate() - 1
+      );
 
       const today = rows.filter(
-        (row) => new Date(row.created_at) >= todayStart
+        (row) =>
+          new Date(row.created_at) >=
+          todayStart
       ).length;
 
       const yesterday = rows.filter((row) => {
-        const date = new Date(row.created_at);
+        const date = new Date(
+          row.created_at
+        );
 
-        return date >= yesterdayStart && date < todayStart;
+        return (
+          date >= yesterdayStart &&
+          date < todayStart
+        );
       }).length;
 
       const month = rows.filter(
-        (row) => new Date(row.created_at) >= monthStart
+        (row) =>
+          new Date(row.created_at) >=
+          monthStart
       ).length;
 
       const total = rows.length;
 
-      // ==========================================
-      // CONVERSION DETECTION
-      // ==========================================
+      // ==================================================
+      // CONVERSIONS
+      // ==================================================
 
-      const isConverted = (row: ClickRow) => {
-        const status = row.status?.toLowerCase();
+      const isConverted = (
+        row: ClickRow
+      ) => {
+        const status =
+          row.status?.toLowerCase();
 
         return (
           status === "converted" ||
@@ -416,8 +347,11 @@ export default function AffiliateDashboard() {
         );
       };
 
-      const isLead = (row: ClickRow) => {
-        const status = row.status?.toLowerCase();
+      const isLead = (
+        row: ClickRow
+      ) => {
+        const status =
+          row.status?.toLowerCase();
 
         return (
           status === "lead" ||
@@ -427,23 +361,34 @@ export default function AffiliateDashboard() {
         );
       };
 
-      const conversions = rows.filter(isConverted).length;
-      const leads = rows.filter(isLead).length;
+      const conversions =
+        rows.filter(isConverted).length;
 
-      const revenue = rows.reduce((sum, row) => {
-        if (!isConverted(row)) {
-          return sum;
-        }
+      const leads =
+        rows.filter(isLead).length;
 
-        return sum + Number(row.payout || 0);
-      }, 0);
+      const revenue = rows.reduce(
+        (sum, row) => {
+          if (!isConverted(row)) {
+            return sum;
+          }
+
+          return (
+            sum +
+            Number(row.payout || 0)
+          );
+        },
+        0
+      );
 
       const conversionRate =
-        total > 0 ? (conversions / total) * 100 : 0;
+        total > 0
+          ? (conversions / total) * 100
+          : 0;
 
-      // ==========================================
+      // ==================================================
       // LAST 7 DAYS
-      // ==========================================
+      // ==================================================
 
       const daily: DailyStat[] = [];
 
@@ -451,40 +396,71 @@ export default function AffiliateDashboard() {
         const date = new Date();
 
         date.setHours(0, 0, 0, 0);
-        date.setDate(date.getDate() - i);
 
-        const nextDate = new Date(date);
-        nextDate.setDate(nextDate.getDate() + 1);
+        date.setDate(
+          date.getDate() - i
+        );
 
-        const dayRows = rows.filter((row) => {
-          const created = new Date(row.created_at);
+        const nextDate =
+          new Date(date);
 
-          return created >= date && created < nextDate;
-        });
+        nextDate.setDate(
+          nextDate.getDate() + 1
+        );
+
+        const dayRows = rows.filter(
+          (row) => {
+            const created =
+              new Date(
+                row.created_at
+              );
+
+            return (
+              created >= date &&
+              created < nextDate
+            );
+          }
+        );
 
         daily.push({
           date: date.toISOString(),
-          label: new Intl.DateTimeFormat("en-US", {
-            weekday: "short",
-          }).format(date),
+          label:
+            new Intl.DateTimeFormat(
+              "en-US",
+              {
+                weekday: "short",
+              }
+            ).format(date),
           clicks: dayRows.length,
-          conversions: dayRows.filter(isConverted).length,
+          conversions:
+            dayRows.filter(
+              isConverted
+            ).length,
         });
       }
 
-      // ==========================================
+      // ==================================================
       // RECENT CONVERSIONS
-      // ==========================================
+      // ==================================================
 
-      const recentConversions = rows
-        .filter(isConverted)
-        .slice(0, 8)
-        .map((row) => ({
-          clickId: row.click_id,
-          country: row.country || "Unknown",
-          payout: Number(row.payout || 0),
-          convertedAt: row.converted_at || row.created_at,
-        }));
+      const recentConversions =
+        rows
+          .filter(isConverted)
+          .slice(0, 8)
+          .map((row) => ({
+            clickId:
+              row.click_id,
+            country:
+              row.country ||
+              "Unknown",
+            payout:
+              Number(
+                row.payout || 0
+              ),
+            convertedAt:
+              row.converted_at ||
+              row.created_at,
+          }));
 
       setStats({
         today,
@@ -499,10 +475,14 @@ export default function AffiliateDashboard() {
         recentConversions,
       });
     } catch (err: any) {
-      console.error("Affiliate dashboard error:", err);
+      console.error(
+        "Affiliate dashboard error:",
+        err
+      );
 
       setError(
-        err?.message || "Failed to load dashboard."
+        err?.message ||
+          "Failed to load dashboard."
       );
     } finally {
       setLoading(false);
@@ -510,37 +490,48 @@ export default function AffiliateDashboard() {
     }
   }, []);
 
+  // ==================================================
+  // INITIAL LOAD
+  // ==================================================
+
   useEffect(() => {
     loadDashboard();
   }, [loadDashboard]);
 
-  // ==========================================
-  // CLOSE MENU WHEN CLICKING OUTSIDE
-  // ==========================================
+  // ==================================================
+  // CLOSE 3-DOT MENU OUTSIDE CLICK
+  // ==================================================
 
   useEffect(() => {
-    function handleOutsideClick(event: MouseEvent) {
+    const handleClick = (
+      event: MouseEvent
+    ) => {
       if (
         menuRef.current &&
-        !menuRef.current.contains(event.target as Node)
+        !menuRef.current.contains(
+          event.target as Node
+        )
       ) {
         setMenuOpen(false);
       }
-    }
+    };
 
-    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener(
+      "mousedown",
+      handleClick
+    );
 
     return () => {
       document.removeEventListener(
         "mousedown",
-        handleOutsideClick
+        handleClick
       );
     };
   }, []);
 
-  // ==========================================
+  // ==================================================
   // SMARTLINK
-  // ==========================================
+  // ==================================================
 
   const smartlink = useMemo(() => {
     if (
@@ -568,109 +559,123 @@ export default function AffiliateDashboard() {
     return url.toString();
   }, [profile]);
 
-  // ==========================================
+  // ==================================================
   // COPY SMARTLINK
-  // ==========================================
+  // ==================================================
 
-  const copySmartlink = async () => {
-    if (!smartlink) {
-      return;
-    }
+  const copySmartlink =
+    async () => {
+      if (!smartlink) return;
 
-    try {
-      await navigator.clipboard.writeText(smartlink);
+      try {
+        await navigator.clipboard.writeText(
+          smartlink
+        );
 
-      setCopied(true);
+        setCopied(true);
 
-      setTimeout(() => {
-        setCopied(false);
-      }, 2000);
-    } catch (copyError) {
-      console.error("Copy failed:", copyError);
-      setCopied(false);
-    }
-  };
+        setTimeout(() => {
+          setCopied(false);
+        }, 2000);
+      } catch (err) {
+        console.error(
+          "Copy failed:",
+          err
+        );
+      }
+    };
 
-  // ==========================================
+  // ==================================================
   // LOGOUT
-  // ==========================================
+  // ==================================================
 
-  const handleLogout = async () => {
-    if (!supabase) {
-      window.location.href = "/login";
-      return;
-    }
+  const handleLogout =
+    async () => {
+      try {
+        setLoggingOut(true);
+        setMenuOpen(false);
 
-    try {
-      setLoggingOut(true);
-      setMenuOpen(false);
+        if (supabase) {
+          await supabase.auth.signOut();
+        }
 
-      await supabase.auth.signOut();
+        window.location.href =
+          "/login";
+      } catch (err) {
+        console.error(
+          "Logout error:",
+          err
+        );
 
-      window.location.href = "/login";
-    } catch (logoutError) {
-      console.error("Logout error:", logoutError);
-      setLoggingOut(false);
-      setError("Logout failed. Please try again.");
-    }
-  };
+        setLoggingOut(false);
+        setError(
+          "Logout failed. Please try again."
+        );
+      }
+    };
 
-  const maxClicks = Math.max(
-    ...stats.daily.map((item) => item.clicks),
-    1
-  );
+  const maxClicks =
+    Math.max(
+      ...stats.daily.map(
+        (item) => item.clicks
+      ),
+      1
+    );
 
-  // ==========================================
-  // LOADING
-  // ==========================================
+  // ==================================================
+  // LOADING SCREEN
+  // ==================================================
 
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 p-6 text-white">
         <div className="mx-auto max-w-7xl">
           <div className="animate-pulse space-y-6">
+
             <div className="h-32 rounded-3xl bg-white/5" />
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {[1, 2, 3, 4].map((item) => (
-                <div
-                  key={item}
-                  className="h-36 rounded-2xl bg-white/5"
-                />
-              ))}
+              {[1, 2, 3, 4].map(
+                (item) => (
+                  <div
+                    key={item}
+                    className="h-36 rounded-2xl bg-white/5"
+                  />
+                )
+              )}
             </div>
 
-            <div className="grid gap-6 lg:grid-cols-3">
-              <div className="h-96 rounded-2xl bg-white/5 lg:col-span-2" />
-              <div className="h-96 rounded-2xl bg-white/5" />
-            </div>
+            <div className="h-96 rounded-3xl bg-white/5" />
+
           </div>
         </div>
       </div>
     );
   }
 
-  // ==========================================
-  // DASHBOARD
-  // ==========================================
+  // ==================================================
+  // MAIN DASHBOARD
+  // ==================================================
 
   return (
     <div className="min-h-screen bg-[#f6f8fc] text-slate-900">
+
       <main className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 lg:p-8">
 
-        {/* ======================================
-            TOP NAVIGATION
-        ====================================== */}
+        {/* =================================================
+            TOP BAR
+        ================================================= */}
 
-        <header className="relative z-50 flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:px-5">
+        <header className="relative z-50 flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
 
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/20">
+
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-lg">
               <Zap size={20} />
             </div>
 
             <div>
-              <p className="text-sm font-bold text-slate-900">
+              <p className="text-sm font-bold">
                 UpNetwork CPA
               </p>
 
@@ -678,81 +683,101 @@ export default function AffiliateDashboard() {
                 Affiliate Panel
               </p>
             </div>
+
           </div>
 
-          {/* ==================================
-              3 DOT ACCOUNT MENU
-          ================================== */}
+          {/* =================================================
+              3 DOT MENU
+          ================================================= */}
 
           <div
             ref={menuRef}
             className="relative"
           >
+
             <button
               type="button"
-              onClick={() => setMenuOpen((value) => !value)}
-              aria-label="Open account menu"
-              aria-expanded={menuOpen}
-              className="group flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+              onClick={() =>
+                setMenuOpen(
+                  (value) =>
+                    !value
+                )
+              }
+              className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+              aria-label="Account menu"
             >
               <MoreVertical
                 size={21}
-                className="transition group-hover:scale-110"
               />
             </button>
 
             {menuOpen && (
-              <div className="absolute right-0 top-14 w-[290px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/15">
+              <div className="absolute right-0 top-14 w-[290px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
 
-                {/* USER HEADER */}
+                {/* ACCOUNT HEADER */}
 
                 <div className="bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-900 p-4 text-white">
+
                   <div className="flex items-center gap-3">
 
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/15 text-lg font-bold ring-1 ring-white/20">
-                      {(profile?.name || "A")
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/15 text-lg font-bold">
+                      {(
+                        profile?.name ||
+                        "A"
+                      )
                         .charAt(0)
                         .toUpperCase()}
                     </div>
 
                     <div className="min-w-0">
+
                       <p className="truncate text-sm font-bold">
-                        {profile?.name || "Affiliate"}
+                        {profile?.name ||
+                          "Affiliate"}
                       </p>
 
                       <p className="truncate text-xs text-blue-200">
-                        {profile?.email || "Affiliate Account"}
+                        {profile?.email ||
+                          "Affiliate Account"}
                       </p>
 
-                      <div className="mt-1 inline-flex items-center rounded-full bg-emerald-400/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                      <span className="mt-1 inline-block rounded-full bg-emerald-400/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
                         ● Online
-                      </div>
+                      </span>
+
                     </div>
+
                   </div>
                 </div>
 
-                {/* MENU ITEMS */}
+                {/* MENU */}
 
                 <div className="p-2">
 
                   <button
                     type="button"
-                    onClick={() => setMenuOpen(false)}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-slate-50"
+                    onClick={() =>
+                      setMenuOpen(false)
+                    }
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left hover:bg-slate-50"
                   >
+
                     <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
                       <User size={17} />
                     </span>
 
                     <span>
-                      <span className="block text-sm font-semibold text-slate-800">
+                      <span className="block text-sm font-semibold">
                         My Account
                       </span>
 
                       <span className="block text-xs text-slate-500">
-                        View your affiliate account
+                        Affiliate ID:{" "}
+                        {profile?.affiliateId ||
+                          "Loading..."}
                       </span>
                     </span>
+
                   </button>
 
                   <button
@@ -761,34 +786,41 @@ export default function AffiliateDashboard() {
                       setMenuOpen(false);
                       setManagerOpen(true);
                     }}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-slate-50"
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left hover:bg-slate-50"
                   >
+
                     <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-                      <MessageCircle size={17} />
+                      <MessageCircle
+                        size={17}
+                      />
                     </span>
 
                     <span>
-                      <span className="block text-sm font-semibold text-slate-800">
+                      <span className="block text-sm font-semibold">
                         Contact Manager
                       </span>
 
                       <span className="block text-xs text-slate-500">
-                        Chat with our panel managers
+                        Telegram support
                       </span>
                     </span>
+
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => setMenuOpen(false)}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-slate-50"
+                    onClick={() =>
+                      setMenuOpen(false)
+                    }
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left hover:bg-slate-50"
                   >
-                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 text-violet-600">
+
+                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
                       <Settings size={17} />
                     </span>
 
                     <span>
-                      <span className="block text-sm font-semibold text-slate-800">
+                      <span className="block text-sm font-semibold">
                         Settings
                       </span>
 
@@ -796,6 +828,7 @@ export default function AffiliateDashboard() {
                         Account settings
                       </span>
                     </span>
+
                   </button>
 
                   <div className="my-2 border-t border-slate-100" />
@@ -804,23 +837,25 @@ export default function AffiliateDashboard() {
                     type="button"
                     onClick={handleLogout}
                     disabled={loggingOut}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-red-50 disabled:opacity-60"
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-red-600 hover:bg-red-50 disabled:opacity-50"
                   >
-                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-50 text-red-600">
+
+                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-50">
                       <LogOut size={17} />
                     </span>
 
                     <span>
-                      <span className="block text-sm font-semibold text-red-600">
+                      <span className="block text-sm font-semibold">
                         {loggingOut
                           ? "Logging out..."
                           : "Logout"}
                       </span>
 
-                      <span className="block text-xs text-slate-500">
+                      <span className="block text-xs text-red-400">
                         Sign out of your account
                       </span>
                     </span>
+
                   </button>
 
                 </div>
@@ -829,115 +864,33 @@ export default function AffiliateDashboard() {
           </div>
         </header>
 
-        {/* ======================================
-            MANAGER MODAL
-        ====================================== */}
-
-        {managerOpen && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
-
-            <div className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl">
-
-              <div className="relative overflow-hidden bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-900 p-6 text-white">
-
-                <button
-                  type="button"
-                  onClick={() => setManagerOpen(false)}
-                  className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 transition hover:bg-white/20"
-                  aria-label="Close"
-                >
-                  <X size={18} />
-                </button>
-
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/10">
-                  <MessageCircle size={23} />
-                </div>
-
-                <h2 className="mt-4 text-xl font-bold">
-                  Contact Panel Manager
-                </h2>
-
-                <p className="mt-1 text-sm leading-5 text-blue-200">
-                  Choose any manager below to contact the UpNetwork CPA team.
-                </p>
-              </div>
-
-              <div className="space-y-3 p-4">
-
-                {PANEL_MANAGERS.map((manager) => (
-                  <a
-                    key={manager.id}
-                    href={manager.telegramUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="group flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-4 transition hover:-translate-y-0.5 hover:border-blue-200 hover:bg-blue-50/40 hover:shadow-lg"
-                  >
-                    <div className="flex items-center gap-3">
-
-                      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg">
-                        <MessageCircle size={19} />
-                      </div>
-
-                      <div>
-                        <p className="text-sm font-bold text-slate-900">
-                          {manager.name}
-                        </p>
-
-                        <p className="text-xs text-slate-500">
-                          {manager.telegram}
-                        </p>
-
-                        <span className="mt-1 inline-block text-[10px] font-semibold text-emerald-600">
-                          Available on Telegram
-                        </span>
-                      </div>
-                    </div>
-
-                    <ChevronRight
-                      size={18}
-                      className="text-slate-300 transition group-hover:translate-x-1 group-hover:text-blue-600"
-                    />
-                  </a>
-                ))}
-
-                <button
-                  type="button"
-                  onClick={() => setManagerOpen(false)}
-                  className="mt-2 w-full rounded-xl bg-slate-100 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ======================================
+        {/* =================================================
             HERO
-        ====================================== */}
+        ================================================= */}
 
         <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-900 p-6 text-white shadow-2xl md:p-8">
 
           <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-blue-500/20 blur-3xl" />
 
-          <div className="absolute -bottom-24 left-1/3 h-72 w-72 rounded-full bg-indigo-500/20 blur-3xl" />
+          <div className="relative">
 
-          <div className="relative flex flex-col justify-between gap-6 md:flex-row md:items-center">
-
-            <div>
-              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-medium backdrop-blur">
-                <Sparkles size={14} />
-                Affiliate Dashboard
-              </div>
-
-              <h1 className="text-3xl font-bold tracking-tight md:text-4xl">
-                Welcome back, {profile?.name || "Affiliate"} 👋
-              </h1>
-
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-blue-100 md:text-base">
-                Track your traffic, leads, conversions and earnings from one place.
-              </p>
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-medium">
+              <Sparkles size={14} />
+              Affiliate Dashboard
             </div>
+
+            <h1 className="text-3xl font-bold md:text-4xl">
+              Welcome back,{" "}
+              {profile?.name ||
+                "Affiliate"}{" "}
+              👋
+            </h1>
+
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-blue-100 md:text-base">
+              Track your traffic, leads,
+              conversions and earnings
+              from one place.
+            </p>
 
             <button
               type="button"
@@ -946,19 +899,26 @@ export default function AffiliateDashboard() {
                 loadDashboard();
               }}
               disabled={refreshing}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-lg transition hover:bg-blue-50 disabled:opacity-60"
+              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 font-semibold text-slate-900 shadow-lg hover:bg-blue-50 disabled:opacity-60"
             >
               <RefreshCw
                 size={17}
-                className={refreshing ? "animate-spin" : ""}
+                className={
+                  refreshing
+                    ? "animate-spin"
+                    : ""
+                }
               />
 
               Refresh
             </button>
+
           </div>
         </section>
 
-        {/* ERROR */}
+        {/* =================================================
+            ERROR
+        ================================================= */}
 
         {error && (
           <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
@@ -966,62 +926,73 @@ export default function AffiliateDashboard() {
           </div>
         )}
 
-        {/* ======================================
-            KPI CARDS
-        ====================================== */}
+        {/* =================================================
+            STATS
+        ================================================= */}
 
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
 
           <StatCard
             title="Total Clicks"
-            value={formatNumber(stats.total)}
-            subtitle={`${formatNumber(stats.today)} today`}
-            trend={
-              stats.yesterday > 0
-                ? `${Math.round(
-                    ((stats.today - stats.yesterday) /
-                      stats.yesterday) *
-                      100
-                  )}%`
-                : undefined
+            value={formatNumber(
+              stats.total
+            )}
+            subtitle={`${formatNumber(
+              stats.today
+            )} today`}
+            icon={
+              <MousePointerClick
+                size={23}
+              />
             }
-            icon={<MousePointerClick size={23} />}
             className="bg-gradient-to-br from-blue-500 to-cyan-500"
-            iconClassName="text-white"
           />
 
           <StatCard
             title="Leads"
-            value={formatNumber(stats.leads)}
+            value={formatNumber(
+              stats.leads
+            )}
             subtitle="Qualified actions"
-            icon={<Users size={23} />}
+            icon={
+              <Users size={23} />
+            }
             className="bg-gradient-to-br from-emerald-500 to-teal-500"
-            iconClassName="text-white"
           />
 
           <StatCard
             title="Conversions"
-            value={formatNumber(stats.conversions)}
-            subtitle={`${stats.conversionRate.toFixed(2)}% conversion rate`}
-            icon={<Target size={23} />}
+            value={formatNumber(
+              stats.conversions
+            )}
+            subtitle={`${stats.conversionRate.toFixed(
+              2
+            )}% conversion rate`}
+            icon={
+              <Target size={23} />
+            }
             className="bg-gradient-to-br from-violet-500 to-purple-600"
-            iconClassName="text-white"
           />
 
           <StatCard
             title="Revenue"
-            value={formatMoney(stats.revenue).replace("$", "")}
-            prefix="$"
+            value={formatMoney(
+              stats.revenue
+            )}
             subtitle="Total earnings"
-            icon={<CircleDollarSign size={23} />}
+            icon={
+              <CircleDollarSign
+                size={23}
+              />
+            }
             className="bg-gradient-to-br from-orange-500 to-amber-500"
-            iconClassName="text-white"
           />
+
         </section>
 
-        {/* ======================================
+        {/* =================================================
             PERFORMANCE + SMARTLINK
-        ====================================== */}
+        ================================================= */}
 
         <section className="grid gap-6 lg:grid-cols-3">
 
@@ -1029,48 +1000,37 @@ export default function AffiliateDashboard() {
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
 
-            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+            <div className="flex items-center gap-2">
+
+              <div className="rounded-lg bg-blue-50 p-2 text-blue-600">
+                <BarChart3 size={19} />
+              </div>
 
               <div>
-                <div className="flex items-center gap-2">
+                <h2 className="font-bold">
+                  Performance
+                </h2>
 
-                  <div className="rounded-lg bg-blue-50 p-2 text-blue-600">
-                    <BarChart3 size={19} />
-                  </div>
-
-                  <h2 className="font-bold text-slate-900">
-                    Performance
-                  </h2>
-                </div>
-
-                <p className="mt-1 text-sm text-slate-500">
-                  Traffic and conversion activity over the last 7 days
+                <p className="text-sm text-slate-500">
+                  Last 7 days
                 </p>
               </div>
 
-              <div className="flex gap-2 text-xs">
-
-                <span className="rounded-full bg-blue-50 px-3 py-1.5 font-medium text-blue-600">
-                  Today: {formatNumber(stats.today)}
-                </span>
-
-                <span className="rounded-full bg-slate-100 px-3 py-1.5 font-medium text-slate-600">
-                  Month: {formatNumber(stats.month)}
-                </span>
-
-              </div>
             </div>
 
-            <div className="mt-8">
+            <div className="mt-8 flex h-64 items-end gap-2 md:gap-4">
 
-              <div className="flex h-64 items-end gap-2 md:gap-4">
-
-                {stats.daily.map((item) => {
-
-                  const height = Math.max(
-                    (item.clicks / maxClicks) * 100,
-                    item.clicks > 0 ? 8 : 2
-                  );
+              {stats.daily.map(
+                (item) => {
+                  const height =
+                    Math.max(
+                      (item.clicks /
+                        maxClicks) *
+                        100,
+                      item.clicks > 0
+                        ? 8
+                        : 2
+                    );
 
                   return (
                     <div
@@ -1080,10 +1040,10 @@ export default function AffiliateDashboard() {
 
                       <div className="flex h-full w-full items-end justify-center">
 
-                        <div className="relative flex h-full w-full max-w-14 items-end">
+                        <div className="relative h-full w-full max-w-14">
 
                           <div
-                            className="group relative w-full rounded-t-xl bg-gradient-to-t from-blue-600 to-cyan-400 transition-all duration-500"
+                            className="absolute bottom-0 w-full rounded-t-xl bg-gradient-to-t from-blue-600 to-cyan-400 transition-all"
                             style={{
                               height: `${height}%`,
                             }}
@@ -1093,69 +1053,72 @@ export default function AffiliateDashboard() {
                               {item.clicks} clicks
                             </div>
 
-                            {item.conversions > 0 && (
-                              <div className="absolute -top-1 left-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-500 ring-4 ring-violet-100" />
-                            )}
-
                           </div>
+
                         </div>
+
                       </div>
 
-                      <span className="text-xs font-medium text-slate-400">
+                      <span className="text-xs text-slate-400">
                         {item.label}
                       </span>
 
                     </div>
                   );
-                })}
+                }
+              )}
 
-              </div>
             </div>
 
             <div className="mt-5 flex items-center gap-5 border-t border-slate-100 pt-4 text-xs text-slate-500">
 
-              <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
-                Clicks
-              </div>
+              <span>
+                Today:{" "}
+                <b>
+                  {formatNumber(
+                    stats.today
+                  )}
+                </b>
+              </span>
 
-              <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-violet-500" />
-                Conversions
-              </div>
+              <span>
+                Month:{" "}
+                <b>
+                  {formatNumber(
+                    stats.month
+                  )}
+                </b>
+              </span>
 
             </div>
+
           </div>
 
           {/* SMARTLINK */}
 
-          <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-violet-600 via-purple-600 to-fuchsia-600 p-5 text-white shadow-xl">
+          <div className="rounded-2xl bg-gradient-to-br from-violet-600 via-purple-600 to-fuchsia-600 p-5 text-white shadow-xl">
 
-            <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
 
-              <div className="flex items-center gap-2">
-
-                <div className="rounded-lg bg-white/15 p-2">
-                  <Link2 size={20} />
-                </div>
-
-                <h2 className="font-bold">
-                  Smartlink
-                </h2>
-
+              <div className="rounded-lg bg-white/15 p-2">
+                <Link2 size={20} />
               </div>
 
-              <Zap size={19} />
+              <h2 className="font-bold">
+                Smartlink
+              </h2>
+
             </div>
 
             <p className="mt-4 text-sm leading-6 text-purple-100">
-              Your personal smartlink is ready. Share this link with your traffic sources.
+              Your personal smartlink
+              is ready.
             </p>
 
-            <div className="mt-5 rounded-xl border border-white/10 bg-black/15 p-3 backdrop-blur">
+            <div className="mt-5 rounded-xl bg-black/15 p-3">
 
               {smartlink ? (
-                <p className="break-all text-xs leading-5 text-purple-50">
+                <p className="break-all text-xs leading-5">
                   {smartlink}
                 </p>
               ) : (
@@ -1170,11 +1133,14 @@ export default function AffiliateDashboard() {
               type="button"
               onClick={copySmartlink}
               disabled={!smartlink}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-purple-700 transition hover:bg-purple-50 disabled:cursor-not-allowed disabled:opacity-50"
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-purple-700 disabled:opacity-50"
             >
+
               {copied ? (
                 <>
-                  <CheckCircle2 size={17} />
+                  <CheckCircle2
+                    size={17}
+                  />
                   Copied!
                 </>
               ) : (
@@ -1183,6 +1149,7 @@ export default function AffiliateDashboard() {
                   Copy Smartlink
                 </>
               )}
+
             </button>
 
             <div className="mt-5 grid grid-cols-2 gap-3">
@@ -1193,7 +1160,9 @@ export default function AffiliateDashboard() {
                 </p>
 
                 <p className="mt-1 text-xl font-bold">
-                  {formatNumber(stats.total)}
+                  {formatNumber(
+                    stats.total
+                  )}
                 </p>
               </div>
 
@@ -1203,52 +1172,49 @@ export default function AffiliateDashboard() {
                 </p>
 
                 <p className="mt-1 text-xl font-bold">
-                  {formatNumber(stats.conversions)}
+                  {formatNumber(
+                    stats.conversions
+                  )}
                 </p>
               </div>
 
             </div>
           </div>
+
         </section>
 
-        {/* ======================================
-            RECENT CONVERSIONS + TRAFFIC
-        ====================================== */}
+        {/* =================================================
+            RECENT CONVERSIONS
+        ================================================= */}
 
         <section className="grid gap-6 lg:grid-cols-3">
 
-          {/* RECENT CONVERSIONS */}
-
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm lg:col-span-2">
 
-            <div className="flex items-center justify-between border-b border-slate-100 p-5">
+            <div className="border-b border-slate-100 p-5">
 
-              <div>
-                <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
 
-                  <div className="rounded-lg bg-emerald-50 p-2 text-emerald-600">
-                    <CheckCircle2 size={19} />
-                  </div>
-
-                  <h2 className="font-bold text-slate-900">
-                    Recent Conversions
-                  </h2>
-
+                <div className="rounded-lg bg-emerald-50 p-2 text-emerald-600">
+                  <CheckCircle2
+                    size={19}
+                  />
                 </div>
 
-                <p className="mt-1 text-sm text-slate-500">
-                  Latest conversion activity
-                </p>
+                <h2 className="font-bold">
+                  Recent Conversions
+                </h2>
+
               </div>
 
-              <span className="flex items-center gap-1 text-sm font-medium text-blue-600">
-                Live
-                <ChevronRight size={16} />
-              </span>
+              <p className="mt-1 text-sm text-slate-500">
+                Latest conversion activity
+              </p>
 
             </div>
 
-            {stats.recentConversions.length === 0 ? (
+            {stats.recentConversions
+              .length === 0 ? (
 
               <div className="flex min-h-52 flex-col items-center justify-center p-6 text-center">
 
@@ -1256,12 +1222,13 @@ export default function AffiliateDashboard() {
                   <Activity size={25} />
                 </div>
 
-                <h3 className="mt-3 font-semibold text-slate-800">
+                <h3 className="mt-3 font-semibold">
                   No conversions yet
                 </h3>
 
-                <p className="mt-1 max-w-sm text-sm text-slate-500">
-                  Your conversions will appear here when your traffic starts converting.
+                <p className="mt-1 text-sm text-slate-500">
+                  Your conversions will
+                  appear here.
                 </p>
 
               </div>
@@ -1270,61 +1237,83 @@ export default function AffiliateDashboard() {
 
               <div className="divide-y divide-slate-100">
 
-                {stats.recentConversions.map((conversion) => (
+                {stats.recentConversions.map(
+                  (conversion) => (
+                    <div
+                      key={
+                        conversion.clickId
+                      }
+                      className="flex items-center justify-between gap-4 p-4"
+                    >
 
-                  <div
-                    key={conversion.clickId}
-                    className="flex items-center justify-between gap-4 p-4 transition hover:bg-slate-50"
-                  >
+                      <div className="flex min-w-0 items-center gap-3">
 
-                    <div className="flex min-w-0 items-center gap-3">
-
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
-                        <CheckCircle2 size={18} />
-                      </div>
-
-                      <div className="min-w-0">
-
-                        <p className="truncate text-sm font-semibold text-slate-800">
-                          {conversion.clickId}
-                        </p>
-
-                        <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
-
-                          <Globe2 size={12} />
-                          {conversion.country}
-
-                          <span>•</span>
-
-                          <Clock3 size={12} />
-                          {formatDate(conversion.convertedAt)}
-
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                          <CheckCircle2
+                            size={18}
+                          />
                         </div>
 
+                        <div className="min-w-0">
+
+                          <p className="truncate text-sm font-semibold">
+                            {
+                              conversion.clickId
+                            }
+                          </p>
+
+                          <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
+
+                            <Globe2
+                              size={12}
+                            />
+
+                            {
+                              conversion.country
+                            }
+
+                            <span>
+                              •
+                            </span>
+
+                            <Clock3
+                              size={12}
+                            />
+
+                            {formatDate(
+                              conversion.convertedAt
+                            )}
+
+                          </div>
+
+                        </div>
                       </div>
+
+                      <div className="shrink-0 text-right">
+
+                        <p className="font-bold text-emerald-600">
+                          +
+                          {formatMoney(
+                            conversion.payout
+                          )}
+                        </p>
+
+                        <p className="text-xs text-slate-400">
+                          Conversion
+                        </p>
+
+                      </div>
+
                     </div>
-
-                    <div className="shrink-0 text-right">
-
-                      <p className="font-bold text-emerald-600">
-                        +{formatMoney(conversion.payout)}
-                      </p>
-
-                      <p className="mt-1 text-xs text-slate-400">
-                        Conversion
-                      </p>
-
-                    </div>
-
-                  </div>
-
-                ))}
+                  )
+                )}
 
               </div>
             )}
+
           </div>
 
-          {/* TRAFFIC OVERVIEW */}
+          {/* TRAFFIC */}
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
 
@@ -1335,12 +1324,12 @@ export default function AffiliateDashboard() {
               </div>
 
               <div>
-                <h2 className="font-bold text-slate-900">
+                <h2 className="font-bold">
                   Traffic Overview
                 </h2>
 
                 <p className="text-xs text-slate-500">
-                  Your traffic sources
+                  Traffic tracking
                 </p>
               </div>
 
@@ -1352,23 +1341,18 @@ export default function AffiliateDashboard() {
 
                 <div className="flex items-center gap-3">
 
-                  <div className="rounded-lg bg-blue-100 p-2 text-blue-600">
-                    <Globe2 size={17} />
-                  </div>
+                  <Globe2
+                    size={18}
+                    className="text-blue-600"
+                  />
 
-                  <div>
-                    <p className="text-sm font-semibold">
-                      Total GEO
-                    </p>
-
-                    <p className="text-xs text-slate-500">
-                      Country tracking
-                    </p>
-                  </div>
+                  <span className="text-sm font-semibold">
+                    GEO Tracking
+                  </span>
 
                 </div>
 
-                <span className="text-sm font-bold text-emerald-600">
+                <span className="text-xs font-bold text-emerald-600">
                   Live
                 </span>
 
@@ -1378,23 +1362,18 @@ export default function AffiliateDashboard() {
 
                 <div className="flex items-center gap-3">
 
-                  <div className="rounded-lg bg-violet-100 p-2 text-violet-600">
-                    <Smartphone size={17} />
-                  </div>
+                  <Smartphone
+                    size={18}
+                    className="text-violet-600"
+                  />
 
-                  <div>
-                    <p className="text-sm font-semibold">
-                      Mobile Traffic
-                    </p>
-
-                    <p className="text-xs text-slate-500">
-                      Device tracking
-                    </p>
-                  </div>
+                  <span className="text-sm font-semibold">
+                    Mobile
+                  </span>
 
                 </div>
 
-                <span className="text-sm font-bold text-emerald-600">
+                <span className="text-xs font-bold text-emerald-600">
                   Live
                 </span>
 
@@ -1404,23 +1383,18 @@ export default function AffiliateDashboard() {
 
                 <div className="flex items-center gap-3">
 
-                  <div className="rounded-lg bg-emerald-100 p-2 text-emerald-600">
-                    <Laptop size={17} />
-                  </div>
+                  <Laptop
+                    size={18}
+                    className="text-emerald-600"
+                  />
 
-                  <div>
-                    <p className="text-sm font-semibold">
-                      Desktop Traffic
-                    </p>
-
-                    <p className="text-xs text-slate-500">
-                      Device tracking
-                    </p>
-                  </div>
+                  <span className="text-sm font-semibold">
+                    Desktop
+                  </span>
 
                 </div>
 
-                <span className="text-sm font-bold text-emerald-600">
+                <span className="text-xs font-bold text-emerald-600">
                   Live
                 </span>
 
@@ -1428,11 +1402,12 @@ export default function AffiliateDashboard() {
 
             </div>
           </div>
+
         </section>
 
-        {/* ======================================
+        {/* =================================================
             QUICK ACTIONS
-        ====================================== */}
+        ================================================= */}
 
         <section>
 
@@ -1443,12 +1418,12 @@ export default function AffiliateDashboard() {
             </div>
 
             <div>
-              <h2 className="font-bold text-slate-900">
+              <h2 className="font-bold">
                 Quick Actions
               </h2>
 
               <p className="text-xs text-slate-500">
-                Manage your affiliate activity quickly
+                Manage your affiliate activity
               </p>
             </div>
 
@@ -1458,27 +1433,19 @@ export default function AffiliateDashboard() {
 
             <Link
               href="/affiliate/offers"
-              className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:border-blue-200 hover:shadow-lg"
+              className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
             >
 
-              <div className="flex items-center justify-between">
-
-                <div className="rounded-xl bg-blue-50 p-3 text-blue-600">
-                  <Target size={21} />
-                </div>
-
-                <ChevronRight
-                  size={18}
-                  className="text-slate-300 transition group-hover:translate-x-1 group-hover:text-blue-500"
-                />
-
-              </div>
+              <Target
+                size={22}
+                className="text-blue-600"
+              />
 
               <h3 className="mt-4 font-semibold">
                 Browse Offers
               </h3>
 
-              <p className="mt-1 text-xs leading-5 text-slate-500">
+              <p className="mt-1 text-xs text-slate-500">
                 Find offers and start promoting.
               </p>
 
@@ -1486,32 +1453,20 @@ export default function AffiliateDashboard() {
 
             <button
               type="button"
-              onClick={() => {
-                if (smartlink) {
-                  copySmartlink();
-                }
-              }}
-              className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:border-violet-200 hover:shadow-lg"
+              onClick={copySmartlink}
+              className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
             >
 
-              <div className="flex items-center justify-between">
-
-                <div className="rounded-xl bg-violet-50 p-3 text-violet-600">
-                  <Link2 size={21} />
-                </div>
-
-                <ChevronRight
-                  size={18}
-                  className="text-slate-300 transition group-hover:translate-x-1 group-hover:text-violet-500"
-                />
-
-              </div>
+              <Link2
+                size={22}
+                className="text-violet-600"
+              />
 
               <h3 className="mt-4 font-semibold">
                 Smartlinks
               </h3>
 
-              <p className="mt-1 text-xs leading-5 text-slate-500">
+              <p className="mt-1 text-xs text-slate-500">
                 Copy your affiliate smartlink.
               </p>
 
@@ -1519,58 +1474,49 @@ export default function AffiliateDashboard() {
 
             <button
               type="button"
-              onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-              className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:border-emerald-200 hover:shadow-lg"
+              onClick={() =>
+                window.scrollTo({
+                  top: 0,
+                  behavior: "smooth",
+                })
+              }
+              className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
             >
 
-              <div className="flex items-center justify-between">
-
-                <div className="rounded-xl bg-emerald-50 p-3 text-emerald-600">
-                  <BarChart3 size={21} />
-                </div>
-
-                <ChevronRight
-                  size={18}
-                  className="text-slate-300 transition group-hover:translate-x-1 group-hover:text-emerald-500"
-                />
-
-              </div>
+              <BarChart3
+                size={22}
+                className="text-emerald-600"
+              />
 
               <h3 className="mt-4 font-semibold">
                 Statistics
               </h3>
 
-              <p className="mt-1 text-xs leading-5 text-slate-500">
-                Analyze your performance.
+              <p className="mt-1 text-xs text-slate-500">
+                Analyze performance.
               </p>
 
             </button>
 
             <button
               type="button"
-              onClick={() => setManagerOpen(true)}
-              className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:border-orange-200 hover:shadow-lg"
+              onClick={() =>
+                setManagerOpen(true)
+              }
+              className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
             >
 
-              <div className="flex items-center justify-between">
-
-                <div className="rounded-xl bg-orange-50 p-3 text-orange-600">
-                  <MessageCircle size={21} />
-                </div>
-
-                <ChevronRight
-                  size={18}
-                  className="text-slate-300 transition group-hover:translate-x-1 group-hover:text-orange-500"
-                />
-
-              </div>
+              <MessageCircle
+                size={22}
+                className="text-orange-600"
+              />
 
               <h3 className="mt-4 font-semibold">
                 Contact Manager
               </h3>
 
-              <p className="mt-1 text-xs leading-5 text-slate-500">
-                Contact any panel manager on Telegram.
+              <p className="mt-1 text-xs text-slate-500">
+                Contact a panel manager.
               </p>
 
             </button>
@@ -1578,31 +1524,133 @@ export default function AffiliateDashboard() {
           </div>
         </section>
 
-        {/* ======================================
+        {/* =================================================
             FOOTER
-        ====================================== */}
+        ================================================= */}
 
         <div className="flex flex-col justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-xs text-slate-500 shadow-sm sm:flex-row sm:items-center">
 
           <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.12)]" />
+
+            <span className="h-2 w-2 rounded-full bg-emerald-500" />
 
             Dashboard connected to live affiliate data
+
           </div>
 
           <div className="flex items-center gap-2">
+
             <TrendingUp size={14} />
 
             Conversion Rate:
 
             <span className="font-semibold text-slate-700">
-              {stats.conversionRate.toFixed(2)}%
+              {stats.conversionRate.toFixed(
+                2
+              )}
+              %
             </span>
+
           </div>
 
         </div>
 
       </main>
+
+      {/* =================================================
+          MANAGER MODAL
+      ================================================= */}
+
+      {managerOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+
+          <div className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl">
+
+            <div className="flex items-center justify-between bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-900 p-5 text-white">
+
+              <div>
+
+                <div className="flex items-center gap-2">
+
+                  <MessageCircle
+                    size={20}
+                  />
+
+                  <h2 className="font-bold">
+                    Contact Manager
+                  </h2>
+
+                </div>
+
+                <p className="mt-1 text-xs text-blue-200">
+                  Choose a panel manager
+                </p>
+
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setManagerOpen(false)
+                }
+                className="rounded-xl p-2 hover:bg-white/10"
+              >
+                <X size={20} />
+              </button>
+
+            </div>
+
+            <div className="space-y-3 p-5">
+
+              {PANEL_MANAGERS.map(
+                (manager) => (
+                  <a
+                    key={manager.id}
+                    href={
+                      manager.telegramUrl
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between rounded-2xl border border-slate-200 p-4 transition hover:border-blue-200 hover:bg-blue-50"
+                  >
+
+                    <div className="flex items-center gap-3">
+
+                      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-100 font-bold text-blue-600">
+                        <MessageCircle
+                          size={19}
+                        />
+                      </div>
+
+                      <div>
+
+                        <p className="text-sm font-bold">
+                          Panel Manager
+                        </p>
+
+                        <p className="text-xs text-slate-500">
+                          {manager.telegram}
+                        </p>
+
+                      </div>
+
+                    </div>
+
+                    <ChevronRight
+                      size={18}
+                      className="text-slate-400"
+                    />
+
+                  </a>
+                )
+              )}
+
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
-                    }
+}
