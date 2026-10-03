@@ -273,20 +273,30 @@ export default function AffiliatePage() {
       {/* ================================================= */}
 
       <div
-        className="pointer-events-none fixed inset-0 z-0"
+        className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
         aria-hidden="true"
       >
+        <div className="absolute inset-0 bg-[#05070c]" />
+
         <div
           className="absolute inset-0 bg-center bg-no-repeat"
           style={{
             backgroundImage:
               "url('/file_000000013688207a03d42a2550c1954.png')",
-            backgroundSize: "min(720px, 82vw)",
-            opacity: 0.08,
+            backgroundSize: "min(680px, 82vw)",
+            opacity: 0.20,
           }}
         />
 
-        <div className="absolute inset-0 bg-[#05070c]/80" />
+        <div className="absolute inset-0 bg-[#05070c]/25" />
+
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(circle at center, transparent 20%, rgba(5,7,12,0.45) 100%)",
+          }}
+        />
       </div>
 
       <div className="relative z-10">
@@ -682,9 +692,9 @@ export default function AffiliatePage() {
               value={totalClicks.toLocaleString()}
               subtitle="All tracked clicks"
               icon={<MousePointerClick size={21} />}
-              iconBox="bg-blue-500/15 text-blue-400"
-              border="hover:border-blue-400/30"
-              glow="bg-blue-500/5"
+              iconBox="bg-cyan-500/15 text-cyan-400"
+              border="hover:border-cyan-400/40"
+              glow="bg-cyan-500/10"
             />
 
             <ColorCard
@@ -693,8 +703,8 @@ export default function AffiliatePage() {
               subtitle="Successful conversions"
               icon={<TrendingUp size={21} />}
               iconBox="bg-emerald-500/15 text-emerald-400"
-              border="hover:border-emerald-400/30"
-              glow="bg-emerald-500/5"
+              border="hover:border-emerald-400/40"
+              glow="bg-emerald-500/10"
             />
 
             <ColorCard
@@ -702,9 +712,9 @@ export default function AffiliatePage() {
               value={`$${earnings.toFixed(2)}`}
               subtitle="Total affiliate earnings"
               icon={<DollarSign size={21} />}
-              iconBox="bg-purple-500/15 text-purple-400"
-              border="hover:border-purple-400/30"
-              glow="bg-purple-500/5"
+              iconBox="bg-amber-500/15 text-amber-400"
+              border="hover:border-amber-400/40"
+              glow="bg-amber-500/10"
             />
 
             <ColorCard
@@ -712,9 +722,9 @@ export default function AffiliatePage() {
               value={`${conversionRate}%`}
               subtitle="Current conversion rate"
               icon={<Activity size={21} />}
-              iconBox="bg-orange-500/15 text-orange-400"
-              border="hover:border-orange-400/30"
-              glow="bg-orange-500/5"
+              iconBox="bg-violet-500/15 text-violet-400"
+              border="hover:border-violet-400/40"
+              glow="bg-violet-500/10"
             />
 
           </section>
@@ -883,7 +893,7 @@ export default function AffiliatePage() {
                   label="Clicks"
                   value={totalClicks}
                   max={Math.max(totalClicks, 1)}
-                  barClass="bg-blue-400"
+                  barClass="bg-cyan-400"
                 />
 
                 <ProgressRow
@@ -898,7 +908,7 @@ export default function AffiliatePage() {
                   value={Number(conversionRate)}
                   max={100}
                   suffix="%"
-                  barClass="bg-orange-400"
+                  barClass="bg-violet-400"
                 />
 
               </div>
@@ -1540,4 +1550,4 @@ function formatDate(value?: string) {
     hour: "numeric",
     minute: "2-digit",
   });
-      }
+                                }
