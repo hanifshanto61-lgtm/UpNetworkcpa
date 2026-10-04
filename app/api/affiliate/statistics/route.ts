@@ -99,7 +99,7 @@ async function findProfile(
         };
       }
     } catch {
-      // Try next compatible column.
+      // Try next compatible profile column.
     }
   }
 
@@ -109,12 +109,44 @@ async function findProfile(
   };
 }
 
+function isDateInRange(
+  createdAt: any,
+  from: string,
+  to: string
+) {
+  if (!createdAt) {
+    return false;
+  }
+
+  const time =
+    new Date(createdAt).getTime();
+
+  if (!Number.isFinite(time)) {
+    return false;
+  }
+
+  const start =
+    new Date(
+      `${from}T00:00:00`
+    ).getTime();
+
+  const end =
+    new Date(
+      `${to}T23:59:59.999`
+    ).getTime();
+
+  return (
+    time >= start &&
+    time <= end
+  );
+}
+
 export async function GET(
   request: NextRequest
 ) {
   try {
     /* -----------------------------------------
-       1. SERVER CONFIGURATION
+       1. SUPABASE CONFIG
     ----------------------------------------- */
 
     const supabaseUrl =
@@ -312,39 +344,18 @@ export async function GET(
       );
     }
 
-    /*
-     * We intentionally use date-only
-     * boundaries here.
-     *
-     * This works with a normal timestamp/
-     * timestamptz created_at column.
-     */
-
-    const startDate =
-      `${from}T00:00:00.000Z`;
-
-    const endDateObject =
-      new Date(
-        `${to}T00:00:00.000Z`
-      );
-
-    endDateObject.setUTCDate(
-      endDateObject.getUTCDate() + 1
-    );
-
-    const endDate =
-      endDateObject.toISOString();
-
     /* -----------------------------------------
-       7. LOAD CLICK DATA
+       7. LOAD AFFILIATE CLICKS
        
        IMPORTANT:
-       Use the exact same columns already
-       proven to work in dashboard/route.ts.
+       No created_at database filter here.
+
+       Dashboard already proves that this
+       affiliate_id query works correctly.
     ----------------------------------------- */
 
     const {
-      data: clicksData,
+      data: allClicks,
       error: clicksError,
     } =
       await supabaseAdmin
@@ -368,14 +379,6 @@ export async function GET(
           "affiliate_id",
           affiliateId
         )
-        .gte(
-          "created_at",
-          startDate
-        )
-        .lt(
-          "created_at",
-          endDate
-        )
         .order(
           "created_at",
           {
@@ -385,15 +388,10 @@ export async function GET(
 
     if (clicksError) {
       console.error(
-        "STATISTICS CLICKS ERROR:",
+        "Statistics clicks query error:",
         clicksError
       );
 
-      /*
-       * Return the actual database error.
-       * This is temporary diagnostic information
-       * and will help us identify any schema issue.
-       */
       return NextResponse.json(
         {
           error:
@@ -402,28 +400,35 @@ export async function GET(
           details:
             clicksError.message,
 
-          hint:
-            clicksError.hint || null,
-
           code:
             clicksError.code || null,
 
-          affiliateId,
-
-          requestedRange: {
-            from,
-            to,
-          },
+          hint:
+            clicksError.hint || null,
         },
         { status: 500 }
       );
     }
 
+    /* -----------------------------------------
+       8. FILTER DATE RANGE IN JAVASCRIPT
+       
+       This avoids database timestamp/date
+       compatibility problems.
+    ----------------------------------------- */
+
     const clicks =
-      (clicksData || []) as AnyRecord[];
+      ((allClicks || []) as AnyRecord[])
+        .filter((row) =>
+          isDateInRange(
+            row.created_at,
+            from,
+            to
+          )
+        );
 
     /* -----------------------------------------
-       8. MAIN STATISTICS
+       9. MAIN STATISTICS
     ----------------------------------------- */
 
     const totalClicks =
@@ -457,7 +462,7 @@ export async function GET(
         : 0;
 
     /* -----------------------------------------
-       9. COUNTRY REPORT
+       10. COUNTRY REPORT
     ----------------------------------------- */
 
     const countryMap =
@@ -529,7 +534,7 @@ export async function GET(
         );
 
     /* -----------------------------------------
-       10. DEVICE REPORT
+       11. DEVICE REPORT
     ----------------------------------------- */
 
     const deviceMap =
@@ -611,7 +616,7 @@ export async function GET(
         );
 
     /* -----------------------------------------
-       11. SUCCESS RESPONSE
+       12. SUCCESS RESPONSE
     ----------------------------------------- */
 
     return NextResponse.json(
@@ -634,8 +639,7 @@ export async function GET(
             profile?.display_name ||
             user.user_metadata
               ?.full_name ||
-            user.user_metadata
-              ?.name ||
+            user.user_metadata?.name ||
             user.email?.split(
               "@"
             )[0] ||
@@ -682,7 +686,7 @@ export async function GET(
     );
   } catch (error: any) {
     console.error(
-      "AFFILIATE STATISTICS ERROR:",
+      "Affiliate statistics error:",
       error
     );
 
