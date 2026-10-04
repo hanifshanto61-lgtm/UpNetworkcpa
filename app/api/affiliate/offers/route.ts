@@ -53,6 +53,11 @@ async function getAffiliate(request: NextRequest) {
     return null;
   }
 
+  /*
+   * Try all common profile relationships.
+   * We use select("*") so this route does not depend
+   * on a specific profile column such as "name".
+   */
   const possibleProfiles = [
     {
       column: "id",
@@ -94,6 +99,10 @@ async function getAffiliate(request: NextRequest) {
           profile.code ||
           "";
 
+        /*
+         * If the profile exists but has no affiliate ID,
+         * create a stable ID from the Supabase user ID.
+         */
         if (!affiliateId) {
           affiliateId = makeAffiliateId(user.id);
 
@@ -143,13 +152,18 @@ async function getAffiliate(request: NextRequest) {
   }
 
   /*
-   * If the profile does not exist yet,
-   * try to create it.
+   * Profile was not found.
+   * Try creating one using the available
+   * profile key formats.
+   *
+   * Record<string, string>[] is intentional here.
+   * It prevents TypeScript from locking the array
+   * to the first object's shape.
    */
   const affiliateId =
     makeAffiliateId(user.id);
 
-  const createAttempts = [
+  const createAttempts: Record<string, string>[] = [
     {
       id: user.id,
       affiliate_id: affiliateId,
@@ -211,6 +225,9 @@ export async function GET(
       );
     }
 
+    /*
+     * Authenticate affiliate.
+     */
     const affiliate =
       await getAffiliate(request);
 
@@ -225,6 +242,9 @@ export async function GET(
       );
     }
 
+    /*
+     * Get affiliate ID.
+     */
     const affiliateId =
       String(
         affiliate.affiliate_id ||
@@ -243,6 +263,10 @@ export async function GET(
       );
     }
 
+    /*
+     * Only Active Offers are visible
+     * to affiliates.
+     */
     const {
       data,
       error,
