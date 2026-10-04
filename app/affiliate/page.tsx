@@ -25,6 +25,8 @@ import {
   ChevronRight,
   Sun,
   Moon,
+  Zap,
+  ShieldCheck,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -109,7 +111,6 @@ const mainMenu = [
 
 export default function AffiliatePage() {
   const router = useRouter();
-
   const { theme, setTheme } = useAffiliateTheme();
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -129,6 +130,8 @@ export default function AffiliatePage() {
   } | null>(null);
 
   const [clicks, setClicks] = useState<ClickRow[]>([]);
+
+  const dark = theme === "dark";
 
   useEffect(() => {
     loadDashboard();
@@ -313,8 +316,6 @@ export default function AffiliatePage() {
     }
   }
 
-  const dark = theme === "dark";
-
   const pageBg = dark
     ? "bg-[#05070c] text-white"
     : "bg-slate-50 text-slate-900";
@@ -327,7 +328,9 @@ export default function AffiliatePage() {
     ? "border-white/10"
     : "border-slate-200";
 
-  const muted = "text-slate-500";
+  const muted = dark
+    ? "text-slate-400"
+    : "text-slate-500";
 
   const faint = dark
     ? "text-slate-600"
@@ -340,7 +343,7 @@ export default function AffiliatePage() {
       >
         <div className="text-center">
           <div
-            className={`mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 ${
+            className={`mx-auto mb-4 h-11 w-11 animate-spin rounded-full border-4 ${
               dark
                 ? "border-slate-700 border-t-cyan-400"
                 : "border-slate-200 border-t-cyan-500"
@@ -373,11 +376,11 @@ export default function AffiliatePage() {
         />
 
         <div
-          className="absolute left-1/2 top-1/2 h-[520px] w-[520px] -translate-x-1/2 -translate-y-1/2 bg-contain bg-center bg-no-repeat sm:h-[700px] sm:w-[700px]"
+          className="absolute left-1/2 top-1/2 h-[520px] w-[520px] -translate-x-1/2 -translate-y-1/2 bg-contain bg-center bg-no-repeat opacity-20 sm:h-[700px] sm:w-[700px]"
           style={{
             backgroundImage:
               "url('/file_000000013688207a03d42a2550c1954.png')",
-            opacity: dark ? 0.24 : 0.08,
+            opacity: dark ? 0.20 : 0.06,
           }}
         />
 
@@ -385,16 +388,19 @@ export default function AffiliatePage() {
           className="absolute inset-0"
           style={{
             background: dark
-              ? "radial-gradient(circle at center, rgba(5,7,12,0.12) 0%, rgba(5,7,12,0.72) 75%)"
-              : "radial-gradient(circle at center, rgba(248,250,252,0.25) 0%, rgba(248,250,252,0.92) 75%)",
+              ? "radial-gradient(circle at center, rgba(5,7,12,0.08) 0%, rgba(5,7,12,0.88) 78%)"
+              : "radial-gradient(circle at center, rgba(248,250,252,0.15) 0%, rgba(248,250,252,0.94) 78%)",
           }}
         />
+
+        <div className="absolute -left-40 top-20 h-80 w-80 rounded-full bg-cyan-500/5 blur-3xl" />
+        <div className="absolute -right-40 top-80 h-96 w-96 rounded-full bg-purple-500/5 blur-3xl" />
       </div>
 
       <div className="relative z-10">
         {/* Header */}
         <header
-          className={`sticky top-0 z-40 border-b backdrop-blur-xl ${
+          className={`sticky top-0 z-40 border-b backdrop-blur-2xl ${
             dark
               ? "border-white/10 bg-[#05070c]/90"
               : "border-slate-200 bg-white/90"
@@ -404,21 +410,19 @@ export default function AffiliatePage() {
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={() =>
-                  setMenuOpen(true)
-                }
+                onClick={() => setMenuOpen(true)}
                 aria-label="Open menu"
-                className={`flex h-10 w-10 items-center justify-center rounded-xl border transition ${
+                className={`flex h-10 w-10 items-center justify-center rounded-xl border transition-all ${
                   dark
-                    ? "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-cyan-400/10 hover:text-cyan-400"
-                    : "border-slate-200 bg-white text-slate-600 hover:bg-cyan-50 hover:text-cyan-600"
+                    ? "border-white/10 bg-white/[0.04] text-slate-300 hover:border-cyan-400/30 hover:bg-cyan-400/10 hover:text-cyan-400"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-600"
                 }`}
               >
                 <Menu size={21} />
               </button>
 
               <div>
-                <div className="text-lg font-extrabold tracking-tight">
+                <div className="text-lg font-black tracking-tight">
                   UpNetwork
                   <span className="text-cyan-400">
                     CPA
@@ -438,7 +442,7 @@ export default function AffiliatePage() {
               <div
                 className={`hidden rounded-xl border px-3 py-2 md:block ${
                   dark
-                    ? "border-cyan-400/10 bg-cyan-400/[0.04]"
+                    ? "border-cyan-400/20 bg-cyan-400/[0.05]"
                     : "border-cyan-100 bg-cyan-50"
                 }`}
               >
@@ -448,12 +452,11 @@ export default function AffiliatePage() {
                   Affiliate ID
                 </p>
 
-                <p className="mt-0.5 max-w-[150px] truncate font-mono text-xs font-semibold text-cyan-500">
+                <p className="mt-0.5 max-w-[150px] truncate font-mono text-xs font-bold text-cyan-500">
                   {affiliateId}
                 </p>
               </div>
 
-              {/* Notification */}
               <NotificationBell />
 
               {/* Theme */}
@@ -471,7 +474,7 @@ export default function AffiliatePage() {
                 }
                 className={`flex h-10 w-10 items-center justify-center rounded-xl border transition ${
                   dark
-                    ? "border-white/10 bg-white/[0.04] text-amber-300 hover:bg-amber-400/10"
+                    ? "border-white/10 bg-white/[0.04] text-amber-300 hover:border-amber-300/20 hover:bg-amber-400/10"
                     : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
                 }`}
               >
@@ -654,36 +657,67 @@ export default function AffiliatePage() {
             </div>
           )}
 
-          {/* Welcome */}
+          {/* Welcome Hero */}
           <section
-            className={`relative overflow-hidden rounded-3xl border p-6 sm:p-8 ${
+            className={`relative overflow-hidden rounded-3xl border p-6 shadow-xl sm:p-8 ${
               dark
-                ? "border-cyan-400/10 bg-white/[0.025]"
-                : "border-slate-200 bg-white shadow-sm"
+                ? "border-cyan-400/15 bg-gradient-to-br from-cyan-500/[0.12] via-purple-500/[0.06] to-white/[0.02]"
+                : "border-cyan-100 bg-gradient-to-br from-cyan-50 via-white to-purple-50"
             }`}
           >
-            <div className="relative z-10 max-w-2xl">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-500">
-                Affiliate Dashboard
-              </p>
+            <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-cyan-400/10 blur-3xl" />
+            <div className="absolute -bottom-28 right-24 h-56 w-56 rounded-full bg-purple-500/10 blur-3xl" />
 
-              <h1 className="mt-2 text-2xl font-extrabold tracking-tight sm:text-3xl">
-                Welcome back,{" "}
-                {profile?.name ||
-                  "Affiliate"}
-              </h1>
+            <div className="relative z-10 flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
+              <div className="max-w-2xl">
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-500">
+                  <Zap size={12} />
+                  Affiliate Dashboard
+                </div>
 
-              <p
-                className={`mt-3 max-w-xl text-sm leading-6 ${muted}`}
+                <h1 className="text-2xl font-black tracking-tight sm:text-3xl lg:text-4xl">
+                  Welcome back,{" "}
+                  <span className="bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">
+                    {profile?.name ||
+                      "Affiliate"}
+                  </span>
+                </h1>
+
+                <p
+                  className={`mt-3 max-w-xl text-sm leading-6 ${muted}`}
+                >
+                  Manage your offers, smart links,
+                  traffic, conversions, earnings and
+                  referrals from one powerful dashboard.
+                </p>
+              </div>
+
+              <div
+                className={`hidden rounded-2xl border p-4 lg:block ${
+                  dark
+                    ? "border-white/10 bg-black/10"
+                    : "border-slate-200 bg-white/70"
+                }`}
               >
-                Manage your offers, smart links,
-                traffic, earnings and referrals
-                from one place.
-              </p>
-            </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
+                    <ShieldCheck size={22} />
+                  </div>
 
-            <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-cyan-400/10 blur-3xl" />
-            <div className="absolute -bottom-16 right-20 h-32 w-32 rounded-full bg-purple-500/10 blur-3xl" />
+                  <div>
+                    <p className="text-xs font-bold">
+                      Account Active
+                    </p>
+
+                    <p
+                      className={`mt-1 text-[10px] ${faint}`}
+                    >
+                      Ready to generate traffic
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </section>
 
           {/* Stats */}
@@ -693,9 +727,9 @@ export default function AffiliatePage() {
               value={totalClicks.toLocaleString()}
               subtitle="Tracked traffic"
               icon={
-                <MousePointerClick size={20} />
+                <MousePointerClick size={21} />
               }
-              iconClass="bg-cyan-500/10 text-cyan-500"
+              accent="cyan"
               dark={dark}
             />
 
@@ -704,9 +738,9 @@ export default function AffiliatePage() {
               value={conversions.toLocaleString()}
               subtitle="Approved conversions"
               icon={
-                <TrendingUp size={20} />
+                <TrendingUp size={21} />
               }
-              iconClass="bg-emerald-500/10 text-emerald-500"
+              accent="emerald"
               dark={dark}
             />
 
@@ -714,10 +748,8 @@ export default function AffiliatePage() {
               title="Conversion Rate"
               value={`${conversionRate}%`}
               subtitle="Traffic to conversion"
-              icon={
-                <Activity size={20} />
-              }
-              iconClass="bg-purple-500/10 text-purple-500"
+              icon={<Activity size={21} />}
+              accent="purple"
               dark={dark}
             />
 
@@ -725,25 +757,25 @@ export default function AffiliatePage() {
               title="Earnings"
               value={`$${earnings.toFixed(2)}`}
               subtitle="Total recorded payout"
-              icon={
-                <DollarSign size={20} />
-              }
-              iconClass="bg-yellow-500/10 text-yellow-500"
+              icon={<DollarSign size={21} />}
+              accent="amber"
               dark={dark}
             />
           </section>
 
           {/* Smart Link */}
           <section
-            className={`mt-6 rounded-2xl border p-5 sm:p-6 ${
+            className={`relative mt-6 overflow-hidden rounded-2xl border p-5 sm:p-6 ${
               dark
-                ? "border-cyan-400/10 bg-white/[0.025]"
-                : "border-slate-200 bg-white shadow-sm"
+                ? "border-cyan-400/15 bg-gradient-to-br from-cyan-500/[0.09] via-cyan-500/[0.03] to-transparent"
+                : "border-cyan-100 bg-gradient-to-br from-cyan-50 via-white to-white"
             }`}
           >
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex items-start gap-4">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-500">
+            <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-cyan-400/10 blur-3xl" />
+
+            <div className="relative z-10">
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-500">
                   <Link2 size={21} />
                 </div>
 
@@ -753,72 +785,82 @@ export default function AffiliatePage() {
                   </h2>
 
                   <p
-                    className={`mt-1 text-xs ${muted}`}
+                    className={`mt-1 text-xs ${faint}`}
                   >
-                    Use this tracking link to send
-                    traffic and generate conversions.
+                    Use this link to track your traffic
+                    and conversions.
                   </p>
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={copySmartLink}
-                className="flex items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-cyan-600"
-              >
-                {copied ? (
-                  <>
-                    <Check size={17} />
-                    Copied
-                  </>
-                ) : (
-                  <>
-                    <Copy size={17} />
-                    Copy Smart Link
-                  </>
-                )}
-              </button>
-            </div>
-
-            <div
-              className={`mt-5 rounded-xl border p-3 ${
-                dark
-                  ? "border-white/10 bg-black/20"
-                  : "border-slate-200 bg-slate-50"
-              }`}
-            >
-              <p
-                className={`break-all font-mono text-xs leading-6 ${
+              <div
+                className={`flex flex-col gap-3 rounded-xl border p-3 sm:flex-row ${
                   dark
-                    ? "text-slate-400"
-                    : "text-slate-600"
+                    ? "border-cyan-400/10 bg-black/10"
+                    : "border-cyan-100 bg-white"
                 }`}
               >
-                {smartLink}
-              </p>
+                <div
+                  className={`min-w-0 flex-1 overflow-hidden rounded-lg px-3 py-3 font-mono text-xs ${
+                    dark
+                      ? "bg-white/[0.04] text-cyan-300"
+                      : "bg-slate-50 text-cyan-700"
+                  }`}
+                >
+                  <div className="truncate">
+                    {smartLink}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={copySmartLink}
+                  className={`flex shrink-0 items-center justify-center gap-2 rounded-lg px-5 py-3 text-xs font-bold transition ${
+                    copied
+                      ? "bg-emerald-500 text-white"
+                      : "bg-cyan-500 text-white shadow-lg shadow-cyan-500/20 hover:bg-cyan-400"
+                  }`}
+                >
+                  {copied ? (
+                    <>
+                      <Check size={16} />
+                      Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={16} />
+                      Copy Link
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </section>
 
           {/* Quick Actions */}
           <section className="mt-6">
-            <div className="mb-4">
-              <h2 className="text-lg font-bold">
-                Quick Actions
-              </h2>
+            <div className="mb-4 flex items-end justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-500">
+                  Shortcuts
+                </p>
 
-              <p
-                className={`mt-1 text-xs ${faint}`}
-              >
-                Jump directly to your affiliate tools.
+                <h2 className="mt-1 text-lg font-black">
+                  Quick Actions
+                </h2>
+              </div>
+
+              <p className={`hidden text-xs sm:block ${faint}`}>
+                Jump directly to important sections
               </p>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <QuickAction
                 title="Browse Offers"
-                subtitle="Find offers to promote"
+                subtitle="Find available campaigns"
                 icon={<Target size={20} />}
-                iconClass="bg-yellow-500/10 text-yellow-500"
+                accent="blue"
                 onClick={() =>
                   router.push(
                     "/affiliate/offers"
@@ -831,7 +873,7 @@ export default function AffiliatePage() {
                 title="Smart Links"
                 subtitle="Manage tracking links"
                 icon={<Link2 size={20} />}
-                iconClass="bg-cyan-500/10 text-cyan-500"
+                accent="cyan"
                 onClick={() =>
                   router.push(
                     "/affiliate/smart-link"
@@ -842,9 +884,9 @@ export default function AffiliatePage() {
 
               <QuickAction
                 title="Statistics"
-                subtitle="View traffic statistics"
+                subtitle="Analyze your traffic"
                 icon={<BarChart3 size={20} />}
-                iconClass="bg-purple-500/10 text-purple-500"
+                accent="purple"
                 onClick={() =>
                   router.push(
                     "/affiliate/statistics"
@@ -859,7 +901,7 @@ export default function AffiliatePage() {
                 icon={
                   <MessageCircle size={20} />
                 }
-                iconClass="bg-green-500/10 text-green-500"
+                accent="green"
                 onClick={() =>
                   setManagerOpen(true)
                 }
@@ -870,10 +912,10 @@ export default function AffiliatePage() {
 
           {/* Recent Activity */}
           <section
-            className={`mt-6 rounded-2xl border p-5 sm:p-6 ${
+            className={`relative mt-6 overflow-hidden rounded-2xl border p-5 sm:p-6 ${
               dark
-                ? "border-white/10 bg-white/[0.02]"
-                : "border-slate-200 bg-white shadow-sm"
+                ? "border-orange-400/10 bg-gradient-to-br from-orange-500/[0.05] to-transparent"
+                : "border-orange-100 bg-gradient-to-br from-orange-50/70 to-white"
             }`}
           >
             <div className="mb-5 flex items-center justify-between gap-4">
@@ -890,7 +932,8 @@ export default function AffiliatePage() {
                   <p
                     className={`mt-1 text-xs ${faint}`}
                   >
-                    Latest tracked traffic
+                    Latest tracked traffic and
+                    conversions
                   </p>
                 </div>
               </div>
@@ -902,7 +945,7 @@ export default function AffiliatePage() {
                     "/affiliate/statistics"
                   )
                 }
-                className="flex items-center gap-1 text-xs font-semibold text-cyan-500"
+                className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold text-orange-500 hover:bg-orange-500/10"
               >
                 View Statistics
                 <ChevronRight size={15} />
@@ -911,19 +954,19 @@ export default function AffiliatePage() {
 
             {clicks.length === 0 ? (
               <div
-                className={`rounded-xl border border-dashed py-10 text-center ${
+                className={`rounded-xl border border-dashed py-12 text-center ${
                   dark
-                    ? "border-white/10"
-                    : "border-slate-200"
+                    ? "border-white/10 bg-white/[0.015]"
+                    : "border-slate-200 bg-white"
                 }`}
               >
                 <MousePointerClick
-                  size={28}
+                  size={30}
                   className="mx-auto mb-3 text-slate-400"
                 />
 
                 <p
-                  className={`text-sm ${muted}`}
+                  className={`text-sm font-semibold ${muted}`}
                 >
                   No activity yet
                 </p>
@@ -937,32 +980,32 @@ export default function AffiliatePage() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[620px] text-left text-sm">
+                <table className="w-full min-w-[650px] text-left text-sm">
                   <thead>
                     <tr
                       className={`border-b text-xs ${
                         dark
-                          ? "border-white/10 text-slate-600"
+                          ? "border-white/10 text-slate-500"
                           : "border-slate-200 text-slate-400"
                       }`}
                     >
-                      <th className="px-3 py-3 font-medium">
+                      <th className="px-3 py-3 font-semibold">
                         Date
                       </th>
 
-                      <th className="px-3 py-3 font-medium">
+                      <th className="px-3 py-3 font-semibold">
                         Country
                       </th>
 
-                      <th className="px-3 py-3 font-medium">
+                      <th className="px-3 py-3 font-semibold">
                         Device
                       </th>
 
-                      <th className="px-3 py-3 font-medium">
+                      <th className="px-3 py-3 font-semibold">
                         Status
                       </th>
 
-                      <th className="px-3 py-3 text-right font-medium">
+                      <th className="px-3 py-3 text-right font-semibold">
                         Payout
                       </th>
                     </tr>
@@ -995,9 +1038,9 @@ export default function AffiliatePage() {
                             }
                             className={`border-b last:border-0 ${
                               dark
-                                ? "border-white/5"
-                                : "border-slate-100"
-                            }`}
+                                ? "border-white/5 hover:bg-white/[0.02]"
+                                : "border-slate-100 hover:bg-orange-50/30"
+                            } transition`}
                           >
                             <td
                               className={`px-3 py-4 text-xs ${
@@ -1025,11 +1068,11 @@ export default function AffiliatePage() {
 
                             <td className="px-3 py-4">
                               <span
-                                className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
+                                className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold ${
                                   converted
                                     ? "bg-emerald-500/10 text-emerald-500"
                                     : dark
-                                      ? "bg-slate-500/10 text-slate-500"
+                                      ? "bg-slate-500/10 text-slate-400"
                                       : "bg-slate-100 text-slate-500"
                                 }`}
                               >
@@ -1039,7 +1082,7 @@ export default function AffiliatePage() {
                               </span>
                             </td>
 
-                            <td className="px-3 py-4 text-right text-xs font-semibold text-cyan-500">
+                            <td className="px-3 py-4 text-right text-xs font-bold text-emerald-500">
                               $
                               {Number(
                                 row.payout || 0
@@ -1063,8 +1106,12 @@ export default function AffiliatePage() {
             }`}
           >
             © {new Date().getFullYear()}{" "}
-            UpNetworkCPA
+            <span className="font-semibold">
+              UpNetworkCPA
+            </span>
+
             <span className="mx-2">•</span>
+
             Affiliate Panel
           </footer>
         </div>
@@ -1073,9 +1120,7 @@ export default function AffiliatePage() {
         {menuOpen && (
           <div
             className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm"
-            onClick={() =>
-              setMenuOpen(false)
-            }
+            onClick={() => setMenuOpen(false)}
           >
             <aside
               className={`absolute left-0 top-0 flex h-full w-[290px] flex-col border-r shadow-2xl ${
@@ -1095,7 +1140,7 @@ export default function AffiliatePage() {
                 }`}
               >
                 <div>
-                  <div className="text-lg font-extrabold">
+                  <div className="text-lg font-black">
                     UpNetwork
                     <span className="text-cyan-400">
                       CPA
@@ -1126,7 +1171,7 @@ export default function AffiliatePage() {
 
               <div className="flex-1 overflow-y-auto p-4">
                 <p
-                  className={`mb-3 px-2 text-[10px] font-semibold uppercase tracking-[0.18em] ${faint}`}
+                  className={`mb-3 px-2 text-[10px] font-bold uppercase tracking-[0.18em] ${faint}`}
                 >
                   Main Menu
                 </p>
@@ -1150,20 +1195,13 @@ export default function AffiliatePage() {
                         }
                         className={`group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium transition ${
                           active
-                            ? "bg-cyan-500 text-white shadow-lg shadow-cyan-500/10"
+                            ? "bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg shadow-cyan-500/20"
                             : dark
                               ? "text-slate-400 hover:bg-white/5 hover:text-white"
                               : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
                         }`}
                       >
-                        <Icon
-                          size={18}
-                          className={
-                            active
-                              ? "text-white"
-                              : ""
-                          }
-                        />
+                        <Icon size={18} />
 
                         <span className="flex-1">
                           {item.label}
@@ -1174,8 +1212,8 @@ export default function AffiliatePage() {
                             size={15}
                             className={
                               dark
-                                ? "text-slate-700 group-hover:text-slate-400"
-                                : "text-slate-300 group-hover:text-slate-500"
+                                ? "text-slate-700 group-hover:text-cyan-400"
+                                : "text-slate-300 group-hover:text-cyan-500"
                             }
                           />
                         )}
@@ -1198,7 +1236,7 @@ export default function AffiliatePage() {
                     setMenuOpen(false);
                     setManagerOpen(true);
                   }}
-                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium ${
+                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold ${
                     dark
                       ? "text-green-400 hover:bg-green-500/10"
                       : "text-green-600 hover:bg-green-50"
@@ -1348,55 +1386,121 @@ function StatCard({
   value,
   subtitle,
   icon,
-  iconClass,
+  accent,
   dark,
 }: {
   title: string;
   value: string;
   subtitle: string;
   icon: ReactNode;
-  iconClass: string;
+  accent: "cyan" | "emerald" | "purple" | "amber";
   dark: boolean;
 }) {
+  const styles = {
+    cyan: {
+      darkCard:
+        "border-cyan-400/15 bg-gradient-to-br from-cyan-500/[0.12] via-cyan-500/[0.035] to-transparent shadow-[0_0_35px_rgba(34,211,238,0.06)]",
+      lightCard:
+        "border-cyan-200 bg-gradient-to-br from-cyan-50 via-white to-white shadow-sm",
+      icon: "bg-cyan-500/10 text-cyan-400",
+      value: "text-cyan-400",
+      line: "bg-cyan-400",
+      glow: "bg-cyan-400/10",
+    },
+
+    emerald: {
+      darkCard:
+        "border-emerald-400/15 bg-gradient-to-br from-emerald-500/[0.12] via-emerald-500/[0.035] to-transparent shadow-[0_0_35px_rgba(16,185,129,0.06)]",
+      lightCard:
+        "border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-white shadow-sm",
+      icon: "bg-emerald-500/10 text-emerald-400",
+      value: "text-emerald-400",
+      line: "bg-emerald-400",
+      glow: "bg-emerald-400/10",
+    },
+
+    purple: {
+      darkCard:
+        "border-purple-400/15 bg-gradient-to-br from-purple-500/[0.12] via-purple-500/[0.035] to-transparent shadow-[0_0_35px_rgba(168,85,247,0.06)]",
+      lightCard:
+        "border-purple-200 bg-gradient-to-br from-purple-50 via-white to-white shadow-sm",
+      icon: "bg-purple-500/10 text-purple-400",
+      value: "text-purple-400",
+      line: "bg-purple-400",
+      glow: "bg-purple-400/10",
+    },
+
+    amber: {
+      darkCard:
+        "border-amber-400/15 bg-gradient-to-br from-amber-500/[0.12] via-amber-500/[0.035] to-transparent shadow-[0_0_35px_rgba(245,158,11,0.06)]",
+      lightCard:
+        "border-amber-200 bg-gradient-to-br from-amber-50 via-white to-white shadow-sm",
+      icon: "bg-amber-500/10 text-amber-400",
+      value: "text-amber-400",
+      line: "bg-amber-400",
+      glow: "bg-amber-400/10",
+    },
+  };
+
+  const style = styles[accent];
+
   return (
     <div
-      className={`rounded-2xl border p-5 transition ${
+      className={`group relative overflow-hidden rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 ${
         dark
-          ? "border-white/10 bg-white/[0.025] hover:bg-white/[0.04]"
-          : "border-slate-200 bg-white shadow-sm hover:shadow-md"
+          ? style.darkCard
+          : style.lightCard
       }`}
     >
-      <div className="flex items-center justify-between">
-        <span
-          className={`text-[10px] font-semibold uppercase tracking-wider ${
-            dark
-              ? "text-slate-500"
-              : "text-slate-400"
-          }`}
-        >
-          {title}
-        </span>
+      <div
+        className={`absolute -right-10 -top-10 h-28 w-28 rounded-full blur-3xl ${style.glow}`}
+      />
 
-        <div
-          className={`flex h-10 w-10 items-center justify-center rounded-xl ${iconClass}`}
+      <div
+        className={`absolute left-0 top-0 h-1 w-full opacity-70 ${style.line}`}
+      />
+
+      <div className="relative z-10">
+        <div className="flex items-center justify-between gap-3">
+          <span
+            className={`text-[10px] font-bold uppercase tracking-[0.14em] ${
+              dark
+                ? "text-slate-500"
+                : "text-slate-400"
+            }`}
+          >
+            {title}
+          </span>
+
+          <div
+            className={`flex h-11 w-11 items-center justify-center rounded-xl ${style.icon}`}
+          >
+            {icon}
+          </div>
+        </div>
+
+        <p
+          className={`mt-5 text-3xl font-black tracking-tight ${style.value}`}
         >
-          {icon}
+          {value}
+        </p>
+
+        <div className="mt-3 flex items-center gap-2">
+          <div
+            className={`h-1.5 w-1.5 rounded-full ${style.line}`}
+          />
+
+          <p
+            className={`text-xs ${
+              dark
+                ? "text-slate-500"
+                : "text-slate-400"
+            }`}
+          >
+            {subtitle}
+          </p>
         </div>
       </div>
-
-      <p className="mt-5 text-2xl font-extrabold tracking-tight">
-        {value}
-      </p>
-
-      <p
-        className={`mt-2 text-xs ${
-          dark
-            ? "text-slate-600"
-            : "text-slate-400"
-        }`}
-      >
-        {subtitle}
-      </p>
     </div>
   );
 }
@@ -1405,37 +1509,77 @@ function QuickAction({
   title,
   subtitle,
   icon,
-  iconClass,
+  accent,
   onClick,
   dark,
 }: {
   title: string;
   subtitle: string;
   icon: ReactNode;
-  iconClass: string;
+  accent: "blue" | "cyan" | "purple" | "green";
   onClick: () => void;
   dark: boolean;
 }) {
+  const styles = {
+    blue: {
+      dark:
+        "border-blue-400/15 bg-blue-500/[0.05] hover:border-blue-400/30 hover:bg-blue-500/[0.09]",
+      light:
+        "border-blue-100 bg-blue-50/60 hover:border-blue-200 hover:bg-blue-50",
+      icon: "bg-blue-500/10 text-blue-400",
+      arrow: "group-hover:text-blue-400",
+    },
+
+    cyan: {
+      dark:
+        "border-cyan-400/15 bg-cyan-500/[0.05] hover:border-cyan-400/30 hover:bg-cyan-500/[0.09]",
+      light:
+        "border-cyan-100 bg-cyan-50/60 hover:border-cyan-200 hover:bg-cyan-50",
+      icon: "bg-cyan-500/10 text-cyan-400",
+      arrow: "group-hover:text-cyan-400",
+    },
+
+    purple: {
+      dark:
+        "border-purple-400/15 bg-purple-500/[0.05] hover:border-purple-400/30 hover:bg-purple-500/[0.09]",
+      light:
+        "border-purple-100 bg-purple-50/60 hover:border-purple-200 hover:bg-purple-50",
+      icon: "bg-purple-500/10 text-purple-400",
+      arrow: "group-hover:text-purple-400",
+    },
+
+    green: {
+      dark:
+        "border-emerald-400/15 bg-emerald-500/[0.05] hover:border-emerald-400/30 hover:bg-emerald-500/[0.09]",
+      light:
+        "border-emerald-100 bg-emerald-50/60 hover:border-emerald-200 hover:bg-emerald-50",
+      icon: "bg-emerald-500/10 text-emerald-400",
+      arrow: "group-hover:text-emerald-400",
+    },
+  };
+
+  const style = styles[accent];
+
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`group rounded-2xl border p-5 text-left transition ${
+      className={`group relative overflow-hidden rounded-2xl border p-5 text-left transition-all duration-300 hover:-translate-y-0.5 ${
         dark
-          ? "border-white/10 bg-white/[0.02] hover:border-cyan-400/20 hover:bg-white/[0.045]"
-          : "border-slate-200 bg-white shadow-sm hover:border-cyan-200 hover:bg-slate-50"
+          ? style.dark
+          : style.light
       }`}
     >
       <div className="flex items-center gap-4">
         <div
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconClass}`}
+          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${style.icon}`}
         >
           {icon}
         </div>
 
         <div className="min-w-0 flex-1">
           <p
-            className={`font-semibold ${
+            className={`font-bold ${
               dark
                 ? "text-slate-200"
                 : "text-slate-700"
@@ -1447,7 +1591,7 @@ function QuickAction({
           <p
             className={`mt-1 text-xs ${
               dark
-                ? "text-slate-600"
+                ? "text-slate-500"
                 : "text-slate-400"
             }`}
           >
@@ -1457,11 +1601,7 @@ function QuickAction({
 
         <ChevronRight
           size={17}
-          className={
-            dark
-              ? "text-slate-700 group-hover:text-cyan-400"
-              : "text-slate-300 group-hover:text-cyan-500"
-          }
+          className={`text-slate-500 transition ${style.arrow}`}
         />
       </div>
     </button>
@@ -1486,4 +1626,4 @@ function formatDate(value?: string) {
     hour: "numeric",
     minute: "2-digit",
   });
-          }
+                  }
