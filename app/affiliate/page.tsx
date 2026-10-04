@@ -29,6 +29,7 @@ import {
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import NotificationBell from "./notification-bell";
+import { useAffiliateTheme } from "./theme-context";
 
 type ClickRow = {
   click_id?: string;
@@ -109,6 +110,8 @@ const mainMenu = [
 export default function AffiliatePage() {
   const router = useRouter();
 
+  const { theme, setTheme } = useAffiliateTheme();
+
   const [menuOpen, setMenuOpen] = useState(false);
   const [managerOpen, setManagerOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -116,11 +119,7 @@ export default function AffiliatePage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
   const [copied, setCopied] = useState(false);
-
-  const [theme, setTheme] =
-    useState<"dark" | "light">("dark");
 
   const [profile, setProfile] = useState<{
     id: string;
@@ -132,30 +131,8 @@ export default function AffiliatePage() {
   const [clicks, setClicks] = useState<ClickRow[]>([]);
 
   useEffect(() => {
-    const saved =
-      localStorage.getItem("affiliate-theme");
-
-    if (
-      saved === "dark" ||
-      saved === "light"
-    ) {
-      setTheme(saved);
-    }
-  }, []);
-
-  useEffect(() => {
     loadDashboard();
   }, []);
-
-  function changeTheme(
-    next: "dark" | "light"
-  ) {
-    setTheme(next);
-    localStorage.setItem(
-      "affiliate-theme",
-      next
-    );
-  }
 
   async function loadDashboard() {
     try {
@@ -163,22 +140,16 @@ export default function AffiliatePage() {
       setError("");
 
       if (!supabase) {
-        setError(
-          "Supabase is not configured."
-        );
+        setError("Supabase is not configured.");
         return;
       }
 
       const {
         data: sessionData,
         error: sessionError,
-      } =
-        await supabase.auth.getSession();
+      } = await supabase.auth.getSession();
 
-      if (
-        sessionError ||
-        !sessionData.session
-      ) {
+      if (sessionError || !sessionData.session) {
         router.replace("/login");
         return;
       }
@@ -194,19 +165,15 @@ export default function AffiliatePage() {
         }
       );
 
-      const data =
-        await response.json();
+      const data = await response.json();
 
       if (!response.ok) {
         throw new Error(
-          data?.error ||
-            "Unable to load dashboard."
+          data?.error || "Unable to load dashboard."
         );
       }
 
-      setProfile(
-        data.profile || null
-      );
+      setProfile(data.profile || null);
 
       setClicks(
         Array.isArray(data.clicks)
@@ -235,14 +202,10 @@ export default function AffiliatePage() {
     }
   }
 
-  function navigateMenu(
-    action: string
-  ) {
+  function navigateMenu(action: string) {
     setMenuOpen(false);
 
-    if (
-      action === "dashboard"
-    ) {
+    if (action === "dashboard") {
       window.scrollTo({
         top: 0,
         behavior: "smooth",
@@ -250,122 +213,83 @@ export default function AffiliatePage() {
       return;
     }
 
-    const routes: Record<
-      string,
-      string
-    > = {
-      offers:
-        "/affiliate/offers",
-
-      smartlinks:
-        "/affiliate/smart-link",
-
-      statistics:
-        "/affiliate/statistics",
-
-      earnings:
-        "/affiliate/earnings",
-
-      referrals:
-        "/affiliate/referrals",
-
-      payments:
-        "/affiliate/payments",
+    const routes: Record<string, string> = {
+      offers: "/affiliate/offers",
+      smartlinks: "/affiliate/smart-link",
+      statistics: "/affiliate/statistics",
+      earnings: "/affiliate/earnings",
+      referrals: "/affiliate/referrals",
+      payments: "/affiliate/payments",
     };
 
-    const route =
-      routes[action];
+    const route = routes[action];
 
     if (route) {
       router.push(route);
     }
   }
 
-  const totalClicks =
-    clicks.length;
+  const totalClicks = clicks.length;
 
-  const conversions =
-    useMemo(() => {
-      return clicks.filter(
-        (row) => {
-          const status =
-            String(
-              row.status || ""
-            ).toLowerCase();
+  const conversions = useMemo(() => {
+    return clicks.filter((row) => {
+      const status = String(
+        row.status || ""
+      ).toLowerCase();
 
-          return (
-            [
-              "converted",
-              "conversion",
-              "approved",
-              "paid",
-            ].includes(status) ||
-            Boolean(
-              row.converted_at
-            )
-          );
-        }
-      ).length;
-    }, [clicks]);
-
-  const earnings =
-    useMemo(() => {
-      return clicks.reduce(
-        (total, row) => {
-          const status =
-            String(
-              row.status || ""
-            ).toLowerCase();
-
-          const converted =
-            [
-              "converted",
-              "conversion",
-              "approved",
-              "paid",
-            ].includes(status) ||
-            Boolean(
-              row.converted_at
-            );
-
-          if (!converted) {
-            return total;
-          }
-
-          const payout =
-            Number(
-              row.payout || 0
-            );
-
-          return (
-            total +
-            (Number.isFinite(
-              payout
-            )
-              ? payout
-              : 0)
-          );
-        },
-        0
+      return (
+        [
+          "converted",
+          "conversion",
+          "approved",
+          "paid",
+        ].includes(status) ||
+        Boolean(row.converted_at)
       );
-    }, [clicks]);
+    }).length;
+  }, [clicks]);
+
+  const earnings = useMemo(() => {
+    return clicks.reduce((total, row) => {
+      const status = String(
+        row.status || ""
+      ).toLowerCase();
+
+      const converted =
+        [
+          "converted",
+          "conversion",
+          "approved",
+          "paid",
+        ].includes(status) ||
+        Boolean(row.converted_at);
+
+      if (!converted) {
+        return total;
+      }
+
+      const payout = Number(row.payout || 0);
+
+      return (
+        total +
+        (Number.isFinite(payout) ? payout : 0)
+      );
+    }, 0);
+  }, [clicks]);
 
   const conversionRate =
     totalClicks > 0
       ? (
-          (conversions /
-            totalClicks) *
+          (conversions / totalClicks) *
           100
         ).toFixed(2)
       : "0.00";
 
   const affiliateId =
-    profile?.affiliateId ||
-    "Loading...";
+    profile?.affiliateId || "Loading...";
 
   const smartLink =
-    typeof window !==
-    "undefined"
+    typeof window !== "undefined"
       ? `${window.location.origin}/api/track?aid=${encodeURIComponent(
           affiliateId
         )}&sl=default-smartlink`
@@ -389,8 +313,7 @@ export default function AffiliatePage() {
     }
   }
 
-  const dark =
-    theme === "dark";
+  const dark = theme === "dark";
 
   const pageBg = dark
     ? "bg-[#05070c] text-white"
@@ -404,9 +327,7 @@ export default function AffiliatePage() {
     ? "border-white/10"
     : "border-slate-200";
 
-  const muted = dark
-    ? "text-slate-500"
-    : "text-slate-500";
+  const muted = "text-slate-500";
 
   const faint = dark
     ? "text-slate-600"
@@ -426,9 +347,7 @@ export default function AffiliatePage() {
             }`}
           />
 
-          <p
-            className={`text-sm ${muted}`}
-          >
+          <p className={`text-sm ${muted}`}>
             Loading affiliate dashboard...
           </p>
         </div>
@@ -458,9 +377,7 @@ export default function AffiliatePage() {
           style={{
             backgroundImage:
               "url('/file_000000013688207a03d42a2550c1954.png')",
-            opacity: dark
-              ? 0.24
-              : 0.08,
+            opacity: dark ? 0.24 : 0.08,
           }}
         />
 
@@ -543,10 +460,8 @@ export default function AffiliatePage() {
               <button
                 type="button"
                 onClick={() =>
-                  changeTheme(
-                    dark
-                      ? "light"
-                      : "dark"
+                  setTheme(
+                    dark ? "light" : "dark"
                   )
                 }
                 aria-label={
@@ -902,9 +817,7 @@ export default function AffiliatePage() {
               <QuickAction
                 title="Browse Offers"
                 subtitle="Find offers to promote"
-                icon={
-                  <Target size={20} />
-                }
+                icon={<Target size={20} />}
                 iconClass="bg-yellow-500/10 text-yellow-500"
                 onClick={() =>
                   router.push(
@@ -917,9 +830,7 @@ export default function AffiliatePage() {
               <QuickAction
                 title="Smart Links"
                 subtitle="Manage tracking links"
-                icon={
-                  <Link2 size={20} />
-                }
+                icon={<Link2 size={20} />}
                 iconClass="bg-cyan-500/10 text-cyan-500"
                 onClick={() =>
                   router.push(
@@ -932,9 +843,7 @@ export default function AffiliatePage() {
               <QuickAction
                 title="Statistics"
                 subtitle="View traffic statistics"
-                icon={
-                  <BarChart3 size={20} />
-                }
+                icon={<BarChart3 size={20} />}
                 iconClass="bg-purple-500/10 text-purple-500"
                 onClick={() =>
                   router.push(
@@ -1062,95 +971,83 @@ export default function AffiliatePage() {
                   <tbody>
                     {clicks
                       .slice(0, 8)
-                      .map(
-                        (
-                          row,
-                          index
-                        ) => {
-                          const status =
-                            String(
-                              row.status ||
-                                "click"
-                            ).toLowerCase();
+                      .map((row, index) => {
+                        const status = String(
+                          row.status || "click"
+                        ).toLowerCase();
 
-                          const converted =
-                            [
-                              "converted",
-                              "conversion",
-                              "approved",
-                              "paid",
-                            ].includes(
-                              status
-                            ) ||
-                            Boolean(
-                              row.converted_at
-                            );
+                        const converted =
+                          [
+                            "converted",
+                            "conversion",
+                            "approved",
+                            "paid",
+                          ].includes(status) ||
+                          Boolean(
+                            row.converted_at
+                          );
 
-                          return (
-                            <tr
-                              key={
-                                row.click_id ||
-                                `${row.created_at}-${index}`
-                              }
-                              className={`border-b last:border-0 ${
+                        return (
+                          <tr
+                            key={
+                              row.click_id ||
+                              `${row.created_at}-${index}`
+                            }
+                            className={`border-b last:border-0 ${
+                              dark
+                                ? "border-white/5"
+                                : "border-slate-100"
+                            }`}
+                          >
+                            <td
+                              className={`px-3 py-4 text-xs ${
                                 dark
-                                  ? "border-white/5"
-                                  : "border-slate-100"
+                                  ? "text-slate-400"
+                                  : "text-slate-600"
                               }`}
                             >
-                              <td
-                                className={`px-3 py-4 text-xs ${
-                                  dark
-                                    ? "text-slate-400"
-                                    : "text-slate-600"
+                              {formatDate(
+                                row.created_at
+                              )}
+                            </td>
+
+                            <td
+                              className={`px-3 py-4 text-xs ${muted}`}
+                            >
+                              {row.country || "-"}
+                            </td>
+
+                            <td
+                              className={`px-3 py-4 text-xs ${muted}`}
+                            >
+                              {row.device || "-"}
+                            </td>
+
+                            <td className="px-3 py-4">
+                              <span
+                                className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
+                                  converted
+                                    ? "bg-emerald-500/10 text-emerald-500"
+                                    : dark
+                                      ? "bg-slate-500/10 text-slate-500"
+                                      : "bg-slate-100 text-slate-500"
                                 }`}
                               >
-                                {formatDate(
-                                  row.created_at
-                                )}
-                              </td>
+                                {converted
+                                  ? "Converted"
+                                  : "Click"}
+                              </span>
+                            </td>
 
-                              <td
-                                className={`px-3 py-4 text-xs ${muted}`}
-                              >
-                                {row.country ||
-                                  "-"}
-                              </td>
-
-                              <td
-                                className={`px-3 py-4 text-xs ${muted}`}
-                              >
-                                {row.device ||
-                                  "-"}
-                              </td>
-
-                              <td className="px-3 py-4">
-                                <span
-                                  className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${
-                                    converted
-                                      ? "bg-emerald-500/10 text-emerald-500"
-                                      : dark
-                                        ? "bg-slate-500/10 text-slate-500"
-                                        : "bg-slate-100 text-slate-500"
-                                  }`}
-                                >
-                                  {converted
-                                    ? "Converted"
-                                    : "Click"}
-                                </span>
-                              </td>
-
-                              <td className="px-3 py-4 text-right text-xs font-semibold text-cyan-500">
-                                $
-                                {Number(
-                                  row.payout ||
-                                    0
-                                ).toFixed(2)}
-                              </td>
-                            </tr>
-                          );
-                        }
-                      )}
+                            <td className="px-3 py-4 text-right text-xs font-semibold text-cyan-500">
+                              $
+                              {Number(
+                                row.payout || 0
+                              ).toFixed(2)}
+                            </td>
+                          </tr>
+                        );
+                      })}
                   </tbody>
                 </table>
               </div>
@@ -1167,9 +1064,7 @@ export default function AffiliatePage() {
           >
             © {new Date().getFullYear()}{" "}
             UpNetworkCPA
-            <span className="mx-2">
-              •
-            </span>
+            <span className="mx-2">•</span>
             Affiliate Panel
           </footer>
         </div>
@@ -1237,61 +1132,56 @@ export default function AffiliatePage() {
                 </p>
 
                 <nav className="space-y-1.5">
-                  {mainMenu.map(
-                    (item) => {
-                      const Icon =
-                        item.icon;
+                  {mainMenu.map((item) => {
+                    const Icon = item.icon;
 
-                      const active =
-                        item.action ===
-                        "dashboard";
+                    const active =
+                      item.action ===
+                      "dashboard";
 
-                      return (
-                        <button
-                          type="button"
-                          key={
+                    return (
+                      <button
+                        type="button"
+                        key={item.action}
+                        onClick={() =>
+                          navigateMenu(
                             item.action
-                          }
-                          onClick={() =>
-                            navigateMenu(
-                              item.action
-                            )
-                          }
-                          className={`group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium transition ${
+                          )
+                        }
+                        className={`group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium transition ${
+                          active
+                            ? "bg-cyan-500 text-white shadow-lg shadow-cyan-500/10"
+                            : dark
+                              ? "text-slate-400 hover:bg-white/5 hover:text-white"
+                              : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                        }`}
+                      >
+                        <Icon
+                          size={18}
+                          className={
                             active
-                              ? "bg-cyan-500 text-white shadow-lg shadow-cyan-500/10"
-                              : dark
-                                ? "text-slate-400 hover:bg-white/5 hover:text-white"
-                                : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-                          }`}
-                        >
-                          <Icon
-                            size={18}
+                              ? "text-white"
+                              : ""
+                          }
+                        />
+
+                        <span className="flex-1">
+                          {item.label}
+                        </span>
+
+                        {!active && (
+                          <ChevronRight
+                            size={15}
                             className={
-                              active
-                                ? "text-white"
-                                : ""
+                              dark
+                                ? "text-slate-700 group-hover:text-slate-400"
+                                : "text-slate-300 group-hover:text-slate-500"
                             }
                           />
-
-                          <span className="flex-1">
-                            {item.label}
-                          </span>
-
-                          {!active && (
-                            <ChevronRight
-                              size={15}
-                              className={
-                                dark
-                                  ? "text-slate-700 group-hover:text-slate-400"
-                                  : "text-slate-300 group-hover:text-slate-500"
-                              }
-                            />
-                          )}
-                        </button>
-                      );
-                    }
-                  )}
+                        )}
+                      </button>
+                    );
+                  })}
                 </nav>
 
                 <div
@@ -1388,9 +1278,7 @@ export default function AffiliatePage() {
                 <button
                   type="button"
                   onClick={() =>
-                    setManagerOpen(
-                      false
-                    )
+                    setManagerOpen(false)
                   }
                   className={`flex h-9 w-9 items-center justify-center rounded-lg ${
                     dark
@@ -1404,14 +1292,9 @@ export default function AffiliatePage() {
 
               <div className="space-y-3">
                 {PANEL_MANAGERS.map(
-                  (
-                    manager,
-                    index
-                  ) => (
+                  (manager, index) => (
                     <a
-                      key={
-                        manager.id
-                      }
+                      key={manager.id}
                       href={
                         manager.telegramUrl
                       }
@@ -1436,9 +1319,7 @@ export default function AffiliatePage() {
                         </p>
 
                         <p className="mt-0.5 text-xs text-cyan-500">
-                          {
-                            manager.telegram
-                          }
+                          {manager.telegram}
                         </p>
                       </div>
 
@@ -1587,31 +1468,22 @@ function QuickAction({
   );
 }
 
-function formatDate(
-  value?: string
-) {
+function formatDate(value?: string) {
   if (!value) {
     return "-";
   }
 
   const date = new Date(value);
 
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
+  if (Number.isNaN(date.getTime())) {
     return "-";
   }
 
-  return date.toLocaleString(
-    "en-US",
-    {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    }
-  );
-      }
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+          }
