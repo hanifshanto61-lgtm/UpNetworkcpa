@@ -30,9 +30,10 @@ async function getAdminUser(request: NextRequest) {
 
   const {
     data: { user },
+    error,
   } = await supabaseAdmin.auth.getUser(accessToken);
 
-  if (!user) {
+  if (error || !user) {
     return null;
   }
 
@@ -43,13 +44,35 @@ async function getAdminUser(request: NextRequest) {
   return user;
 }
 
+function normalizeStatus(value: unknown) {
+  return String(value ?? "active").toLowerCase() === "paused"
+    ? "paused"
+    : "active";
+}
+
+function isValidUrl(value: string) {
+  try {
+    new URL(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * GET
+ * Load all offers for admin
+ */
 export async function GET(request: NextRequest) {
   try {
     const user = await getAdminUser(request);
 
     if (!user) {
       return NextResponse.json(
-        { success: false, message: "Unauthorized" },
+        {
+          success: false,
+          message: "Unauthorized",
+        },
         { status: 401 }
       );
     }
@@ -60,7 +83,7 @@ export async function GET(request: NextRequest) {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("Offers GET error:", error);
+      console.error("Admin Offers GET error:", error);
 
       return NextResponse.json(
         {
@@ -76,25 +99,32 @@ export async function GET(request: NextRequest) {
       offers: data ?? [],
     });
   } catch (error) {
-    console.error("Offers GET exception:", error);
+    console.error("Admin Offers GET exception:", error);
 
     return NextResponse.json(
       {
         success: false,
-        message: "Failed to load offers",
+        message: "Failed to load offers.",
       },
       { status: 500 }
     );
   }
 }
 
+/**
+ * POST
+ * Create a new offer
+ */
 export async function POST(request: NextRequest) {
   try {
     const user = await getAdminUser(request);
 
     if (!user) {
       return NextResponse.json(
-        { success: false, message: "Unauthorized" },
+        {
+          success: false,
+          message: "Unauthorized",
+        },
         { status: 401 }
       );
     }
@@ -103,27 +133,44 @@ export async function POST(request: NextRequest) {
 
     const name = String(body.name ?? "").trim();
     const advertiser = String(body.advertiser ?? "").trim();
-    const offerUrl = String(body.offer_url ?? "").trim();
+
+    /*
+     * Frontend uses offer_url.
+     * Database uses tracking_url.
+     */
+    const offerUrl = String(
+      body.offer_url ?? body.tracking_url ?? ""
+    ).trim();
 
     const description = String(body.description ?? "").trim();
     const category = String(body.category ?? "").trim();
     const country = String(body.country ?? "Worldwide").trim();
-    const device = String(body.device ?? "All").trim();
+    const device = String(body.device ?? "All").trim() || "All";
     const imageUrl = String(body.image_url ?? "").trim();
 
     const payout = Number(body.payout ?? 0);
-    const currency = String(body.currency ?? "USD").trim() || "USD";
 
-    const status =
-      String(body.status ?? "active").toLowerCase() === "paused"
-        ? "paused"
-        : "active";
+    const currency =
+      String(body.currency ?? "USD").trim().toUpperCase() || "USD";
+
+    const status = normalizeStatus(body.status);
 
     if (!name || !advertiser || !offerUrl) {
       return NextResponse.json(
         {
           success: false,
-          message: "Offer name, advertiser and offer URL are required.",
+          message:
+            "Offer name, advertiser and offer URL are required.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (!isValidUrl(offerUrl)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Invalid offer URL.",
         },
         { status: 400 }
       );
@@ -139,29 +186,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    try {
-      new URL(offerUrl);
-    } catch {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Invalid offer URL.",
-        },
-        { status: 400 }
-      );
-    }
-
     const { data, error } = await supabaseAdmin!
       .from("offers")
       .insert({
         name,
         advertiser,
-        offer_url: offerUrl,
+        tracking_url: offerUrl,
         payout,
         currency,
         country,
         category: category || null,
-        device: device || "All",
+        device,
         description: description || null,
         image_url: imageUrl || null,
         status,
@@ -170,7 +205,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error("Offers POST error:", error);
+      console.error("Admin Offers POST error:", error);
 
       return NextResponse.json(
         {
@@ -186,7 +221,7 @@ export async function POST(request: NextRequest) {
       offer: data,
     });
   } catch (error) {
-    console.error("Offers POST exception:", error);
+    console.error("Admin Offers POST exception:", error);
 
     return NextResponse.json(
       {
@@ -198,13 +233,20 @@ export async function POST(request: NextRequest) {
   }
 }
 
+/**
+ * PATCH
+ * Update an existing offer
+ */
 export async function PATCH(request: NextRequest) {
   try {
     const user = await getAdminUser(request);
 
     if (!user) {
       return NextResponse.json(
-        { success: false, message: "Unauthorized" },
+        {
+          success: false,
+          message: "Unauthorized",
+        },
         { status: 401 }
       );
     }
@@ -226,19 +268,60 @@ export async function PATCH(request: NextRequest) {
     const updates: Record<string, unknown> = {};
 
     if (body.name !== undefined) {
-      updates.name = String(body.name).trim();
+      const name = String(body.name).trim();
+
+      if (!name) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Offer name is required.",
+          },
+          { status: 400 }
+        );
+      }
+
+      updates.name = name;
     }
 
     if (body.advertiser !== undefined) {
-      updates.advertiser = String(body.advertiser).trim();
+      const advertiser = String(body.advertiser).trim();
+
+      if (!advertiser) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Advertiser is required.",
+          },
+          { status: 400 }
+        );
+      }
+
+      updates.advertiser = advertiser;
     }
 
-    if (body.offer_url !== undefined) {
-      const offerUrl = String(body.offer_url).trim();
+    /*
+     * Frontend may send offer_url.
+     * Database column is tracking_url.
+     */
+    if (
+      body.offer_url !== undefined ||
+      body.tracking_url !== undefined
+    ) {
+      const offerUrl = String(
+        body.offer_url ?? body.tracking_url ?? ""
+      ).trim();
 
-      try {
-        new URL(offerUrl);
-      } catch {
+      if (!offerUrl) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Offer URL is required.",
+          },
+          { status: 400 }
+        );
+      }
+
+      if (!isValidUrl(offerUrl)) {
         return NextResponse.json(
           {
             success: false,
@@ -248,7 +331,7 @@ export async function PATCH(request: NextRequest) {
         );
       }
 
-      updates.offer_url = offerUrl;
+      updates.tracking_url = offerUrl;
     }
 
     if (body.payout !== undefined) {
@@ -268,7 +351,8 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (body.currency !== undefined) {
-      updates.currency = String(body.currency).trim() || "USD";
+      updates.currency =
+        String(body.currency).trim().toUpperCase() || "USD";
     }
 
     if (body.country !== undefined) {
@@ -276,29 +360,51 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (body.category !== undefined) {
-      updates.category = String(body.category).trim() || null;
+      updates.category =
+        String(body.category).trim() || null;
     }
 
     if (body.device !== undefined) {
-      updates.device = String(body.device).trim() || "All";
+      updates.device =
+        String(body.device).trim() || "All";
     }
 
     if (body.description !== undefined) {
-      updates.description = String(body.description).trim() || null;
+      updates.description =
+        String(body.description).trim() || null;
     }
 
     if (body.image_url !== undefined) {
-      updates.image_url = String(body.image_url).trim() || null;
+      const imageUrl = String(body.image_url).trim();
+
+      if (imageUrl && !isValidUrl(imageUrl)) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Invalid image URL.",
+          },
+          { status: 400 }
+        );
+      }
+
+      updates.image_url = imageUrl || null;
     }
 
     if (body.status !== undefined) {
-      const status =
-        String(body.status).toLowerCase() === "paused"
-          ? "paused"
-          : "active";
-
-      updates.status = status;
+      updates.status = normalizeStatus(body.status);
     }
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "No changes were provided.",
+        },
+        { status: 400 }
+      );
+    }
+
+    updates.updated_at = new Date().toISOString();
 
     const { data, error } = await supabaseAdmin!
       .from("offers")
@@ -308,7 +414,7 @@ export async function PATCH(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error("Offers PATCH error:", error);
+      console.error("Admin Offers PATCH error:", error);
 
       return NextResponse.json(
         {
@@ -324,7 +430,7 @@ export async function PATCH(request: NextRequest) {
       offer: data,
     });
   } catch (error) {
-    console.error("Offers PATCH exception:", error);
+    console.error("Admin Offers PATCH exception:", error);
 
     return NextResponse.json(
       {
@@ -336,18 +442,26 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
+/**
+ * DELETE
+ * Delete an offer
+ */
 export async function DELETE(request: NextRequest) {
   try {
     const user = await getAdminUser(request);
 
     if (!user) {
       return NextResponse.json(
-        { success: false, message: "Unauthorized" },
+        {
+          success: false,
+          message: "Unauthorized",
+        },
         { status: 401 }
       );
     }
 
     const { searchParams } = new URL(request.url);
+
     const id = searchParams.get("id")?.trim();
 
     if (!id) {
@@ -366,7 +480,7 @@ export async function DELETE(request: NextRequest) {
       .eq("id", id);
 
     if (error) {
-      console.error("Offers DELETE error:", error);
+      console.error("Admin Offers DELETE error:", error);
 
       return NextResponse.json(
         {
@@ -379,9 +493,10 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      message: "Offer deleted successfully.",
     });
   } catch (error) {
-    console.error("Offers DELETE exception:", error);
+    console.error("Admin Offers DELETE exception:", error);
 
     return NextResponse.json(
       {
@@ -391,4 +506,4 @@ export async function DELETE(request: NextRequest) {
       { status: 500 }
     );
   }
-                                   }
+      }
