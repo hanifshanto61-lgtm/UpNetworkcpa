@@ -11,6 +11,16 @@ const SMARTLINKS = [
   "https://datesdreamy.com/qw3y42Vq?aid=pkkfxdhdk&kid=hhkbkaaxpzg",
 ];
 
+function normalizePayout(value: unknown) {
+  const payout = Number(value);
+
+  if (!Number.isFinite(payout) || payout < 0) {
+    return 0;
+  }
+
+  return Number(payout.toFixed(2));
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabaseUrl =
@@ -58,7 +68,8 @@ export async function GET(request: NextRequest) {
     if (!affiliateId) {
       return NextResponse.json(
         {
-          error: "Affiliate ID is required.",
+          error:
+            "Affiliate ID is required.",
         },
         { status: 400 }
       );
@@ -95,7 +106,8 @@ export async function GET(request: NextRequest) {
     if (!affiliate) {
       return NextResponse.json(
         {
-          error: "Invalid affiliate ID.",
+          error:
+            "Invalid affiliate ID.",
         },
         { status: 404 }
       );
@@ -166,7 +178,9 @@ export async function GET(request: NextRequest) {
         error: offerError,
       } = await supabase
         .from("offers")
-        .select("id, offer_url, status")
+        .select(
+          "id, offer_url, payout, currency, status"
+        )
         .eq("id", offerId)
         .eq("status", "active")
         .maybeSingle();
@@ -196,7 +210,21 @@ export async function GET(request: NextRequest) {
         );
       }
 
+      // ==========================================
+      // IMPORTANT:
+      // Save the payout configured by Admin
+      // with this click.
+      // ==========================================
+
+      const offerPayout =
+        normalizePayout(
+          offer.payout
+        );
+
+      // ==========================================
       // Save offer click
+      // ==========================================
+
       const {
         error: clickError,
       } = await supabase
@@ -210,6 +238,9 @@ export async function GET(request: NextRequest) {
           device,
           browser,
           referer,
+
+          // Admin-controlled payout
+          payout: offerPayout,
         });
 
       if (clickError) {
@@ -227,10 +258,12 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      // Add click ID to offer URL
-      const redirectUrl = new URL(
-        offer.offer_url
-      );
+      // ==========================================
+      // Add tracking parameters to offer URL
+      // ==========================================
+
+      const redirectUrl =
+        new URL(offer.offer_url);
 
       redirectUrl.searchParams.set(
         "sub1",
@@ -296,12 +329,12 @@ export async function GET(request: NextRequest) {
 
     const smartlink =
       SMARTLINKS[
-        firstByte % SMARTLINKS.length
+        firstByte %
+          SMARTLINKS.length
       ];
 
-    const redirectUrl = new URL(
-      smartlink
-    );
+    const redirectUrl =
+      new URL(smartlink);
 
     redirectUrl.searchParams.set(
       "sub1",
@@ -325,7 +358,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       {
-        error: "Internal server error.",
+        error:
+          "Internal server error.",
       },
       { status: 500 }
     );
