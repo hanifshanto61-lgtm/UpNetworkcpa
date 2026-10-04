@@ -10,10 +10,12 @@ import {
   TrendingUp,
   Globe2,
   Smartphone,
-  Monitor,
   Tablet,
+  Monitor,
   CalendarDays,
   RefreshCw,
+  Search,
+  RotateCcw,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -38,20 +40,59 @@ type Profile = {
   email?: string;
 };
 
+function isConverted(row: ClickRow) {
+  const status = String(row.status || "").toLowerCase();
+
+  return (
+    ["converted", "conversion", "approved", "paid"].includes(status) ||
+    Boolean(row.converted_at)
+  );
+}
+
+function getToday() {
+  const date = new Date();
+  return date.toISOString().slice(0, 10);
+}
+
+function getFirstDayOfMonth() {
+  const date = new Date();
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    1
+  )
+    .toISOString()
+    .slice(0, 10);
+}
+
 export default function AffiliateStatisticsPage() {
   const router = useRouter();
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [clicks, setClicks] = useState<ClickRow[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
-  const [period, setPeriod] = useState("all");
+
+  // Custom calendar range
+  const [fromDate, setFromDate] = useState(getFirstDayOfMonth());
+  const [toDate, setToDate] = useState(getToday());
+
+  // Applied range
+  const [appliedFromDate, setAppliedFromDate] =
+    useState(getFirstDayOfMonth());
+
+  const [appliedToDate, setAppliedToDate] =
+    useState(getToday());
 
   async function loadReport(showRefresh = false) {
     try {
-      if (showRefresh) setRefreshing(true);
-      else setLoading(true);
+      if (showRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
 
       setError("");
 
@@ -76,14 +117,22 @@ export default function AffiliateStatisticsPage() {
 
       if (!response.ok) {
         throw new Error(
-          data?.error || "Unable to load affiliate statistics."
+          data?.error ||
+            "Unable to load affiliate statistics."
         );
       }
 
       setProfile(data?.profile || null);
-      setClicks(Array.isArray(data?.clicks) ? data.clicks : []);
+      setClicks(
+        Array.isArray(data?.clicks)
+          ? data.clicks
+          : []
+      );
     } catch (err: any) {
-      setError(err?.message || "Unable to load statistics.");
+      setError(
+        err?.message ||
+          "Unable to load statistics."
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -94,71 +143,98 @@ export default function AffiliateStatisticsPage() {
     loadReport();
   }, []);
 
-  const filteredClicks = useMemo(() => {
-    if (period === "all") return clicks;
+  function applyDateRange() {
+    if (!fromDate || !toDate) {
+      setError("Please select both dates.");
+      return;
+    }
 
-    const now = new Date();
-    let start = new Date();
-
-    if (period === "today") {
-      start = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate()
+    if (fromDate > toDate) {
+      setError(
+        "From Date cannot be later than To Date."
       );
+      return;
     }
 
-    if (period === "7d") {
-      start.setDate(now.getDate() - 7);
+    setError("");
+    setAppliedFromDate(fromDate);
+    setAppliedToDate(toDate);
+  }
+
+  function resetDateRange() {
+    const firstDay = getFirstDayOfMonth();
+    const today = getToday();
+
+    setFromDate(firstDay);
+    setToDate(today);
+    setAppliedFromDate(firstDay);
+    setAppliedToDate(today);
+    setError("");
+  }
+
+  const filteredClicks = useMemo(() => {
+    if (!appliedFromDate || !appliedToDate) {
+      return clicks;
     }
 
-    if (period === "30d") {
-      start.setDate(now.getDate() - 30);
-    }
+    const start = new Date(
+      `${appliedFromDate}T00:00:00`
+    );
+
+    const end = new Date(
+      `${appliedToDate}T23:59:59.999`
+    );
 
     return clicks.filter((row) => {
       if (!row.created_at) return false;
 
       const created = new Date(row.created_at);
-      return created >= start;
+
+      return created >= start && created <= end;
     });
-  }, [clicks, period]);
+  }, [
+    clicks,
+    appliedFromDate,
+    appliedToDate,
+  ]);
 
   const totalClicks = filteredClicks.length;
 
-  const totalConversions = filteredClicks.filter((row) => {
-    const status = String(row.status || "").toLowerCase();
+  const totalConversions =
+    filteredClicks.filter(isConverted).length;
 
-    return (
-      ["converted", "conversion", "approved", "paid"].includes(status) ||
-      Boolean(row.converted_at)
-    );
-  }).length;
+  const totalEarnings = filteredClicks.reduce(
+    (sum, row) => {
+      if (!isConverted(row)) return sum;
 
-  const totalEarnings = filteredClicks.reduce((sum, row) => {
-    const status = String(row.status || "").toLowerCase();
+      const payout = Number(row.payout || 0);
 
-    const converted =
-      ["converted", "conversion", "approved", "paid"].includes(status) ||
-      Boolean(row.converted_at);
-
-    if (!converted) return sum;
-
-    const payout = Number(row.payout || 0);
-    return sum + (Number.isFinite(payout) ? payout : 0);
-  }, 0);
+      return (
+        sum +
+        (Number.isFinite(payout) ? payout : 0)
+      );
+    },
+    0
+  );
 
   const conversionRate =
-    totalClicks > 0 ? (totalConversions / totalClicks) * 100 : 0;
+    totalClicks > 0
+      ? (totalConversions / totalClicks) * 100
+      : 0;
 
   const countryStats = useMemo(() => {
     const map = new Map<
       string,
-      { clicks: number; conversions: number; earnings: number }
+      {
+        clicks: number;
+        conversions: number;
+        earnings: number;
+      }
     >();
 
     filteredClicks.forEach((row) => {
-      const country = row.country || "Unknown";
+      const country =
+        row.country || "Unknown";
 
       if (!map.has(country)) {
         map.set(country, {
@@ -169,17 +245,13 @@ export default function AffiliateStatisticsPage() {
       }
 
       const item = map.get(country)!;
+
       item.clicks++;
 
-      const status = String(row.status || "").toLowerCase();
-
-      const converted =
-        ["converted", "conversion", "approved", "paid"].includes(status) ||
-        Boolean(row.converted_at);
-
-      if (converted) {
+      if (isConverted(row)) {
         item.conversions++;
-        item.earnings += Number(row.payout || 0) || 0;
+        item.earnings +=
+          Number(row.payout || 0) || 0;
       }
     });
 
@@ -188,15 +260,25 @@ export default function AffiliateStatisticsPage() {
         country,
         ...value,
       }))
-      .sort((a, b) => b.clicks - a.clicks);
+      .sort(
+        (a, b) => b.clicks - a.clicks
+      );
   }, [filteredClicks]);
 
   const deviceStats = useMemo(() => {
-    const map = new Map<string, number>();
+    const map = new Map<
+      string,
+      number
+    >();
 
     filteredClicks.forEach((row) => {
-      const device = String(row.device || "Unknown");
-      map.set(device, (map.get(device) || 0) + 1);
+      const device =
+        row.device || "Unknown";
+
+      map.set(
+        device,
+        (map.get(device) || 0) + 1
+      );
     });
 
     return Array.from(map.entries())
@@ -204,23 +286,39 @@ export default function AffiliateStatisticsPage() {
         device,
         count,
         percentage:
-          totalClicks > 0 ? (count / totalClicks) * 100 : 0,
+          totalClicks > 0
+            ? (count / totalClicks) * 100
+            : 0,
       }))
-      .sort((a, b) => b.count - a.count);
+      .sort(
+        (a, b) => b.count - a.count
+      );
   }, [filteredClicks, totalClicks]);
 
-  const recentRows = [...filteredClicks]
+  const recentRows = [
+    ...filteredClicks,
+  ]
     .sort((a, b) => {
-      const aTime = new Date(a.created_at || 0).getTime();
-      const bTime = new Date(b.created_at || 0).getTime();
+      const aTime = new Date(
+        a.created_at || 0
+      ).getTime();
+
+      const bTime = new Date(
+        b.created_at || 0
+      ).getTime();
+
       return bTime - aTime;
     })
-    .slice(0, 20);
+    .slice(0, 100);
 
   function deviceIcon(device: string) {
-    const value = device.toLowerCase();
+    const value =
+      device.toLowerCase();
 
-    if (value.includes("mobile") || value.includes("phone")) {
+    if (
+      value.includes("mobile") ||
+      value.includes("phone")
+    ) {
       return <Smartphone size={17} />;
     }
 
@@ -234,11 +332,15 @@ export default function AffiliateStatisticsPage() {
   return (
     <main className="min-h-screen bg-slate-950 text-white">
       <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
-        {/* Header */}
+
+        {/* HEADER */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
+
             <button
-              onClick={() => router.push("/affiliate")}
+              onClick={() =>
+                router.push("/affiliate")
+              }
               className="rounded-xl border border-white/10 bg-white/5 p-2.5 transition hover:bg-white/10"
             >
               <ArrowLeft size={20} />
@@ -246,14 +348,19 @@ export default function AffiliateStatisticsPage() {
 
             <div>
               <div className="flex items-center gap-2">
-                <BarChart3 size={23} className="text-cyan-400" />
+                <BarChart3
+                  size={23}
+                  className="text-cyan-400"
+                />
+
                 <h1 className="text-2xl font-bold">
                   Statistics & Report
                 </h1>
               </div>
 
               <p className="mt-1 text-sm text-slate-400">
-                Track your affiliate performance and earnings
+                View your affiliate performance
+                for any date range
               </p>
             </div>
           </div>
@@ -265,16 +372,22 @@ export default function AffiliateStatisticsPage() {
           >
             <RefreshCw
               size={17}
-              className={refreshing ? "animate-spin" : ""}
+              className={
+                refreshing
+                  ? "animate-spin"
+                  : ""
+              }
             />
+
             Refresh
           </button>
         </div>
 
-        {/* Affiliate ID */}
+        {/* AFFILIATE ID */}
         {profile?.affiliate_id && (
           <div className="mb-5 rounded-2xl border border-cyan-400/10 bg-cyan-400/5 px-4 py-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
+
               <span className="text-sm text-slate-400">
                 Affiliate ID
               </span>
@@ -282,50 +395,123 @@ export default function AffiliateStatisticsPage() {
               <span className="font-mono text-sm font-semibold text-cyan-300">
                 {profile.affiliate_id}
               </span>
+
             </div>
           </div>
         )}
 
-        {/* Error */}
+        {/* ERROR */}
         {error && (
           <div className="mb-5 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
             {error}
           </div>
         )}
 
-        {/* Period */}
-        <div className="mb-6 flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 text-sm text-slate-400">
-            <CalendarDays size={17} />
-            Period:
+        {/* CALENDAR FILTER */}
+        <section className="mb-6 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+
+          <div className="mb-4 flex items-center gap-2">
+            <CalendarDays
+              size={20}
+              className="text-cyan-400"
+            />
+
+            <div>
+              <h2 className="font-semibold">
+                Report Date Range
+              </h2>
+
+              <p className="text-xs text-slate-500">
+                Select any date range, including
+                different years
+              </p>
+            </div>
           </div>
 
-          {[
-            ["all", "All Time"],
-            ["today", "Today"],
-            ["7d", "Last 7 Days"],
-            ["30d", "Last 30 Days"],
-          ].map(([value, label]) => (
-            <button
-              key={value}
-              onClick={() => setPeriod(value)}
-              className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
-                period === value
-                  ? "bg-cyan-500 text-slate-950"
-                  : "border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_1fr_auto_auto] md:items-end">
 
-        {/* KPI Cards */}
+            {/* FROM */}
+            <div>
+              <label className="mb-2 block text-sm text-slate-400">
+                From Date
+              </label>
+
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) =>
+                  setFromDate(e.target.value)
+                }
+                className="w-full rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none transition focus:border-cyan-400"
+              />
+            </div>
+
+            {/* TO */}
+            <div>
+              <label className="mb-2 block text-sm text-slate-400">
+                To Date
+              </label>
+
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) =>
+                  setToDate(e.target.value)
+                }
+                className="w-full rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none transition focus:border-cyan-400"
+              />
+            </div>
+
+            {/* APPLY */}
+            <button
+              onClick={applyDateRange}
+              className="flex items-center justify-center gap-2 rounded-xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-400"
+            >
+              <Search size={18} />
+              Apply
+            </button>
+
+            {/* RESET */}
+            <button
+              onClick={resetDateRange}
+              className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-5 py-3 font-semibold text-slate-200 transition hover:bg-white/10"
+            >
+              <RotateCcw size={17} />
+              Reset
+            </button>
+
+          </div>
+
+          {/* CURRENT RANGE */}
+          <div className="mt-4 rounded-xl border border-cyan-400/10 bg-cyan-400/5 px-4 py-3 text-sm">
+            <span className="text-slate-400">
+              Showing report:
+            </span>{" "}
+            <span className="font-semibold text-cyan-300">
+              {appliedFromDate}
+            </span>{" "}
+            <span className="text-slate-500">
+              →
+            </span>{" "}
+            <span className="font-semibold text-cyan-300">
+              {appliedToDate}
+            </span>
+          </div>
+        </section>
+
+        {/* STAT CARDS */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+
           <StatCard
-            icon={<MousePointerClick size={22} />}
+            icon={
+              <MousePointerClick size={22} />
+            }
             title="Total Clicks"
-            value={loading ? "..." : totalClicks.toLocaleString()}
+            value={
+              loading
+                ? "..."
+                : totalClicks.toLocaleString()
+            }
             description="Tracked clicks"
           />
 
@@ -333,242 +519,322 @@ export default function AffiliateStatisticsPage() {
             icon={<Target size={22} />}
             title="Conversions"
             value={
-              loading ? "..." : totalConversions.toLocaleString()
+              loading
+                ? "..."
+                : totalConversions.toLocaleString()
             }
             description="Successful conversions"
           />
 
           <StatCard
-            icon={<DollarSign size={22} />}
+            icon={
+              <DollarSign size={22} />
+            }
             title="Total Earnings"
             value={
-              loading ? "..." : `$${totalEarnings.toFixed(2)}`
+              loading
+                ? "..."
+                : `$${totalEarnings.toFixed(2)}`
             }
             description="Conversion revenue"
           />
 
           <StatCard
-            icon={<TrendingUp size={22} />}
+            icon={
+              <TrendingUp size={22} />
+            }
             title="Conversion Rate"
             value={
-              loading ? "..." : `${conversionRate.toFixed(2)}%`
+              loading
+                ? "..."
+                : `${conversionRate.toFixed(2)}%`
             }
             description="Clicks to conversions"
           />
+
         </div>
 
-        {/* Country + Device */}
+        {/* COUNTRY + DEVICE */}
         <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {/* Country */}
+
+          {/* COUNTRY */}
           <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+
             <div className="mb-5 flex items-center gap-2">
-              <Globe2 size={20} className="text-cyan-400" />
+              <Globe2
+                size={20}
+                className="text-cyan-400"
+              />
+
               <h2 className="text-lg font-semibold">
                 Country Report
               </h2>
             </div>
 
             {countryStats.length === 0 ? (
-              <EmptyState text="No country data available yet." />
+              <EmptyState text="No country data available for this date range." />
             ) : (
               <div className="space-y-3">
-                {countryStats.map((item) => (
-                  <div
-                    key={item.country}
-                    className="rounded-xl border border-white/5 bg-white/[0.03] p-3"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="font-medium">
-                          {item.country}
+
+                {countryStats.map(
+                  (item) => (
+                    <div
+                      key={item.country}
+                      className="rounded-xl border border-white/5 bg-white/[0.03] p-3"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+
+                        <div>
+                          <div className="font-medium">
+                            {item.country}
+                          </div>
+
+                          <div className="mt-1 text-xs text-slate-500">
+                            {item.clicks} clicks ·{" "}
+                            {item.conversions} conversions
+                          </div>
                         </div>
-                        <div className="mt-1 text-xs text-slate-500">
-                          {item.clicks} clicks · {item.conversions} conversions
+
+                        <div className="text-right">
+                          <div className="font-semibold text-emerald-400">
+                            $
+                            {item.earnings.toFixed(
+                              2
+                            )}
+                          </div>
+
+                          <div className="text-xs text-slate-500">
+                            earnings
+                          </div>
                         </div>
+
                       </div>
 
-                      <div className="text-right">
-                        <div className="font-semibold text-emerald-400">
-                          ${item.earnings.toFixed(2)}
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          earnings
-                        </div>
+                      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+                        <div
+                          className="h-full rounded-full bg-cyan-400"
+                          style={{
+                            width: `${
+                              totalClicks > 0
+                                ? Math.min(
+                                    100,
+                                    (item.clicks /
+                                      totalClicks) *
+                                      100
+                                  )
+                                : 0
+                            }%`,
+                          }}
+                        />
                       </div>
                     </div>
+                  )
+                )}
 
-                    <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-                      <div
-                        className="h-full rounded-full bg-cyan-400"
-                        style={{
-                          width: `${
-                            totalClicks > 0
-                              ? Math.min(
-                                  100,
-                                  (item.clicks / totalClicks) * 100
-                                )
-                              : 0
-                          }%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                ))}
               </div>
             )}
           </section>
 
-          {/* Device */}
+          {/* DEVICE */}
           <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+
             <div className="mb-5 flex items-center gap-2">
-              <Smartphone size={20} className="text-purple-400" />
+              <Smartphone
+                size={20}
+                className="text-purple-400"
+              />
+
               <h2 className="text-lg font-semibold">
                 Device Report
               </h2>
             </div>
 
             {deviceStats.length === 0 ? (
-              <EmptyState text="No device data available yet." />
+              <EmptyState text="No device data available for this date range." />
             ) : (
               <div className="space-y-4">
-                {deviceStats.map((item) => (
-                  <div key={item.device}>
-                    <div className="mb-2 flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-sm">
-                        {deviceIcon(item.device)}
-                        <span>{item.device}</span>
+
+                {deviceStats.map(
+                  (item) => (
+                    <div key={item.device}>
+
+                      <div className="mb-2 flex items-center justify-between">
+
+                        <div className="flex items-center gap-2 text-sm">
+                          {deviceIcon(
+                            item.device
+                          )}
+
+                          <span>
+                            {item.device}
+                          </span>
+                        </div>
+
+                        <span className="text-sm font-semibold">
+                          {item.count}{" "}
+                          <span className="text-slate-500">
+                            (
+                            {item.percentage.toFixed(
+                              1
+                            )}
+                            %)
+                          </span>
+                        </span>
+
                       </div>
 
-                      <span className="text-sm font-semibold">
-                        {item.count}{" "}
-                        <span className="text-slate-500">
-                          ({item.percentage.toFixed(1)}%)
-                        </span>
-                      </span>
-                    </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                        <div
+                          className="h-full rounded-full bg-purple-400"
+                          style={{
+                            width: `${Math.min(
+                              100,
+                              item.percentage
+                            )}%`,
+                          }}
+                        />
+                      </div>
 
-                    <div className="h-2 overflow-hidden rounded-full bg-white/10">
-                      <div
-                        className="h-full rounded-full bg-purple-400"
-                        style={{
-                          width: `${Math.min(
-                            100,
-                            item.percentage
-                          )}%`,
-                        }}
-                      />
                     </div>
-                  </div>
-                ))}
+                  )
+                )}
+
               </div>
             )}
           </section>
         </div>
 
-        {/* Detailed Report */}
+        {/* DETAILED REPORT */}
         <section className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
+
           <div className="border-b border-white/10 px-5 py-5">
+
             <div className="flex items-center gap-2">
-              <BarChart3 size={20} className="text-amber-400" />
+              <BarChart3
+                size={20}
+                className="text-amber-400"
+              />
+
               <h2 className="text-lg font-semibold">
                 Detailed Report
               </h2>
             </div>
 
             <p className="mt-1 text-sm text-slate-500">
-              Latest click and conversion activity
+              Activity from the selected date range
             </p>
+
           </div>
 
           {recentRows.length === 0 ? (
             <div className="p-8">
-              <EmptyState text="No report data available yet." />
+              <EmptyState text="No report data available for this date range." />
             </div>
           ) : (
             <div className="overflow-x-auto">
+
               <table className="w-full min-w-[850px] text-left text-sm">
+
                 <thead className="border-b border-white/10 bg-white/[0.03] text-xs uppercase text-slate-500">
                   <tr>
-                    <th className="px-5 py-4">Date</th>
-                    <th className="px-5 py-4">Country</th>
-                    <th className="px-5 py-4">Device</th>
-                    <th className="px-5 py-4">Status</th>
-                    <th className="px-5 py-4">Payout</th>
+                    <th className="px-5 py-4">
+                      Date
+                    </th>
+
+                    <th className="px-5 py-4">
+                      Country
+                    </th>
+
+                    <th className="px-5 py-4">
+                      Device
+                    </th>
+
+                    <th className="px-5 py-4">
+                      Status
+                    </th>
+
+                    <th className="px-5 py-4">
+                      Payout
+                    </th>
                   </tr>
                 </thead>
 
                 <tbody>
-                  {recentRows.map((row, index) => {
-                    const status = String(
-                      row.status || "click"
-                    ).toLowerCase();
+                  {recentRows.map(
+                    (row, index) => {
+                      const converted =
+                        isConverted(row);
 
-                    const converted =
-                      [
-                        "converted",
-                        "conversion",
-                        "approved",
-                        "paid",
-                      ].includes(status) ||
-                      Boolean(row.converted_at);
+                      return (
+                        <tr
+                          key={
+                            row.click_id ||
+                            `${row.created_at}-${index}`
+                          }
+                          className="border-b border-white/5 last:border-0"
+                        >
 
-                    return (
-                      <tr
-                        key={
-                          row.click_id ||
-                          `${row.created_at}-${index}`
-                        }
-                        className="border-b border-white/5 last:border-0"
-                      >
-                        <td className="px-5 py-4 text-slate-300">
-                          {row.created_at
-                            ? new Date(
-                                row.created_at
-                              ).toLocaleString()
-                            : "-"}
-                        </td>
+                          <td className="px-5 py-4 text-slate-300">
+                            {row.created_at
+                              ? new Date(
+                                  row.created_at
+                                ).toLocaleString()
+                              : "-"}
+                          </td>
 
-                        <td className="px-5 py-4">
-                          {row.country || "Unknown"}
-                        </td>
+                          <td className="px-5 py-4">
+                            {row.country ||
+                              "Unknown"}
+                          </td>
 
-                        <td className="px-5 py-4 text-slate-300">
-                          {row.device || "Unknown"}
-                        </td>
+                          <td className="px-5 py-4 text-slate-300">
+                            {row.device ||
+                              "Unknown"}
+                          </td>
 
-                        <td className="px-5 py-4">
-                          <span
-                            className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                              converted
-                                ? "bg-emerald-400/10 text-emerald-400"
-                                : "bg-slate-400/10 text-slate-400"
-                            }`}
-                          >
+                          <td className="px-5 py-4">
+
+                            <span
+                              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                                converted
+                                  ? "bg-emerald-400/10 text-emerald-400"
+                                  : "bg-slate-400/10 text-slate-400"
+                              }`}
+                            >
+                              {converted
+                                ? "Converted"
+                                : row.status ||
+                                  "Click"}
+                            </span>
+
+                          </td>
+
+                          <td className="px-5 py-4 font-semibold text-emerald-400">
                             {converted
-                              ? "Converted"
-                              : row.status || "Click"}
-                          </span>
-                        </td>
+                              ? `$${Number(
+                                  row.payout ||
+                                    0
+                                ).toFixed(2)}`
+                              : "$0.00"}
+                          </td>
 
-                        <td className="px-5 py-4 font-semibold text-emerald-400">
-                          {converted
-                            ? `$${Number(
-                                row.payout || 0
-                              ).toFixed(2)}`
-                            : "$0.00"}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                        </tr>
+                      );
+                    }
+                  )}
                 </tbody>
+
               </table>
             </div>
           )}
         </section>
 
-        <div className="mt-6 text-center text-xs text-slate-600">
-          Affiliate Statistics • {profile?.affiliate_id || "Affiliate"}
+        <div className="mt-6 pb-6 text-center text-xs text-slate-600">
+          Affiliate Statistics •{" "}
+          {profile?.affiliate_id ||
+            "Affiliate"}
         </div>
+
       </div>
     </main>
   );
@@ -587,15 +853,22 @@ function StatCard({
 }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 transition hover:bg-white/[0.05]">
+
       <div className="mb-4 flex items-center justify-between">
+
         <div className="rounded-xl bg-white/5 p-2.5 text-cyan-400">
           {icon}
         </div>
 
-        <BarChart3 size={17} className="text-slate-700" />
+        <BarChart3
+          size={17}
+          className="text-slate-700"
+        />
       </div>
 
-      <div className="text-sm text-slate-400">{title}</div>
+      <div className="text-sm text-slate-400">
+        {title}
+      </div>
 
       <div className="mt-1 text-2xl font-bold">
         {value}
@@ -604,14 +877,19 @@ function StatCard({
       <div className="mt-1 text-xs text-slate-600">
         {description}
       </div>
+
     </div>
   );
 }
 
-function EmptyState({ text }: { text: string }) {
+function EmptyState({
+  text,
+}: {
+  text: string;
+}) {
   return (
     <div className="rounded-xl border border-dashed border-white/10 p-8 text-center text-sm text-slate-500">
       {text}
     </div>
   );
-      }
+  }
