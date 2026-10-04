@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
     }
 
     // ==========================================
-    // Validate affiliate
+    // VALIDATE AFFILIATE
     // ==========================================
 
     const {
@@ -114,13 +114,13 @@ export async function GET(request: NextRequest) {
     }
 
     // ==========================================
-    // Generate click ID
+    // GENERATE CLICK ID
     // ==========================================
 
     const clickId = randomUUID();
 
     // ==========================================
-    // Request information
+    // REQUEST INFORMATION
     // ==========================================
 
     const userAgent =
@@ -139,7 +139,7 @@ export async function GET(request: NextRequest) {
       null;
 
     // ==========================================
-    // Device
+    // DEVICE
     // ==========================================
 
     let device = "Desktop";
@@ -153,7 +153,7 @@ export async function GET(request: NextRequest) {
     }
 
     // ==========================================
-    // Browser
+    // BROWSER
     // ==========================================
 
     let browser = "Other";
@@ -211,9 +211,7 @@ export async function GET(request: NextRequest) {
       }
 
       // ==========================================
-      // IMPORTANT:
-      // Save the payout configured by Admin
-      // with this click.
+      // ADMIN CONTROLLED PAYOUT
       // ==========================================
 
       const offerPayout =
@@ -222,26 +220,64 @@ export async function GET(request: NextRequest) {
         );
 
       // ==========================================
-      // Save offer click
+      // SAVE OFFER CLICK
+      //
+      // First try with offer_id.
+      // If the current database does not have
+      // offer_id, retry without it.
       // ==========================================
 
-      const {
+      const clickWithOfferId = {
+        click_id: clickId,
+        affiliate_id: affiliateId,
+        offer_id: offer.id,
+        smartlink_id: `offer-${offer.id}`,
+        country,
+        device,
+        browser,
+        referer,
+        payout: offerPayout,
+      };
+
+      let {
         error: clickError,
       } = await supabase
         .from("clicks")
-        .insert({
+        .insert(clickWithOfferId);
+
+      // ==========================================
+      // FALLBACK
+      // ==========================================
+
+      if (clickError) {
+        console.warn(
+          "Offer click insert with offer_id failed. Retrying without offer_id:",
+          clickError
+        );
+
+        const clickWithoutOfferId = {
           click_id: clickId,
           affiliate_id: affiliateId,
-          offer_id: offer.id,
           smartlink_id: `offer-${offer.id}`,
           country,
           device,
           browser,
           referer,
-
-          // Admin-controlled payout
           payout: offerPayout,
-        });
+        };
+
+        const fallbackResult =
+          await supabase
+            .from("clicks")
+            .insert(clickWithoutOfferId);
+
+        clickError =
+          fallbackResult.error;
+      }
+
+      // ==========================================
+      // FINAL CLICK INSERT ERROR
+      // ==========================================
 
       if (clickError) {
         console.error(
@@ -253,37 +289,59 @@ export async function GET(request: NextRequest) {
           {
             error:
               "Unable to record click.",
+            details:
+              clickError.message ||
+              "Database insert failed.",
           },
           { status: 500 }
         );
       }
 
       // ==========================================
-      // Add tracking parameters to offer URL
+      // REDIRECT TO OFFER
       // ==========================================
 
-      const redirectUrl =
-        new URL(offer.offer_url);
+      try {
+        const redirectUrl =
+          new URL(offer.offer_url);
 
-      redirectUrl.searchParams.set(
-        "sub1",
-        clickId
-      );
+        redirectUrl.searchParams.set(
+          "sub1",
+          clickId
+        );
 
-      redirectUrl.searchParams.set(
-        "sub2",
-        affiliateId
-      );
+        redirectUrl.searchParams.set(
+          "sub2",
+          affiliateId
+        );
 
-      redirectUrl.searchParams.set(
-        "offer_id",
-        offer.id
-      );
+        /*
+         * Keep offer_id in the outgoing URL
+         * for the advertiser/postback system.
+         */
+        redirectUrl.searchParams.set(
+          "offer_id",
+          String(offer.id)
+        );
 
-      return NextResponse.redirect(
-        redirectUrl.toString(),
-        302
-      );
+        return NextResponse.redirect(
+          redirectUrl.toString(),
+          302
+        );
+      } catch (redirectError) {
+        console.error(
+          "Offer redirect URL error:",
+          redirectError
+        );
+
+        return NextResponse.json(
+          {
+            error:
+              "Offer URL is invalid.",
+          },
+          { status: 500 }
+        );
+      }
     }
 
     // ==========================================
@@ -291,7 +349,7 @@ export async function GET(request: NextRequest) {
     // ==========================================
 
     const {
-      error: clickError,
+      error: smartlinkClickError,
     } = await supabase
       .from("clicks")
       .insert({
@@ -304,20 +362,27 @@ export async function GET(request: NextRequest) {
         referer,
       });
 
-    if (clickError) {
+    if (smartlinkClickError) {
       console.error(
-        "Click tracking error:",
-        clickError
+        "Smartlink click tracking error:",
+        smartlinkClickError
       );
 
       return NextResponse.json(
         {
           error:
             "Unable to record click.",
+          details:
+            smartlinkClickError.message ||
+            "Database insert failed.",
         },
         { status: 500 }
       );
     }
+
+    // ==========================================
+    // ROTATE SMARTLINK
+    // ==========================================
 
     const firstByte =
       Number.parseInt(
