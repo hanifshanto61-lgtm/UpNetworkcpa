@@ -131,6 +131,7 @@ export async function GET(request: NextRequest) {
           pendingCommission: 0,
           paidCommission: 0,
           commissionCurrency: "USD",
+          commissions: [],
         },
         {
           status: 200,
@@ -147,13 +148,14 @@ export async function GET(request: NextRequest) {
      * REFERRALS
      * ------------------------------------------
      *
-     * A referral is an affiliate whose
-     * profiles.referred_by equals this affiliate ID.
+     * IMPORTANT:
+     * Only columns that actually exist in the
+     * current profiles table are selected.
      */
     const referralsResult = await supabaseAdmin
       .from("profiles")
       .select(
-        "id, affiliate_id, email, full_name, name, username, display_name, created_at, application_status"
+        "id, affiliate_id, email, full_name, username, created_at, referred_by"
       )
       .eq("referred_by", affiliateId)
       .order("created_at", {
@@ -180,6 +182,7 @@ export async function GET(request: NextRequest) {
           pendingCommission: 0,
           paidCommission: 0,
           commissionCurrency: "USD",
+          commissions: [],
         },
         { status: 500 }
       );
@@ -189,112 +192,105 @@ export async function GET(request: NextRequest) {
       referralsResult.data || []
     ).map((referral: AnyRecord) => ({
       id: referral.id,
+
       affiliateId:
         referral.affiliate_id || "",
+
       email:
         referral.email || "",
+
       name:
         referral.full_name ||
-        referral.name ||
         referral.username ||
-        referral.display_name ||
         referral.email?.split("@")[0] ||
         "Affiliate",
-      status:
-        referral.application_status ||
-        "pending",
+
+      status: "pending",
+
       joinedAt:
         referral.created_at || null,
     }));
 
     /*
      * ------------------------------------------
-     * REFERRAL COMMISSION
+     * REFERRAL COMMISSIONS
      * ------------------------------------------
      *
-     * The database trigger creates these records
-     * from real approved/converted conversions.
+     * Commission data is optional.
      *
-     * Commission rate = 5%.
+     * If the referral_commissions table is not
+     * ready yet, referrals will still load normally.
      */
-    const commissionsResult =
-      await supabaseAdmin
-        .from("referral_commissions")
-        .select(
-          "id, referred_affiliate_id, click_id, source_earnings, commission_rate, commission_amount, status, created_at, paid_at"
-        )
-        .eq(
-          "referrer_affiliate_id",
-          affiliateId
-        )
-        .order("created_at", {
-          ascending: false,
-        });
+    let commissions: any[] = [];
 
-    if (commissionsResult.error) {
-      console.error(
-        "Commission query error:",
-        commissionsResult.error
-      );
+    try {
+      const commissionsResult =
+        await supabaseAdmin
+          .from("referral_commissions")
+          .select(
+            "id, referred_affiliate_id, click_id, source_earnings, commission_rate, commission_amount, status, created_at, paid_at"
+          )
+          .eq(
+            "referrer_affiliate_id",
+            affiliateId
+          )
+          .order("created_at", {
+            ascending: false,
+          });
 
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "Referral commission data could not be loaded.",
-          affiliateId,
-          referralLink: "",
-          totalReferrals: referrals.length,
-          referrals,
-          commissionRate: 5,
-          totalCommission: 0,
-          pendingCommission: 0,
-          paidCommission: 0,
-          commissionCurrency: "USD",
-          commissions: [],
-        },
-        { status: 500 }
+      if (!commissionsResult.error) {
+        commissions = (
+          commissionsResult.data || []
+        ).map((commission: AnyRecord) => ({
+          id: commission.id,
+
+          referredAffiliateId:
+            commission.referred_affiliate_id || "",
+
+          clickId:
+            commission.click_id || null,
+
+          sourceEarnings:
+            Number(
+              commission.source_earnings || 0
+            ),
+
+          commissionRate:
+            Number(
+              commission.commission_rate || 5
+            ),
+
+          commissionAmount:
+            Number(
+              commission.commission_amount || 0
+            ),
+
+          status:
+            commission.status || "pending",
+
+          createdAt:
+            commission.created_at || null,
+
+          paidAt:
+            commission.paid_at || null,
+        }));
+      } else {
+        console.warn(
+          "Referral commission query skipped:",
+          commissionsResult.error
+        );
+      }
+    } catch (error) {
+      console.warn(
+        "Referral commission query failed:",
+        error
       );
     }
 
-    const commissions = (
-      commissionsResult.data || []
-    ).map((commission: AnyRecord) => ({
-      id: commission.id,
-
-      referredAffiliateId:
-        commission.referred_affiliate_id || "",
-
-      clickId:
-        commission.click_id || null,
-
-      sourceEarnings:
-        Number(
-          commission.source_earnings || 0
-        ),
-
-      commissionRate:
-        Number(
-          commission.commission_rate || 5
-        ),
-
-      commissionAmount:
-        Number(
-          commission.commission_amount || 0
-        ),
-
-      status:
-        commission.status || "pending",
-
-      createdAt:
-        commission.created_at || null,
-
-      paidAt:
-        commission.paid_at || null,
-    }));
-
     /*
-     * Calculate balances.
+     * ------------------------------------------
+     * CALCULATE COMMISSION BALANCES
+     * ------------------------------------------
      */
     let totalCommission = 0;
     let pendingCommission = 0;
@@ -337,10 +333,9 @@ export async function GET(request: NextRequest) {
       ) / 100;
 
     /*
-     * Build the referral URL.
-     *
-     * Prefer the current request origin.
-     * This works with Vercel/custom domains.
+     * ------------------------------------------
+     * BUILD REFERRAL LINK
+     * ------------------------------------------
      */
     const forwardedProto =
       request.headers.get(
@@ -368,6 +363,11 @@ export async function GET(request: NextRequest) {
         )}`
       : "";
 
+    /*
+     * ------------------------------------------
+     * FINAL RESPONSE
+     * ------------------------------------------
+     */
     return NextResponse.json(
       {
         success: true,
