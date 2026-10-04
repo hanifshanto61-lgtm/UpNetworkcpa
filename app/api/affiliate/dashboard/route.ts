@@ -14,12 +14,6 @@ const CONVERSION_STATUSES = [
   "paid",
 ];
 
-type ApplicationStatus =
-  | "pending"
-  | "approved"
-  | "rejected"
-  | "suspended";
-
 function makeAffiliateId(userId: string) {
   return `UP${userId
     .replace(/-/g, "")
@@ -27,143 +21,12 @@ function makeAffiliateId(userId: string) {
     .toUpperCase()}`;
 }
 
-/**
- * Normalize application status.
- *
- * Unknown / empty status is treated as pending
- * for security.
- */
-function normalizeApplicationStatus(
-  value: any
-): ApplicationStatus {
-  const status = String(value || "")
+function normalizeStatus(value: any) {
+  return String(value || "")
     .trim()
     .toLowerCase();
-
-  if (
-    status === "approved" ||
-    status === "rejected" ||
-    status === "suspended"
-  ) {
-    return status;
-  }
-
-  return "pending";
 }
 
-/**
- * Find affiliate profile safely.
- *
- * Different versions of the project may use:
- * - id
- * - user_id
- * - auth_id
- * - email
- */
-async function findProfile(
-  supabaseAdmin: any,
-  user: any
-) {
-  const lookups = [
-    {
-      column: "id",
-      value: user.id,
-    },
-    {
-      column: "user_id",
-      value: user.id,
-    },
-    {
-      column: "auth_id",
-      value: user.id,
-    },
-    {
-      column: "email",
-      value: user.email,
-    },
-  ];
-
-  for (const lookup of lookups) {
-    if (!lookup.value) continue;
-
-    try {
-      const result = await supabaseAdmin
-        .from("profiles")
-        .select("*")
-        .eq(lookup.column, lookup.value)
-        .maybeSingle();
-
-      if (!result.error && result.data) {
-        return {
-          profile: result.data as AnyRecord,
-          lookupColumn: lookup.column,
-        };
-      }
-    } catch (error) {
-      console.warn(
-        "Profile lookup error:",
-        error
-      );
-    }
-  }
-
-  return {
-    profile: null,
-    lookupColumn: null,
-  };
-}
-
-/**
- * Create profile only when one does not exist.
- *
- * We keep compatibility with the existing
- * project schema.
- */
-async function createProfile(
-  supabaseAdmin: any,
-  user: any,
-  affiliateId: string
-) {
-  const attempts = [
-    {
-      id: user.id,
-      affiliate_id: affiliateId,
-    },
-    {
-      user_id: user.id,
-      affiliate_id: affiliateId,
-    },
-    {
-      auth_id: user.id,
-      affiliate_id: affiliateId,
-    },
-  ];
-
-  for (const payload of attempts) {
-    try {
-      const result = await supabaseAdmin
-        .from("profiles")
-        .insert(payload)
-        .select("*")
-        .maybeSingle();
-
-      if (!result.error && result.data) {
-        return result.data as AnyRecord;
-      }
-    } catch (error) {
-      console.warn(
-        "Profile creation error:",
-        error
-      );
-    }
-  }
-
-  return null;
-}
-
-/**
- * Convert payout safely to a number.
- */
 function getNumericPayout(value: any) {
   if (
     value === null ||
@@ -175,18 +38,132 @@ function getNumericPayout(value: any) {
 
   const number = Number(value);
 
-  return Number.isFinite(number)
-    ? number
-    : 0;
+  return Number.isFinite(number) ? number : 0;
 }
 
 /**
- * Normalize status for reliable comparison.
+ * Convert affiliate profile status to dashboard access status.
+ *
+ * Our current database uses:
+ * affiliate_profiles.status
+ *
+ * Typical values:
+ * active
+ * pending
+ * rejected
+ * suspended
  */
-function normalizeStatus(value: any) {
-  return String(value || "")
-    .trim()
-    .toLowerCase();
+function normalizeAffiliateStatus(value: any) {
+  const status = normalizeStatus(value);
+
+  if (
+    status === "active" ||
+    status === "approved"
+  ) {
+    return "approved";
+  }
+
+  if (status === "rejected") {
+    return "rejected";
+  }
+
+  if (status === "suspended") {
+    return "suspended";
+  }
+
+  return "pending";
+}
+
+/**
+ * Find the current affiliate profile.
+ *
+ * Current schema:
+ * public.affiliate_profiles
+ *
+ * Primary relation:
+ * affiliate_profiles.id = auth.users.id
+ */
+async function findAffiliateProfile(
+  supabaseAdmin: any,
+  user: any
+) {
+  try {
+    const result = await supabaseAdmin
+      .from("affiliate_profiles")
+      .select("*")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (!result.error && result.data) {
+      return result.data as AnyRecord;
+    }
+
+    if (result.error) {
+      console.error(
+        "Affiliate profile lookup error:",
+        result.error
+      );
+    }
+  } catch (error) {
+    console.error(
+      "Affiliate profile lookup exception:",
+      error
+    );
+  }
+
+  return null;
+}
+
+/**
+ * Create an affiliate profile if one does not exist.
+ *
+ * This is a fallback for newly approved affiliate
+ * accounts that do not yet have a profile row.
+ */
+async function createAffiliateProfile(
+  supabaseAdmin: any,
+  user: any,
+  affiliateId: string
+) {
+  try {
+    const fullName =
+      user.user_metadata?.full_name ||
+      user.user_metadata?.name ||
+      user.email?.split("@")[0] ||
+      "Affiliate";
+
+    const result = await supabaseAdmin
+      .from("affiliate_profiles")
+      .insert({
+        id: user.id,
+        affiliate_id: affiliateId,
+        full_name: fullName,
+        email: user.email || null,
+        status: "active",
+        referral_code: affiliateId,
+        referral_rate: 5,
+      })
+      .select("*")
+      .maybeSingle();
+
+    if (!result.error && result.data) {
+      return result.data as AnyRecord;
+    }
+
+    if (result.error) {
+      console.error(
+        "Affiliate profile creation error:",
+        result.error
+      );
+    }
+  } catch (error) {
+    console.error(
+      "Affiliate profile creation exception:",
+      error
+    );
+  }
+
+  return null;
 }
 
 export async function GET(
@@ -227,9 +204,7 @@ export async function GET(
 
     if (
       !authorization ||
-      !authorization.startsWith(
-        "Bearer "
-      )
+      !authorization.startsWith("Bearer ")
     ) {
       return NextResponse.json(
         {
@@ -299,20 +274,7 @@ export async function GET(
     }
 
     /* -------------------------------------------------
-       5. AFFILIATE APPROVAL SECURITY
-       
-       Admin approval is stored in Auth metadata
-       by the Admin Affiliates system.
-
-       IMPORTANT:
-       We check this BEFORE:
-       - loading profile
-       - creating profile
-       - loading clicks
-       - calculating earnings
-
-       Unknown / missing status = PENDING.
-       This is fail-closed for security.
+       5. ACCOUNT TYPE CHECK
     ------------------------------------------------- */
 
     const accountType =
@@ -338,94 +300,154 @@ export async function GET(
       );
     }
 
+    /* -------------------------------------------------
+       6. FIND AFFILIATE PROFILE
+    ------------------------------------------------- */
+
+    let profile =
+      await findAffiliateProfile(
+        supabaseAdmin,
+        user
+      );
+
+    /* -------------------------------------------------
+       7. DETERMINE APPLICATION STATUS
+    ------------------------------------------------- */
+
     let applicationStatus =
-      normalizeApplicationStatus(
+      normalizeAffiliateStatus(
+        profile?.status
+      );
+
+    /*
+     * Auth metadata can override the database status
+     * when an admin system explicitly stores one.
+     */
+
+    const metadataStatus =
+      normalizeStatus(
         user.user_metadata
           ?.application_status
       );
 
-    /*
-     * If Auth metadata does not contain an
-     * application_status, try the profiles table
-     * as a compatibility fallback.
-     *
-     * We ONLY use profiles when metadata does
-     * not contain a usable status.
-     */
-    const metadataStatus =
-      String(
-        user.user_metadata
-          ?.application_status || ""
-      )
-        .trim()
-        .toLowerCase();
+    if (
+      metadataStatus === "approved"
+    ) {
+      applicationStatus =
+        "approved";
+    }
 
-    if (!metadataStatus) {
-      try {
-        const profileStatusLookups = [
-          {
-            column: "id",
-            value: user.id,
-          },
-          {
-            column: "user_id",
-            value: user.id,
-          },
-          {
-            column: "auth_id",
-            value: user.id,
-          },
-        ];
+    if (
+      metadataStatus === "rejected"
+    ) {
+      applicationStatus =
+        "rejected";
+    }
 
-        for (
-          const lookup of profileStatusLookups
-        ) {
-          try {
-            const statusResult =
-              await supabaseAdmin
-                .from("profiles")
-                .select(
-                  "application_status"
-                )
-                .eq(
-                  lookup.column,
-                  lookup.value
-                )
-                .maybeSingle();
-
-            if (
-              !statusResult.error &&
-              statusResult.data
-                ?.application_status
-            ) {
-              applicationStatus =
-                normalizeApplicationStatus(
-                  statusResult.data
-                    .application_status
-                );
-
-              break;
-            }
-          } catch (error) {
-            console.warn(
-              "Profile approval status lookup error:",
-              error
-            );
-          }
-        }
-      } catch (error) {
-        console.warn(
-          "Profile approval fallback error:",
-          error
-        );
-      }
+    if (
+      metadataStatus === "suspended"
+    ) {
+      applicationStatus =
+        "suspended";
     }
 
     /*
-     * ONLY approved affiliates can continue.
+     * If there is no profile at all, fail closed.
+     * We will only create a profile for an explicitly
+     * approved affiliate account.
      */
+
+    if (!profile) {
+      if (
+        applicationStatus !==
+        "approved"
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Your affiliate application is waiting for admin approval.",
+            code: "AFFILIATE_PENDING",
+            status: "pending",
+          },
+          {
+            status: 403,
+            headers: {
+              "Cache-Control":
+                "no-store, no-cache, must-revalidate",
+            },
+          }
+        );
+      }
+
+      const generatedAffiliateId =
+        makeAffiliateId(user.id);
+
+      profile =
+        await createAffiliateProfile(
+          supabaseAdmin,
+          user,
+          generatedAffiliateId
+        );
+    }
+
+    /* -------------------------------------------------
+       8. FINAL PROFILE CHECK
+    ------------------------------------------------- */
+
+    if (!profile) {
+      return NextResponse.json(
+        {
+          error:
+            "Unable to read the affiliate profile.",
+          code: "AFFILIATE_PROFILE_NOT_FOUND",
+        },
+        { status: 500 }
+      );
+    }
+
+    /*
+     * If the profile exists and its status is active,
+     * the affiliate is allowed to use the dashboard.
+     */
+
+    applicationStatus =
+      normalizeAffiliateStatus(
+        profile.status
+      );
+
+    /*
+     * Explicit Auth metadata approval/rejection
+     * remains authoritative.
+     */
+
     if (
-      applicationStatus !== "approved"
+      metadataStatus === "approved"
+    ) {
+      applicationStatus =
+        "approved";
+    }
+
+    if (
+      metadataStatus === "rejected"
+    ) {
+      applicationStatus =
+        "rejected";
+    }
+
+    if (
+      metadataStatus === "suspended"
+    ) {
+      applicationStatus =
+        "suspended";
+    }
+
+    /* -------------------------------------------------
+       9. BLOCK NON-APPROVED AFFILIATES
+    ------------------------------------------------- */
+
+    if (
+      applicationStatus !==
+      "approved"
     ) {
       if (
         applicationStatus ===
@@ -487,131 +509,52 @@ export async function GET(
     }
 
     /* -------------------------------------------------
-       6. FIND AFFILIATE PROFILE
+       10. AFFILIATE ID
     ------------------------------------------------- */
 
-    let profileResult =
-      await findProfile(
-        supabaseAdmin,
-        user
-      );
+    let affiliateId =
+      profile.affiliate_id ||
+      "";
 
-    let profile =
-      profileResult.profile;
-
-    let affiliateId = "";
-
-    if (profile) {
-      affiliateId =
-        profile.affiliate_id ||
-        profile.affiliateId ||
-        profile.affiliate_code ||
-        profile.code ||
-        "";
-    }
-
-    /* -------------------------------------------------
-       7. GENERATE AFFILIATE ID IF MISSING
-    ------------------------------------------------- */
-
-    if (
-      profile &&
-      !affiliateId
-    ) {
-      affiliateId =
-        makeAffiliateId(user.id);
-
-      const lookupColumn =
-        profileResult.lookupColumn;
-
-      if (lookupColumn) {
-        try {
-          const updateValue =
-            lookupColumn === "email"
-              ? user.email
-              : user.id;
-
-          const updateResult =
-            await supabaseAdmin
-              .from("profiles")
-              .update({
-                affiliate_id:
-                  affiliateId,
-              })
-              .eq(
-                lookupColumn,
-                updateValue
-              )
-              .select("*")
-              .maybeSingle();
-
-          if (
-            !updateResult.error &&
-            updateResult.data
-          ) {
-            profile =
-              updateResult.data;
-
-            profileResult = {
-              profile:
-                updateResult.data,
-              lookupColumn,
-            };
-          }
-        } catch (error) {
-          console.warn(
-            "Affiliate ID update error:",
-            error
-          );
-        }
-      }
-    }
-
-    /* -------------------------------------------------
-       8. CREATE PROFILE IF IT DOES NOT EXIST
-    ------------------------------------------------- */
-
-    if (!profile) {
-      affiliateId =
-        makeAffiliateId(user.id);
-
-      const createdProfile =
-        await createProfile(
-          supabaseAdmin,
-          user,
-          affiliateId
-        );
-
-      if (createdProfile) {
-        profile =
-          createdProfile;
-
-        affiliateId =
-          createdProfile.affiliate_id ||
-          createdProfile.affiliateId ||
-          affiliateId;
-
-        profileResult = {
-          profile: createdProfile,
-          lookupColumn:
-            createdProfile.id
-              ? "id"
-              : createdProfile.user_id
-                ? "user_id"
-                : createdProfile.auth_id
-                  ? "auth_id"
-                  : null,
-        };
-      }
-    }
-
-    /* -------------------------------------------------
-       9. FINAL AFFILIATE ID SAFETY CHECK
-    ------------------------------------------------- */
+    /*
+     * If affiliate_id is somehow missing, generate one
+     * and save it to the current affiliate profile.
+     */
 
     if (!affiliateId) {
       affiliateId =
         makeAffiliateId(user.id);
+
+      try {
+        const updateResult =
+          await supabaseAdmin
+            .from("affiliate_profiles")
+            .update({
+              affiliate_id:
+                affiliateId,
+              referral_code:
+                profile.referral_code ||
+                affiliateId,
+              updated_at:
+                new Date().toISOString(),
+            })
+            .eq("id", user.id)
+            .select("*")
+            .maybeSingle();
+
+        if (
+          !updateResult.error &&
+          updateResult.data
+        ) {
+          profile =
+            updateResult.data;
+        }
+      } catch (error) {
+        console.warn(
+          "Affiliate ID update error:",
+          error
+        );
+      }
     }
 
     affiliateId =
@@ -628,14 +571,11 @@ export async function GET(
     }
 
     /* -------------------------------------------------
-       10. AFFILIATE DISPLAY NAME
+       11. AFFILIATE DISPLAY NAME
     ------------------------------------------------- */
 
     const profileName =
-      profile?.full_name ||
-      profile?.name ||
-      profile?.username ||
-      profile?.display_name ||
+      profile.full_name ||
       user.user_metadata
         ?.full_name ||
       user.user_metadata?.name ||
@@ -643,11 +583,7 @@ export async function GET(
       "Affiliate";
 
     /* -------------------------------------------------
-       11. LOAD RECENT CLICKS ONLY
-       
-       IMPORTANT:
-       We no longer load the entire click table.
-       Only the latest 20 records are returned.
+       12. LOAD RECENT CLICKS
     ------------------------------------------------- */
 
     let clicks: AnyRecord[] = [];
@@ -702,7 +638,7 @@ export async function GET(
     }
 
     /* -------------------------------------------------
-       12. TOTAL CLICK COUNT
+       13. TOTAL CLICK COUNT
     ------------------------------------------------- */
 
     let totalClicks = 0;
@@ -739,10 +675,7 @@ export async function GET(
     }
 
     /* -------------------------------------------------
-       13. CONVERSION COUNT + EARNINGS
-       
-       Only conversion rows are loaded here,
-       instead of every click.
+       14. CONVERSIONS + EARNINGS
     ------------------------------------------------- */
 
     let conversions = 0;
@@ -809,7 +742,7 @@ export async function GET(
     }
 
     /* -------------------------------------------------
-       14. CONVERSION RATE
+       15. CONVERSION RATE
     ------------------------------------------------- */
 
     const conversionRate =
@@ -824,7 +757,7 @@ export async function GET(
         : 0;
 
     /* -------------------------------------------------
-       15. RESPONSE
+       16. RESPONSE
     ------------------------------------------------- */
 
     return NextResponse.json(
@@ -840,12 +773,24 @@ export async function GET(
             user.email || null,
 
           name: profileName,
+
+          status:
+            profile.status ||
+            "active",
+
+          referralCode:
+            profile.referral_code ||
+            affiliateId,
+
+          referralRate:
+            Number(
+              profile.referral_rate ??
+                5
+            ),
         },
 
-        /* Latest 20 activities */
         clicks,
 
-        /* Server-side dashboard metrics */
         stats: {
           totalClicks,
 
@@ -853,24 +798,22 @@ export async function GET(
 
           conversionRate,
 
-          earnings: Number(
-            earnings.toFixed(2)
-          ),
+          earnings:
+            Number(
+              earnings.toFixed(2)
+            ),
         },
 
         meta: {
-          profileFound:
-            Boolean(profile),
+          profileFound: true,
 
           profileLookup:
-            profileResult.lookupColumn ||
-            "generated",
+            "affiliate_profiles.id",
 
           recentClicksLimit:
             RECENT_CLICKS_LIMIT,
 
-          applicationStatus:
-            applicationStatus,
+          applicationStatus,
         },
       },
       {
@@ -879,6 +822,7 @@ export async function GET(
         headers: {
           "Cache-Control":
             "no-store, no-cache, must-revalidate",
+
           Pragma: "no-cache",
         },
       }
@@ -897,4 +841,4 @@ export async function GET(
       { status: 500 }
     );
   }
-    }
+}
