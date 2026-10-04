@@ -15,16 +15,6 @@ function isValidSecret(provided: string, expected: string) {
   return timingSafeEqual(a, b);
 }
 
-function isValidPayout(value: string) {
-  const payout = Number(value);
-
-  return (
-    Number.isFinite(payout) &&
-    payout >= 0 &&
-    payout <= 100000
-  );
-}
-
 export async function GET(req: NextRequest) {
   try {
     const searchParams = req.nextUrl.searchParams;
@@ -34,16 +24,23 @@ export async function GET(req: NextRequest) {
       searchParams.get("s1") ||
       searchParams.get("sub1");
 
-    const payoutValue = searchParams.get("payout") || "0";
-    const providedSecret = searchParams.get("secret") || "";
+    const providedSecret =
+      searchParams.get("secret") || "";
 
-    const configuredSecret = process.env.POSTBACK_SECRET;
+    const configuredSecret =
+      process.env.POSTBACK_SECRET;
 
     if (!configuredSecret) {
-      console.error("POSTBACK_SECRET is not configured.");
-      return new NextResponse("Server configuration error", {
-        status: 500,
-      });
+      console.error(
+        "POSTBACK_SECRET is not configured."
+      );
+
+      return new NextResponse(
+        "Server configuration error",
+        {
+          status: 500,
+        }
+      );
     }
 
     if (!providedSecret) {
@@ -52,33 +49,39 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    if (!isValidSecret(providedSecret, configuredSecret)) {
+    if (
+      !isValidSecret(
+        providedSecret,
+        configuredSecret
+      )
+    ) {
       return new NextResponse("Unauthorized", {
         status: 401,
       });
     }
 
     if (!clickId) {
-      return new NextResponse("Missing click_id", {
-        status: 400,
-      });
+      return new NextResponse(
+        "Missing click_id",
+        {
+          status: 400,
+        }
+      );
     }
 
-    if (!isValidPayout(payoutValue)) {
-      return new NextResponse("Invalid payout", {
-        status: 400,
-      });
-    }
+    const supabaseUrl =
+      process.env.NEXT_PUBLIC_SUPABASE_URL;
 
-    const payout = Number(payoutValue);
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const serviceRoleKey =
+      process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !serviceRoleKey) {
-      return new NextResponse("Server configuration error", {
-        status: 500,
-      });
+      return new NextResponse(
+        "Server configuration error",
+        {
+          status: 500,
+        }
+      );
     }
 
     const supabase = createClient(
@@ -92,62 +95,126 @@ export async function GET(req: NextRequest) {
       }
     );
 
-    // Check that the click exists.
-    const { data: click, error: findError } = await supabase
-      .from("clicks")
-      .select("click_id, status, payout")
-      .eq("click_id", clickId)
-      .maybeSingle();
+    /*
+     * Find the original click.
+     *
+     * IMPORTANT:
+     * The payout stored on the click was captured
+     * from the Admin-controlled Offer when the
+     * affiliate generated the click.
+     */
+    const { data: click, error: findError } =
+      await supabase
+        .from("clicks")
+        .select(
+          "click_id, status, payout, offer_id, affiliate_id"
+        )
+        .eq("click_id", clickId)
+        .maybeSingle();
 
     if (findError) {
-      console.error("Postback lookup error:", findError);
+      console.error(
+        "Postback lookup error:",
+        findError
+      );
 
-      return new NextResponse("Database lookup failed", {
-        status: 500,
-      });
+      return new NextResponse(
+        "Database lookup failed",
+        {
+          status: 500,
+        }
+      );
     }
 
     if (!click) {
-      return new NextResponse("Unknown click_id", {
-        status: 404,
-      });
+      return new NextResponse(
+        "Unknown click_id",
+        {
+          status: 404,
+        }
+      );
     }
 
-    // Already converted = idempotent success.
+    /*
+     * Already converted.
+     *
+     * This makes the postback idempotent and
+     * prevents the same conversion from being
+     * counted multiple times.
+     */
     if (click.status === "converted") {
       return new NextResponse("OK", {
         status: 200,
       });
     }
 
-    // Convert the click.
-    const { error: updateError } = await supabase
-      .from("clicks")
-      .update({
-        status: "converted",
-        payout,
-        converted_at: new Date().toISOString(),
-      })
-      .eq("click_id", clickId)
-      .neq("status", "converted");
+    /*
+     * Use the payout captured at click time.
+     *
+     * DO NOT trust payout coming from the
+     * postback URL.
+     *
+     * This means an external caller cannot change
+     * the affiliate's earning by sending:
+     *
+     * ?payout=999
+     */
+    const storedPayout = Number(click.payout);
+
+    const payout =
+      Number.isFinite(storedPayout) &&
+      storedPayout >= 0
+        ? storedPayout
+        : 0;
+
+    /*
+     * Convert the click.
+     */
+    const { error: updateError } =
+      await supabase
+        .from("clicks")
+        .update({
+          status: "converted",
+          payout,
+          converted_at:
+            new Date().toISOString(),
+        })
+        .eq("click_id", clickId)
+        .neq("status", "converted");
 
     if (updateError) {
-      console.error("Postback update error:", updateError);
+      console.error(
+        "Postback update error:",
+        updateError
+      );
 
-      return new NextResponse("Database update failed", {
-        status: 500,
-      });
+      return new NextResponse(
+        "Database update failed",
+        {
+          status: 500,
+        }
+      );
     }
+
+    console.log(
+      `Conversion recorded: ${clickId} | payout: ${payout}`
+    );
 
     return new NextResponse("OK", {
       status: 200,
     });
   } catch (error) {
-    console.error("Postback error:", error);
+    console.error(
+      "Postback error:",
+      error
+    );
 
-    return new NextResponse("Internal server error", {
-      status: 500,
-    });
+    return new NextResponse(
+      "Internal server error",
+      {
+        status: 500,
+      }
+    );
   }
 }
 
