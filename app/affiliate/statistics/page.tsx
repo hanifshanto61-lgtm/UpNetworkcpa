@@ -1,895 +1,636 @@
-"use client";
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
-import { useEffect, useMemo, useState } from "react";
-import {
-  ArrowLeft,
-  BarChart3,
-  MousePointerClick,
-  Target,
-  DollarSign,
-  TrendingUp,
-  Globe2,
-  Smartphone,
-  Tablet,
-  Monitor,
-  CalendarDays,
-  RefreshCw,
-  Search,
-  RotateCcw,
-} from "lucide-react";
-import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+export const dynamic = "force-dynamic";
 
-type ClickRow = {
-  click_id?: string;
-  affiliate_id?: string;
-  smartlink_id?: string | null;
-  country?: string | null;
-  device?: string | null;
-  browser?: string | null;
-  referer?: string | null;
-  status?: string | null;
-  payout?: number | string | null;
-  converted_at?: string | null;
-  created_at?: string | null;
-};
+type AnyRecord = Record<string, any>;
 
-type Profile = {
-  affiliate_id?: string;
-  name?: string;
-  email?: string;
-};
+const CONVERSION_STATUSES = [
+  "converted",
+  "conversion",
+  "approved",
+  "paid",
+];
 
-function isConverted(row: ClickRow) {
-  const status = String(row.status || "").toLowerCase();
+function normalizeStatus(value: any) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+function getNumericPayout(value: any) {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return 0;
+  }
+
+  const number = Number(value);
+
+  return Number.isFinite(number)
+    ? number
+    : 0;
+}
+
+function isConverted(row: AnyRecord) {
+  const status = normalizeStatus(row.status);
 
   return (
-    ["converted", "conversion", "approved", "paid"].includes(status) ||
+    CONVERSION_STATUSES.includes(status) ||
     Boolean(row.converted_at)
   );
 }
 
-function getToday() {
-  const date = new Date();
-  return date.toISOString().slice(0, 10);
+function makeAffiliateId(userId: string) {
+  return `UP${userId
+    .replace(/-/g, "")
+    .slice(0, 10)
+    .toUpperCase()}`;
 }
 
-function getFirstDayOfMonth() {
-  const date = new Date();
-  return new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    1
-  )
-    .toISOString()
-    .slice(0, 10);
-}
-
-export default function AffiliateStatisticsPage() {
-  const router = useRouter();
-
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [clicks, setClicks] = useState<ClickRow[]>([]);
-
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState("");
-
-  // Custom calendar range
-  const [fromDate, setFromDate] = useState(getFirstDayOfMonth());
-  const [toDate, setToDate] = useState(getToday());
-
-  // Applied range
-  const [appliedFromDate, setAppliedFromDate] =
-    useState(getFirstDayOfMonth());
-
-  const [appliedToDate, setAppliedToDate] =
-    useState(getToday());
-
-  async function loadReport(showRefresh = false) {
-    try {
-      if (showRefresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
-
-      setError("");
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!session?.access_token) {
-        router.push("/login");
-        return;
-      }
-
-      const response = await fetch("/api/affiliate/dashboard", {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        cache: "no-store",
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          data?.error ||
-            "Unable to load affiliate statistics."
-        );
-      }
-
-      setProfile(data?.profile || null);
-      setClicks(
-        Array.isArray(data?.clicks)
-          ? data.clicks
-          : []
-      );
-    } catch (err: any) {
-      setError(
-        err?.message ||
-          "Unable to load statistics."
-      );
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }
-
-  useEffect(() => {
-    loadReport();
-  }, []);
-
-  function applyDateRange() {
-    if (!fromDate || !toDate) {
-      setError("Please select both dates.");
-      return;
-    }
-
-    if (fromDate > toDate) {
-      setError(
-        "From Date cannot be later than To Date."
-      );
-      return;
-    }
-
-    setError("");
-    setAppliedFromDate(fromDate);
-    setAppliedToDate(toDate);
-  }
-
-  function resetDateRange() {
-    const firstDay = getFirstDayOfMonth();
-    const today = getToday();
-
-    setFromDate(firstDay);
-    setToDate(today);
-    setAppliedFromDate(firstDay);
-    setAppliedToDate(today);
-    setError("");
-  }
-
-  const filteredClicks = useMemo(() => {
-    if (!appliedFromDate || !appliedToDate) {
-      return clicks;
-    }
-
-    const start = new Date(
-      `${appliedFromDate}T00:00:00`
-    );
-
-    const end = new Date(
-      `${appliedToDate}T23:59:59.999`
-    );
-
-    return clicks.filter((row) => {
-      if (!row.created_at) return false;
-
-      const created = new Date(row.created_at);
-
-      return created >= start && created <= end;
-    });
-  }, [
-    clicks,
-    appliedFromDate,
-    appliedToDate,
-  ]);
-
-  const totalClicks = filteredClicks.length;
-
-  const totalConversions =
-    filteredClicks.filter(isConverted).length;
-
-  const totalEarnings = filteredClicks.reduce(
-    (sum, row) => {
-      if (!isConverted(row)) return sum;
-
-      const payout = Number(row.payout || 0);
-
-      return (
-        sum +
-        (Number.isFinite(payout) ? payout : 0)
-      );
+async function findProfile(
+  supabaseAdmin: any,
+  user: any
+) {
+  const lookups = [
+    {
+      column: "id",
+      value: user.id,
     },
-    0
-  );
+    {
+      column: "user_id",
+      value: user.id,
+    },
+    {
+      column: "auth_id",
+      value: user.id,
+    },
+    {
+      column: "email",
+      value: user.email,
+    },
+  ];
 
-  const conversionRate =
-    totalClicks > 0
-      ? (totalConversions / totalClicks) * 100
-      : 0;
+  for (const lookup of lookups) {
+    if (!lookup.value) continue;
 
-  const countryStats = useMemo(() => {
-    const map = new Map<
-      string,
-      {
-        clicks: number;
-        conversions: number;
-        earnings: number;
+    try {
+      const result = await supabaseAdmin
+        .from("profiles")
+        .select("*")
+        .eq(lookup.column, lookup.value)
+        .maybeSingle();
+
+      if (!result.error && result.data) {
+        return result.data as AnyRecord;
       }
-    >();
+    } catch (error) {
+      console.warn(
+        "Profile lookup error:",
+        error
+      );
+    }
+  }
 
-    filteredClicks.forEach((row) => {
+  return null;
+}
+
+export async function GET(
+  request: NextRequest
+) {
+  try {
+    /* ---------------------------------------------
+       1. SERVER CONFIGURATION
+    --------------------------------------------- */
+
+    const supabaseUrl =
+      process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+    const serviceRoleKey =
+      process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (
+      !supabaseUrl ||
+      !serviceRoleKey
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Supabase server configuration is missing.",
+        },
+        { status: 500 }
+      );
+    }
+
+    /* ---------------------------------------------
+       2. AUTHENTICATION
+    --------------------------------------------- */
+
+    const authorization =
+      request.headers.get("authorization");
+
+    if (
+      !authorization ||
+      !authorization.startsWith("Bearer ")
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Authentication required.",
+        },
+        { status: 401 }
+      );
+    }
+
+    const accessToken =
+      authorization
+        .replace("Bearer ", "")
+        .trim();
+
+    if (!accessToken) {
+      return NextResponse.json(
+        {
+          error:
+            "Authentication token is missing.",
+        },
+        { status: 401 }
+      );
+    }
+
+    /* ---------------------------------------------
+       3. SUPABASE ADMIN CLIENT
+    --------------------------------------------- */
+
+    const supabaseAdmin =
+      createClient(
+        supabaseUrl,
+        serviceRoleKey,
+        {
+          auth: {
+            autoRefreshToken: false,
+            persistSession: false,
+          },
+        }
+      );
+
+    /* ---------------------------------------------
+       4. VERIFY LOGGED-IN USER
+    --------------------------------------------- */
+
+    const {
+      data: authData,
+      error: authError,
+    } =
+      await supabaseAdmin.auth.getUser(
+        accessToken
+      );
+
+    const user = authData?.user;
+
+    if (authError || !user) {
+      return NextResponse.json(
+        {
+          error:
+            "Your login session is invalid or expired.",
+        },
+        { status: 401 }
+      );
+    }
+
+    /* ---------------------------------------------
+       5. FIND AFFILIATE PROFILE
+    --------------------------------------------- */
+
+    const profile =
+      await findProfile(
+        supabaseAdmin,
+        user
+      );
+
+    let affiliateId =
+      profile?.affiliate_id ||
+      profile?.affiliateId ||
+      profile?.affiliate_code ||
+      profile?.code ||
+      "";
+
+    if (!affiliateId) {
+      affiliateId =
+        makeAffiliateId(user.id);
+    }
+
+    affiliateId =
+      String(affiliateId).trim();
+
+    if (!affiliateId) {
+      return NextResponse.json(
+        {
+          error:
+            "Affiliate ID could not be determined.",
+        },
+        { status: 500 }
+      );
+    }
+
+    /* ---------------------------------------------
+       6. READ DATE RANGE
+       
+       Example:
+       ?from=2025-01-01&to=2026-12-31
+    --------------------------------------------- */
+
+    const searchParams =
+      request.nextUrl.searchParams;
+
+    const fromDate =
+      searchParams.get("from");
+
+    const toDate =
+      searchParams.get("to");
+
+    if (!fromDate || !toDate) {
+      return NextResponse.json(
+        {
+          error:
+            "Both from and to dates are required.",
+        },
+        { status: 400 }
+      );
+    }
+
+    /*
+     * Validate YYYY-MM-DD format.
+     */
+    const datePattern =
+      /^\d{4}-\d{2}-\d{2}$/;
+
+    if (
+      !datePattern.test(fromDate) ||
+      !datePattern.test(toDate)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Invalid date format. Use YYYY-MM-DD.",
+        },
+        { status: 400 }
+      );
+    }
+
+    /*
+     * String comparison works correctly for
+     * YYYY-MM-DD dates.
+     */
+    if (fromDate > toDate) {
+      return NextResponse.json(
+        {
+          error:
+            "From date cannot be later than To date.",
+        },
+        { status: 400 }
+      );
+    }
+
+    /*
+     * We use an exclusive upper boundary:
+     *
+     * >= from 00:00:00
+     * <  next day after "to"
+     *
+     * This avoids losing clicks that happen at
+     * 23:59:59.xxx on the selected end date.
+     */
+    const startDateTime =
+      `${fromDate}T00:00:00.000Z`;
+
+    const endDate =
+      new Date(
+        `${toDate}T00:00:00.000Z`
+      );
+
+    endDate.setUTCDate(
+      endDate.getUTCDate() + 1
+    );
+
+    const endDateTime =
+      endDate.toISOString();
+
+    /* ---------------------------------------------
+       7. LOAD ALL CLICKS FOR THIS AFFILIATE
+       
+       IMPORTANT:
+       This is NOT limited to 20 rows.
+       
+       Therefore a report can cover:
+       2025 → 2026
+       2026 → 2027
+       etc.
+    --------------------------------------------- */
+
+    const {
+      data: clicksData,
+      error: clicksError,
+    } = await supabaseAdmin
+      .from("clicks")
+      .select(
+        [
+          "click_id",
+          "affiliate_id",
+          "smartlink_id",
+          "country",
+          "device",
+          "browser",
+          "referer",
+          "status",
+          "payout",
+          "converted_at",
+          "created_at",
+        ].join(", ")
+      )
+      .eq(
+        "affiliate_id",
+        affiliateId
+      )
+      .gte(
+        "created_at",
+        startDateTime
+      )
+      .lt(
+        "created_at",
+        endDateTime
+      )
+      .order(
+        "created_at",
+        {
+          ascending: false,
+        }
+      );
+
+    if (clicksError) {
+      console.error(
+        "Statistics clicks query error:",
+        clicksError
+      );
+
+      return NextResponse.json(
+        {
+          error:
+            "Unable to load statistics data.",
+        },
+        { status: 500 }
+      );
+    }
+
+    const clicks =
+      (clicksData || []) as AnyRecord[];
+
+    /* ---------------------------------------------
+       8. CALCULATE MAIN STATISTICS
+    --------------------------------------------- */
+
+    const totalClicks =
+      clicks.length;
+
+    let conversions = 0;
+    let earnings = 0;
+
+    for (const row of clicks) {
+      if (isConverted(row)) {
+        conversions += 1;
+
+        earnings +=
+          getNumericPayout(
+            row.payout
+          );
+      }
+    }
+
+    const conversionRate =
+      totalClicks > 0
+        ? Number(
+            (
+              (conversions /
+                totalClicks) *
+              100
+            ).toFixed(2)
+          )
+        : 0;
+
+    /* ---------------------------------------------
+       9. COUNTRY REPORT
+    --------------------------------------------- */
+
+    const countryMap =
+      new Map<
+        string,
+        {
+          clicks: number;
+          conversions: number;
+          earnings: number;
+        }
+      >();
+
+    for (const row of clicks) {
       const country =
-        row.country || "Unknown";
+        String(
+          row.country ||
+            "Unknown"
+        ).trim() || "Unknown";
 
-      if (!map.has(country)) {
-        map.set(country, {
+      if (!countryMap.has(country)) {
+        countryMap.set(country, {
           clicks: 0,
           conversions: 0,
           earnings: 0,
         });
       }
 
-      const item = map.get(country)!;
+      const item =
+        countryMap.get(country)!;
 
-      item.clicks++;
+      item.clicks += 1;
 
       if (isConverted(row)) {
-        item.conversions++;
+        item.conversions += 1;
+
         item.earnings +=
-          Number(row.payout || 0) || 0;
+          getNumericPayout(
+            row.payout
+          );
       }
-    });
+    }
 
-    return Array.from(map.entries())
-      .map(([country, value]) => ({
-        country,
-        ...value,
-      }))
-      .sort(
-        (a, b) => b.clicks - a.clicks
-      );
-  }, [filteredClicks]);
+    const countryReport =
+      Array.from(
+        countryMap.entries()
+      )
+        .map(
+          ([country, value]) => ({
+            country,
+            ...value,
+          })
+        )
+        .sort(
+          (a, b) =>
+            b.clicks - a.clicks
+        );
 
-  const deviceStats = useMemo(() => {
-    const map = new Map<
-      string,
-      number
-    >();
+    /* ---------------------------------------------
+       10. DEVICE REPORT
+    --------------------------------------------- */
 
-    filteredClicks.forEach((row) => {
+    const deviceMap =
+      new Map<
+        string,
+        {
+          clicks: number;
+          conversions: number;
+          earnings: number;
+        }
+      >();
+
+    for (const row of clicks) {
       const device =
-        row.device || "Unknown";
+        String(
+          row.device ||
+            "Unknown"
+        ).trim() || "Unknown";
 
-      map.set(
-        device,
-        (map.get(device) || 0) + 1
-      );
-    });
+      if (!deviceMap.has(device)) {
+        deviceMap.set(device, {
+          clicks: 0,
+          conversions: 0,
+          earnings: 0,
+        });
+      }
 
-    return Array.from(map.entries())
-      .map(([device, count]) => ({
-        device,
-        count,
-        percentage:
-          totalClicks > 0
-            ? (count / totalClicks) * 100
-            : 0,
-      }))
-      .sort(
-        (a, b) => b.count - a.count
-      );
-  }, [filteredClicks, totalClicks]);
+      const item =
+        deviceMap.get(device)!;
 
-  const recentRows = [
-    ...filteredClicks,
-  ]
-    .sort((a, b) => {
-      const aTime = new Date(
-        a.created_at || 0
-      ).getTime();
+      item.clicks += 1;
 
-      const bTime = new Date(
-        b.created_at || 0
-      ).getTime();
+      if (isConverted(row)) {
+        item.conversions += 1;
 
-      return bTime - aTime;
-    })
-    .slice(0, 100);
-
-  function deviceIcon(device: string) {
-    const value =
-      device.toLowerCase();
-
-    if (
-      value.includes("mobile") ||
-      value.includes("phone")
-    ) {
-      return <Smartphone size={17} />;
+        item.earnings +=
+          getNumericPayout(
+            row.payout
+          );
+      }
     }
 
-    if (value.includes("tablet")) {
-      return <Tablet size={17} />;
-    }
+    const deviceReport =
+      Array.from(
+        deviceMap.entries()
+      )
+        .map(
+          ([device, value]) => ({
+            device,
+            ...value,
+            percentage:
+              totalClicks > 0
+                ? Number(
+                    (
+                      (value.clicks /
+                        totalClicks) *
+                      100
+                    ).toFixed(2)
+                  )
+                : 0,
+          })
+        )
+        .sort(
+          (a, b) =>
+            b.clicks - a.clicks
+        );
 
-    return <Monitor size={17} />;
+    /* ---------------------------------------------
+       11. RESPONSE
+    --------------------------------------------- */
+
+    return NextResponse.json(
+      {
+        success: true,
+
+        profile: {
+          id: user.id,
+
+          affiliateId,
+
+          email:
+            user.email || null,
+
+          name:
+            profile?.full_name ||
+            profile?.name ||
+            profile?.username ||
+            profile?.display_name ||
+            user.user_metadata
+              ?.full_name ||
+            user.user_metadata?.name ||
+            user.email?.split("@")[0] ||
+            "Affiliate",
+        },
+
+        range: {
+          from: fromDate,
+          to: toDate,
+        },
+
+        stats: {
+          totalClicks,
+
+          conversions,
+
+          conversionRate,
+
+          earnings: Number(
+            earnings.toFixed(2)
+          ),
+        },
+
+        countryReport,
+
+        deviceReport,
+
+        /*
+         * Full rows for the selected period.
+         * This allows the Statistics page to
+         * display the detailed report.
+         */
+        clicks,
+      },
+      {
+        status: 200,
+
+        headers: {
+          "Cache-Control":
+            "no-store, no-cache, must-revalidate",
+
+          Pragma: "no-cache",
+        },
+      }
+    );
+  } catch (error) {
+    console.error(
+      "Affiliate statistics error:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        error:
+          "Affiliate statistics could not be loaded.",
+      },
+      { status: 500 }
+    );
   }
-
-  return (
-    <main className="min-h-screen bg-slate-950 text-white">
-      <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
-
-        {/* HEADER */}
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-
-            <button
-              onClick={() =>
-                router.push("/affiliate")
-              }
-              className="rounded-xl border border-white/10 bg-white/5 p-2.5 transition hover:bg-white/10"
-            >
-              <ArrowLeft size={20} />
-            </button>
-
-            <div>
-              <div className="flex items-center gap-2">
-                <BarChart3
-                  size={23}
-                  className="text-cyan-400"
-                />
-
-                <h1 className="text-2xl font-bold">
-                  Statistics & Report
-                </h1>
-              </div>
-
-              <p className="mt-1 text-sm text-slate-400">
-                View your affiliate performance
-                for any date range
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={() => loadReport(true)}
-            disabled={refreshing}
-            className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium transition hover:bg-white/10 disabled:opacity-50"
-          >
-            <RefreshCw
-              size={17}
-              className={
-                refreshing
-                  ? "animate-spin"
-                  : ""
-              }
-            />
-
-            Refresh
-          </button>
-        </div>
-
-        {/* AFFILIATE ID */}
-        {profile?.affiliate_id && (
-          <div className="mb-5 rounded-2xl border border-cyan-400/10 bg-cyan-400/5 px-4 py-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-
-              <span className="text-sm text-slate-400">
-                Affiliate ID
-              </span>
-
-              <span className="font-mono text-sm font-semibold text-cyan-300">
-                {profile.affiliate_id}
-              </span>
-
-            </div>
-          </div>
-        )}
-
-        {/* ERROR */}
-        {error && (
-          <div className="mb-5 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-            {error}
-          </div>
-        )}
-
-        {/* CALENDAR FILTER */}
-        <section className="mb-6 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-
-          <div className="mb-4 flex items-center gap-2">
-            <CalendarDays
-              size={20}
-              className="text-cyan-400"
-            />
-
-            <div>
-              <h2 className="font-semibold">
-                Report Date Range
-              </h2>
-
-              <p className="text-xs text-slate-500">
-                Select any date range, including
-                different years
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_1fr_auto_auto] md:items-end">
-
-            {/* FROM */}
-            <div>
-              <label className="mb-2 block text-sm text-slate-400">
-                From Date
-              </label>
-
-              <input
-                type="date"
-                value={fromDate}
-                onChange={(e) =>
-                  setFromDate(e.target.value)
-                }
-                className="w-full rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none transition focus:border-cyan-400"
-              />
-            </div>
-
-            {/* TO */}
-            <div>
-              <label className="mb-2 block text-sm text-slate-400">
-                To Date
-              </label>
-
-              <input
-                type="date"
-                value={toDate}
-                onChange={(e) =>
-                  setToDate(e.target.value)
-                }
-                className="w-full rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none transition focus:border-cyan-400"
-              />
-            </div>
-
-            {/* APPLY */}
-            <button
-              onClick={applyDateRange}
-              className="flex items-center justify-center gap-2 rounded-xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-400"
-            >
-              <Search size={18} />
-              Apply
-            </button>
-
-            {/* RESET */}
-            <button
-              onClick={resetDateRange}
-              className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-5 py-3 font-semibold text-slate-200 transition hover:bg-white/10"
-            >
-              <RotateCcw size={17} />
-              Reset
-            </button>
-
-          </div>
-
-          {/* CURRENT RANGE */}
-          <div className="mt-4 rounded-xl border border-cyan-400/10 bg-cyan-400/5 px-4 py-3 text-sm">
-            <span className="text-slate-400">
-              Showing report:
-            </span>{" "}
-            <span className="font-semibold text-cyan-300">
-              {appliedFromDate}
-            </span>{" "}
-            <span className="text-slate-500">
-              →
-            </span>{" "}
-            <span className="font-semibold text-cyan-300">
-              {appliedToDate}
-            </span>
-          </div>
-        </section>
-
-        {/* STAT CARDS */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-
-          <StatCard
-            icon={
-              <MousePointerClick size={22} />
-            }
-            title="Total Clicks"
-            value={
-              loading
-                ? "..."
-                : totalClicks.toLocaleString()
-            }
-            description="Tracked clicks"
-          />
-
-          <StatCard
-            icon={<Target size={22} />}
-            title="Conversions"
-            value={
-              loading
-                ? "..."
-                : totalConversions.toLocaleString()
-            }
-            description="Successful conversions"
-          />
-
-          <StatCard
-            icon={
-              <DollarSign size={22} />
-            }
-            title="Total Earnings"
-            value={
-              loading
-                ? "..."
-                : `$${totalEarnings.toFixed(2)}`
-            }
-            description="Conversion revenue"
-          />
-
-          <StatCard
-            icon={
-              <TrendingUp size={22} />
-            }
-            title="Conversion Rate"
-            value={
-              loading
-                ? "..."
-                : `${conversionRate.toFixed(2)}%`
-            }
-            description="Clicks to conversions"
-          />
-
-        </div>
-
-        {/* COUNTRY + DEVICE */}
-        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-
-          {/* COUNTRY */}
-          <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-
-            <div className="mb-5 flex items-center gap-2">
-              <Globe2
-                size={20}
-                className="text-cyan-400"
-              />
-
-              <h2 className="text-lg font-semibold">
-                Country Report
-              </h2>
-            </div>
-
-            {countryStats.length === 0 ? (
-              <EmptyState text="No country data available for this date range." />
-            ) : (
-              <div className="space-y-3">
-
-                {countryStats.map(
-                  (item) => (
-                    <div
-                      key={item.country}
-                      className="rounded-xl border border-white/5 bg-white/[0.03] p-3"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-
-                        <div>
-                          <div className="font-medium">
-                            {item.country}
-                          </div>
-
-                          <div className="mt-1 text-xs text-slate-500">
-                            {item.clicks} clicks ·{" "}
-                            {item.conversions} conversions
-                          </div>
-                        </div>
-
-                        <div className="text-right">
-                          <div className="font-semibold text-emerald-400">
-                            $
-                            {item.earnings.toFixed(
-                              2
-                            )}
-                          </div>
-
-                          <div className="text-xs text-slate-500">
-                            earnings
-                          </div>
-                        </div>
-
-                      </div>
-
-                      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-                        <div
-                          className="h-full rounded-full bg-cyan-400"
-                          style={{
-                            width: `${
-                              totalClicks > 0
-                                ? Math.min(
-                                    100,
-                                    (item.clicks /
-                                      totalClicks) *
-                                      100
-                                  )
-                                : 0
-                            }%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  )
-                )}
-
-              </div>
-            )}
-          </section>
-
-          {/* DEVICE */}
-          <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-
-            <div className="mb-5 flex items-center gap-2">
-              <Smartphone
-                size={20}
-                className="text-purple-400"
-              />
-
-              <h2 className="text-lg font-semibold">
-                Device Report
-              </h2>
-            </div>
-
-            {deviceStats.length === 0 ? (
-              <EmptyState text="No device data available for this date range." />
-            ) : (
-              <div className="space-y-4">
-
-                {deviceStats.map(
-                  (item) => (
-                    <div key={item.device}>
-
-                      <div className="mb-2 flex items-center justify-between">
-
-                        <div className="flex items-center gap-2 text-sm">
-                          {deviceIcon(
-                            item.device
-                          )}
-
-                          <span>
-                            {item.device}
-                          </span>
-                        </div>
-
-                        <span className="text-sm font-semibold">
-                          {item.count}{" "}
-                          <span className="text-slate-500">
-                            (
-                            {item.percentage.toFixed(
-                              1
-                            )}
-                            %)
-                          </span>
-                        </span>
-
-                      </div>
-
-                      <div className="h-2 overflow-hidden rounded-full bg-white/10">
-                        <div
-                          className="h-full rounded-full bg-purple-400"
-                          style={{
-                            width: `${Math.min(
-                              100,
-                              item.percentage
-                            )}%`,
-                          }}
-                        />
-                      </div>
-
-                    </div>
-                  )
-                )}
-
-              </div>
-            )}
-          </section>
-        </div>
-
-        {/* DETAILED REPORT */}
-        <section className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
-
-          <div className="border-b border-white/10 px-5 py-5">
-
-            <div className="flex items-center gap-2">
-              <BarChart3
-                size={20}
-                className="text-amber-400"
-              />
-
-              <h2 className="text-lg font-semibold">
-                Detailed Report
-              </h2>
-            </div>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Activity from the selected date range
-            </p>
-
-          </div>
-
-          {recentRows.length === 0 ? (
-            <div className="p-8">
-              <EmptyState text="No report data available for this date range." />
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-
-              <table className="w-full min-w-[850px] text-left text-sm">
-
-                <thead className="border-b border-white/10 bg-white/[0.03] text-xs uppercase text-slate-500">
-                  <tr>
-                    <th className="px-5 py-4">
-                      Date
-                    </th>
-
-                    <th className="px-5 py-4">
-                      Country
-                    </th>
-
-                    <th className="px-5 py-4">
-                      Device
-                    </th>
-
-                    <th className="px-5 py-4">
-                      Status
-                    </th>
-
-                    <th className="px-5 py-4">
-                      Payout
-                    </th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {recentRows.map(
-                    (row, index) => {
-                      const converted =
-                        isConverted(row);
-
-                      return (
-                        <tr
-                          key={
-                            row.click_id ||
-                            `${row.created_at}-${index}`
-                          }
-                          className="border-b border-white/5 last:border-0"
-                        >
-
-                          <td className="px-5 py-4 text-slate-300">
-                            {row.created_at
-                              ? new Date(
-                                  row.created_at
-                                ).toLocaleString()
-                              : "-"}
-                          </td>
-
-                          <td className="px-5 py-4">
-                            {row.country ||
-                              "Unknown"}
-                          </td>
-
-                          <td className="px-5 py-4 text-slate-300">
-                            {row.device ||
-                              "Unknown"}
-                          </td>
-
-                          <td className="px-5 py-4">
-
-                            <span
-                              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                                converted
-                                  ? "bg-emerald-400/10 text-emerald-400"
-                                  : "bg-slate-400/10 text-slate-400"
-                              }`}
-                            >
-                              {converted
-                                ? "Converted"
-                                : row.status ||
-                                  "Click"}
-                            </span>
-
-                          </td>
-
-                          <td className="px-5 py-4 font-semibold text-emerald-400">
-                            {converted
-                              ? `$${Number(
-                                  row.payout ||
-                                    0
-                                ).toFixed(2)}`
-                              : "$0.00"}
-                          </td>
-
-                        </tr>
-                      );
-                    }
-                  )}
-                </tbody>
-
-              </table>
-            </div>
-          )}
-        </section>
-
-        <div className="mt-6 pb-6 text-center text-xs text-slate-600">
-          Affiliate Statistics •{" "}
-          {profile?.affiliate_id ||
-            "Affiliate"}
-        </div>
-
-      </div>
-    </main>
-  );
 }
 
-function StatCard({
-  icon,
-  title,
-  value,
-  description,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  value: string;
-  description: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 transition hover:bg-white/[0.05]">
-
-      <div className="mb-4 flex items-center justify-between">
-
-        <div className="rounded-xl bg-white/5 p-2.5 text-cyan-400">
-          {icon}
-        </div>
-
-        <BarChart3
-          size={17}
-          className="text-slate-700"
-        />
-      </div>
-
-      <div className="text-sm text-slate-400">
-        {title}
-      </div>
-
-      <div className="mt-1 text-2xl font-bold">
-        {value}
-      </div>
-
-      <div className="mt-1 text-xs text-slate-600">
-        {description}
-      </div>
-
-    </div>
-  );
-}
-
-function EmptyState({
-  text,
-}: {
-  text: string;
-}) {
-  return (
-    <div className="rounded-xl border border-dashed border-white/10 p-8 text-center text-sm text-slate-500">
-      {text}
-    </div>
-  );
-  }
+export async function POST(
+  request: NextRequest
+) {
+  return GET(request);
+      }
