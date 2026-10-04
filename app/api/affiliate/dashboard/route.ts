@@ -14,11 +14,41 @@ const CONVERSION_STATUSES = [
   "paid",
 ];
 
+type ApplicationStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "suspended";
+
 function makeAffiliateId(userId: string) {
   return `UP${userId
     .replace(/-/g, "")
     .slice(0, 10)
     .toUpperCase()}`;
+}
+
+/**
+ * Normalize application status.
+ *
+ * Unknown / empty status is treated as pending
+ * for security.
+ */
+function normalizeApplicationStatus(
+  value: any
+): ApplicationStatus {
+  const status = String(value || "")
+    .trim()
+    .toLowerCase();
+
+  if (
+    status === "approved" ||
+    status === "rejected" ||
+    status === "suspended"
+  ) {
+    return status;
+  }
+
+  return "pending";
 }
 
 /**
@@ -269,7 +299,195 @@ export async function GET(
     }
 
     /* -------------------------------------------------
-       5. FIND AFFILIATE PROFILE
+       5. AFFILIATE APPROVAL SECURITY
+       
+       Admin approval is stored in Auth metadata
+       by the Admin Affiliates system.
+
+       IMPORTANT:
+       We check this BEFORE:
+       - loading profile
+       - creating profile
+       - loading clicks
+       - calculating earnings
+
+       Unknown / missing status = PENDING.
+       This is fail-closed for security.
+    ------------------------------------------------- */
+
+    const accountType =
+      String(
+        user.user_metadata
+          ?.account_type || ""
+      )
+        .trim()
+        .toLowerCase();
+
+    if (
+      accountType &&
+      accountType !== "affiliate"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "This account is not an affiliate account.",
+          code: "NOT_AFFILIATE",
+          status: "rejected",
+        },
+        { status: 403 }
+      );
+    }
+
+    let applicationStatus =
+      normalizeApplicationStatus(
+        user.user_metadata
+          ?.application_status
+      );
+
+    /*
+     * If Auth metadata does not contain an
+     * application_status, try the profiles table
+     * as a compatibility fallback.
+     *
+     * We ONLY use profiles when metadata does
+     * not contain a usable status.
+     */
+    const metadataStatus =
+      String(
+        user.user_metadata
+          ?.application_status || ""
+      )
+        .trim()
+        .toLowerCase();
+
+    if (!metadataStatus) {
+      try {
+        const profileStatusLookups = [
+          {
+            column: "id",
+            value: user.id,
+          },
+          {
+            column: "user_id",
+            value: user.id,
+          },
+          {
+            column: "auth_id",
+            value: user.id,
+          },
+        ];
+
+        for (
+          const lookup of profileStatusLookups
+        ) {
+          try {
+            const statusResult =
+              await supabaseAdmin
+                .from("profiles")
+                .select(
+                  "application_status"
+                )
+                .eq(
+                  lookup.column,
+                  lookup.value
+                )
+                .maybeSingle();
+
+            if (
+              !statusResult.error &&
+              statusResult.data
+                ?.application_status
+            ) {
+              applicationStatus =
+                normalizeApplicationStatus(
+                  statusResult.data
+                    .application_status
+                );
+
+              break;
+            }
+          } catch (error) {
+            console.warn(
+              "Profile approval status lookup error:",
+              error
+            );
+          }
+        }
+      } catch (error) {
+        console.warn(
+          "Profile approval fallback error:",
+          error
+        );
+      }
+    }
+
+    /*
+     * ONLY approved affiliates can continue.
+     */
+    if (
+      applicationStatus !== "approved"
+    ) {
+      if (
+        applicationStatus ===
+        "rejected"
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Your affiliate application has been rejected.",
+            code: "AFFILIATE_REJECTED",
+            status: "rejected",
+          },
+          {
+            status: 403,
+            headers: {
+              "Cache-Control":
+                "no-store, no-cache, must-revalidate",
+            },
+          }
+        );
+      }
+
+      if (
+        applicationStatus ===
+        "suspended"
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Your affiliate account has been suspended.",
+            code: "AFFILIATE_SUSPENDED",
+            status: "suspended",
+          },
+          {
+            status: 403,
+            headers: {
+              "Cache-Control":
+                "no-store, no-cache, must-revalidate",
+            },
+          }
+        );
+      }
+
+      return NextResponse.json(
+        {
+          error:
+            "Your affiliate application is waiting for admin approval.",
+          code: "AFFILIATE_PENDING",
+          status: "pending",
+        },
+        {
+          status: 403,
+          headers: {
+            "Cache-Control":
+              "no-store, no-cache, must-revalidate",
+          },
+        }
+      );
+    }
+
+    /* -------------------------------------------------
+       6. FIND AFFILIATE PROFILE
     ------------------------------------------------- */
 
     let profileResult =
@@ -293,7 +511,7 @@ export async function GET(
     }
 
     /* -------------------------------------------------
-       6. GENERATE AFFILIATE ID IF MISSING
+       7. GENERATE AFFILIATE ID IF MISSING
     ------------------------------------------------- */
 
     if (
@@ -350,7 +568,7 @@ export async function GET(
     }
 
     /* -------------------------------------------------
-       7. CREATE PROFILE IF IT DOES NOT EXIST
+       8. CREATE PROFILE IF IT DOES NOT EXIST
     ------------------------------------------------- */
 
     if (!profile) {
@@ -388,7 +606,7 @@ export async function GET(
     }
 
     /* -------------------------------------------------
-       8. FINAL AFFILIATE ID SAFETY CHECK
+       9. FINAL AFFILIATE ID SAFETY CHECK
     ------------------------------------------------- */
 
     if (!affiliateId) {
@@ -410,7 +628,7 @@ export async function GET(
     }
 
     /* -------------------------------------------------
-       9. AFFILIATE DISPLAY NAME
+       10. AFFILIATE DISPLAY NAME
     ------------------------------------------------- */
 
     const profileName =
@@ -425,7 +643,7 @@ export async function GET(
       "Affiliate";
 
     /* -------------------------------------------------
-       10. LOAD RECENT CLICKS ONLY
+       11. LOAD RECENT CLICKS ONLY
        
        IMPORTANT:
        We no longer load the entire click table.
@@ -484,7 +702,7 @@ export async function GET(
     }
 
     /* -------------------------------------------------
-       11. TOTAL CLICK COUNT
+       12. TOTAL CLICK COUNT
     ------------------------------------------------- */
 
     let totalClicks = 0;
@@ -521,7 +739,7 @@ export async function GET(
     }
 
     /* -------------------------------------------------
-       12. CONVERSION COUNT + EARNINGS
+       13. CONVERSION COUNT + EARNINGS
        
        Only conversion rows are loaded here,
        instead of every click.
@@ -591,7 +809,7 @@ export async function GET(
     }
 
     /* -------------------------------------------------
-       13. CONVERSION RATE
+       14. CONVERSION RATE
     ------------------------------------------------- */
 
     const conversionRate =
@@ -606,7 +824,7 @@ export async function GET(
         : 0;
 
     /* -------------------------------------------------
-       14. RESPONSE
+       15. RESPONSE
     ------------------------------------------------- */
 
     return NextResponse.json(
@@ -650,6 +868,9 @@ export async function GET(
 
           recentClicksLimit:
             RECENT_CLICKS_LIMIT,
+
+          applicationStatus:
+            applicationStatus,
         },
       },
       {
@@ -676,4 +897,4 @@ export async function GET(
       { status: 500 }
     );
   }
-}
+    }
