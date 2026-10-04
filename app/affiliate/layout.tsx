@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { AffiliateNotificationProvider } from "./notification-context";
 import { AffiliateThemeProvider } from "./theme-context";
+import AffiliateAccessGate from "./access-gate";
 
 export default function AffiliateLayout({
   children,
@@ -10,7 +11,9 @@ export default function AffiliateLayout({
   return (
     <AffiliateThemeProvider>
       <AffiliateNotificationProvider>
-        {children}
+        <AffiliateAccessGate>
+          {children}
+        </AffiliateAccessGate>
       </AffiliateNotificationProvider>
     </AffiliateThemeProvider>
   );
