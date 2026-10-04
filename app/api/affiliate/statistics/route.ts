@@ -21,23 +21,27 @@ function normalizeStatus(value: any) {
 function getPayout(value: any) {
   const number = Number(value);
 
-  if (!Number.isFinite(number)) {
-    return 0;
-  }
-
-  return number;
+  return Number.isFinite(number)
+    ? number
+    : 0;
 }
 
 function isConverted(row: AnyRecord) {
-  const status = normalizeStatus(row.status);
+  const status = normalizeStatus(
+    row.status
+  );
 
   return (
-    CONVERSION_STATUSES.includes(status) ||
+    CONVERSION_STATUSES.includes(
+      status
+    ) ||
     Boolean(row.converted_at)
   );
 }
 
-function makeAffiliateId(userId: string) {
+function makeAffiliateId(
+  userId: string
+) {
   return `UP${userId
     .replace(/-/g, "")
     .slice(0, 10)
@@ -68,7 +72,9 @@ async function findProfile(
   ];
 
   for (const lookup of lookups) {
-    if (!lookup.value) continue;
+    if (!lookup.value) {
+      continue;
+    }
 
     try {
       const result =
@@ -85,17 +91,22 @@ async function findProfile(
         !result.error &&
         result.data
       ) {
-        return result.data as AnyRecord;
+        return {
+          profile:
+            result.data as AnyRecord,
+          lookupColumn:
+            lookup.column,
+        };
       }
-    } catch (error) {
-      console.error(
-        "Profile lookup error:",
-        error
-      );
+    } catch {
+      // Try next compatible column.
     }
   }
 
-  return null;
+  return {
+    profile: null,
+    lookupColumn: null,
+  };
 }
 
 export async function GET(
@@ -103,7 +114,7 @@ export async function GET(
 ) {
   try {
     /* -----------------------------------------
-       1. SUPABASE CONFIG
+       1. SERVER CONFIGURATION
     ----------------------------------------- */
 
     const supabaseUrl =
@@ -211,14 +222,17 @@ export async function GET(
     }
 
     /* -----------------------------------------
-       5. FIND AFFILIATE
+       5. FIND AFFILIATE PROFILE
     ----------------------------------------- */
 
-    const profile =
+    const profileResult =
       await findProfile(
         supabaseAdmin,
         user
       );
+
+    const profile =
+      profileResult.profile;
 
     let affiliateId =
       profile?.affiliate_id ||
@@ -229,11 +243,15 @@ export async function GET(
 
     if (!affiliateId) {
       affiliateId =
-        makeAffiliateId(user.id);
+        makeAffiliateId(
+          user.id
+        );
     }
 
     affiliateId =
-      String(affiliateId).trim();
+      String(
+        affiliateId
+      ).trim();
 
     if (!affiliateId) {
       return NextResponse.json(
@@ -295,13 +313,11 @@ export async function GET(
     }
 
     /*
-     * Start:
-     * selected From date at 00:00:00 UTC
+     * We intentionally use date-only
+     * boundaries here.
      *
-     * End:
-     * day after selected To date at 00:00:00 UTC
-     *
-     * This includes the entire To date.
+     * This works with a normal timestamp/
+     * timestamptz created_at column.
      */
 
     const startDate =
@@ -320,11 +336,11 @@ export async function GET(
       endDateObject.toISOString();
 
     /* -----------------------------------------
-       7. LOAD AFFILIATE CLICKS
+       7. LOAD CLICK DATA
        
        IMPORTANT:
-       No 20-row limit here.
-       This is the historical report.
+       Use the exact same columns already
+       proven to work in dashboard/route.ts.
     ----------------------------------------- */
 
     const {
@@ -369,14 +385,35 @@ export async function GET(
 
     if (clicksError) {
       console.error(
-        "Statistics clicks error:",
+        "STATISTICS CLICKS ERROR:",
         clicksError
       );
 
+      /*
+       * Return the actual database error.
+       * This is temporary diagnostic information
+       * and will help us identify any schema issue.
+       */
       return NextResponse.json(
         {
           error:
-            "Unable to load statistics data.",
+            "Statistics database query failed.",
+
+          details:
+            clicksError.message,
+
+          hint:
+            clicksError.hint || null,
+
+          code:
+            clicksError.code || null,
+
+          affiliateId,
+
+          requestedRange: {
+            from,
+            to,
+          },
         },
         { status: 500 }
       );
@@ -396,15 +433,16 @@ export async function GET(
     let earnings = 0;
 
     for (const row of clicks) {
-      if (!isConverted(row)) {
-        continue;
+      if (
+        isConverted(row)
+      ) {
+        conversions += 1;
+
+        earnings +=
+          getPayout(
+            row.payout
+          );
       }
-
-      conversions += 1;
-
-      earnings += getPayout(
-        row.payout
-      );
     }
 
     const conversionRate =
@@ -437,10 +475,13 @@ export async function GET(
         String(
           row.country ||
             "Unknown"
-        ).trim() || "Unknown";
+        ).trim() ||
+        "Unknown";
 
       if (
-        !countryMap.has(country)
+        !countryMap.has(
+          country
+        )
       ) {
         countryMap.set(
           country,
@@ -459,7 +500,9 @@ export async function GET(
 
       item.clicks += 1;
 
-      if (isConverted(row)) {
+      if (
+        isConverted(row)
+      ) {
         item.conversions += 1;
 
         item.earnings +=
@@ -481,7 +524,8 @@ export async function GET(
         )
         .sort(
           (a, b) =>
-            b.clicks - a.clicks
+            b.clicks -
+            a.clicks
         );
 
     /* -----------------------------------------
@@ -503,10 +547,13 @@ export async function GET(
         String(
           row.device ||
             "Unknown"
-        ).trim() || "Unknown";
+        ).trim() ||
+        "Unknown";
 
       if (
-        !deviceMap.has(device)
+        !deviceMap.has(
+          device
+        )
       ) {
         deviceMap.set(
           device,
@@ -525,7 +572,9 @@ export async function GET(
 
       item.clicks += 1;
 
-      if (isConverted(row)) {
+      if (
+        isConverted(row)
+      ) {
         item.conversions += 1;
 
         item.earnings +=
@@ -557,11 +606,12 @@ export async function GET(
         )
         .sort(
           (a, b) =>
-            b.clicks - a.clicks
+            b.clicks -
+            a.clicks
         );
 
     /* -----------------------------------------
-       11. RESPONSE
+       11. SUCCESS RESPONSE
     ----------------------------------------- */
 
     return NextResponse.json(
@@ -574,7 +624,8 @@ export async function GET(
           affiliateId,
 
           email:
-            user.email || null,
+            user.email ||
+            null,
 
           name:
             profile?.full_name ||
@@ -583,7 +634,8 @@ export async function GET(
             profile?.display_name ||
             user.user_metadata
               ?.full_name ||
-            user.user_metadata?.name ||
+            user.user_metadata
+              ?.name ||
             user.email?.split(
               "@"
             )[0] ||
@@ -604,7 +656,9 @@ export async function GET(
 
           earnings:
             Number(
-              earnings.toFixed(2)
+              earnings.toFixed(
+                2
+              )
             ),
         },
 
@@ -620,13 +674,15 @@ export async function GET(
         headers: {
           "Cache-Control":
             "no-store, no-cache, must-revalidate",
-          Pragma: "no-cache",
+
+          Pragma:
+            "no-cache",
         },
       }
     );
-  } catch (error) {
+  } catch (error: any) {
     console.error(
-      "Affiliate statistics API error:",
+      "AFFILIATE STATISTICS ERROR:",
       error
     );
 
@@ -634,6 +690,10 @@ export async function GET(
       {
         error:
           "Affiliate statistics could not be loaded.",
+
+        details:
+          error?.message ||
+          String(error),
       },
       { status: 500 }
     );
@@ -644,4 +704,4 @@ export async function POST(
   request: NextRequest
 ) {
   return GET(request);
-            }
+}
