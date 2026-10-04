@@ -19,11 +19,13 @@ function normalizeStatus(value: any) {
 }
 
 function getPayout(value: any) {
-  const number = Number(value);
+  const payout = Number(value);
 
-  return Number.isFinite(number)
-    ? number
-    : 0;
+  if (!Number.isFinite(payout)) {
+    return 0;
+  }
+
+  return payout;
 }
 
 function isConverted(row: AnyRecord) {
@@ -32,9 +34,7 @@ function isConverted(row: AnyRecord) {
   );
 
   return (
-    CONVERSION_STATUSES.includes(
-      status
-    ) ||
+    CONVERSION_STATUSES.includes(status) ||
     Boolean(row.converted_at)
   );
 }
@@ -99,7 +99,7 @@ async function findProfile(
         };
       }
     } catch {
-      // Try next compatible profile column.
+      // Continue with the next lookup.
     }
   }
 
@@ -109,35 +109,39 @@ async function findProfile(
   };
 }
 
-function isDateInRange(
-  createdAt: any,
+function isInDateRange(
+  value: any,
   from: string,
   to: string
 ) {
-  if (!createdAt) {
+  if (!value) {
     return false;
   }
 
-  const time =
-    new Date(createdAt).getTime();
+  const date =
+    new Date(value);
 
-  if (!Number.isFinite(time)) {
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
     return false;
   }
 
-  const start =
-    new Date(
-      `${from}T00:00:00`
-    ).getTime();
+  /*
+   * Compare using date-only values.
+   * This prevents timezone issues from
+   * excluding clicks at the beginning/end
+   * of the selected dates.
+   */
 
-  const end =
-    new Date(
-      `${to}T23:59:59.999`
-    ).getTime();
+  const selectedDate =
+    date.toISOString().slice(0, 10);
 
   return (
-    time >= start &&
-    time <= end
+    selectedDate >= from &&
+    selectedDate <= to
   );
 }
 
@@ -145,9 +149,9 @@ export async function GET(
   request: NextRequest
 ) {
   try {
-    /* -----------------------------------------
+    /* =========================================
        1. SUPABASE CONFIG
-    ----------------------------------------- */
+    ========================================= */
 
     const supabaseUrl =
       process.env
@@ -170,9 +174,9 @@ export async function GET(
       );
     }
 
-    /* -----------------------------------------
-       2. AUTHORIZATION
-    ----------------------------------------- */
+    /* =========================================
+       2. AUTH
+    ========================================= */
 
     const authorization =
       request.headers.get(
@@ -196,7 +200,10 @@ export async function GET(
 
     const accessToken =
       authorization
-        .replace("Bearer ", "")
+        .replace(
+          "Bearer ",
+          ""
+        )
         .trim();
 
     if (!accessToken) {
@@ -209,9 +216,9 @@ export async function GET(
       );
     }
 
-    /* -----------------------------------------
-       3. SUPABASE ADMIN CLIENT
-    ----------------------------------------- */
+    /* =========================================
+       3. SUPABASE ADMIN
+    ========================================= */
 
     const supabaseAdmin =
       createClient(
@@ -225,9 +232,9 @@ export async function GET(
         }
       );
 
-    /* -----------------------------------------
+    /* =========================================
        4. VERIFY USER
-    ----------------------------------------- */
+    ========================================= */
 
     const {
       data: authData,
@@ -253,9 +260,9 @@ export async function GET(
       );
     }
 
-    /* -----------------------------------------
-       5. FIND AFFILIATE PROFILE
-    ----------------------------------------- */
+    /* =========================================
+       5. FIND PROFILE
+    ========================================= */
 
     const profileResult =
       await findProfile(
@@ -295,18 +302,22 @@ export async function GET(
       );
     }
 
-    /* -----------------------------------------
+    /* =========================================
        6. DATE RANGE
-    ----------------------------------------- */
+    ========================================= */
 
-    const params =
+    const searchParams =
       request.nextUrl.searchParams;
 
     const from =
-      params.get("from");
+      searchParams.get(
+        "from"
+      );
 
     const to =
-      params.get("to");
+      searchParams.get(
+        "to"
+      );
 
     if (!from || !to) {
       return NextResponse.json(
@@ -338,21 +349,25 @@ export async function GET(
       return NextResponse.json(
         {
           error:
-            "From date cannot be later than To date.",
+            "From Date cannot be later than To Date.",
         },
         { status: 400 }
       );
     }
 
-    /* -----------------------------------------
-       7. LOAD AFFILIATE CLICKS
-       
-       IMPORTANT:
-       No created_at database filter here.
+    /* =========================================
+       7. LOAD CLICKS
 
-       Dashboard already proves that this
-       affiliate_id query works correctly.
-    ----------------------------------------- */
+       IMPORTANT:
+       This intentionally uses select("*")
+       so Statistics does not break because
+       of a column-name mismatch.
+
+       We also do NOT use:
+       - created_at database filtering
+       - order()
+       - a 20-row limit
+    ========================================= */
 
     const {
       data: allClicks,
@@ -360,35 +375,15 @@ export async function GET(
     } =
       await supabaseAdmin
         .from("clicks")
-        .select(
-          [
-            "click_id",
-            "affiliate_id",
-            "smartlink_id",
-            "country",
-            "device",
-            "browser",
-            "referer",
-            "status",
-            "payout",
-            "converted_at",
-            "created_at",
-          ].join(", ")
-        )
+        .select("*")
         .eq(
           "affiliate_id",
           affiliateId
-        )
-        .order(
-          "created_at",
-          {
-            ascending: false,
-          }
         );
 
     if (clicksError) {
       console.error(
-        "Statistics clicks query error:",
+        "Statistics clicks error:",
         clicksError
       );
 
@@ -410,26 +405,42 @@ export async function GET(
       );
     }
 
-    /* -----------------------------------------
-       8. FILTER DATE RANGE IN JAVASCRIPT
-       
-       This avoids database timestamp/date
-       compatibility problems.
-    ----------------------------------------- */
+    /* =========================================
+       8. DATE FILTER IN JAVASCRIPT
+    ========================================= */
 
     const clicks =
-      ((allClicks || []) as AnyRecord[])
-        .filter((row) =>
-          isDateInRange(
-            row.created_at,
-            from,
-            to
-          )
+      (allClicks || [])
+        .filter(
+          (row: AnyRecord) =>
+            isInDateRange(
+              row.created_at,
+              from,
+              to
+            )
+        )
+        .sort(
+          (
+            a: AnyRecord,
+            b: AnyRecord
+          ) => {
+            const aTime =
+              new Date(
+                a.created_at || 0
+              ).getTime();
+
+            const bTime =
+              new Date(
+                b.created_at || 0
+              ).getTime();
+
+            return bTime - aTime;
+          }
         );
 
-    /* -----------------------------------------
-       9. MAIN STATISTICS
-    ----------------------------------------- */
+    /* =========================================
+       9. MAIN STATS
+    ========================================= */
 
     const totalClicks =
       clicks.length;
@@ -437,7 +448,9 @@ export async function GET(
     let conversions = 0;
     let earnings = 0;
 
-    for (const row of clicks) {
+    for (
+      const row of clicks
+    ) {
       if (
         isConverted(row)
       ) {
@@ -461,9 +474,9 @@ export async function GET(
           )
         : 0;
 
-    /* -----------------------------------------
+    /* =========================================
        10. COUNTRY REPORT
-    ----------------------------------------- */
+    ========================================= */
 
     const countryMap =
       new Map<
@@ -475,7 +488,9 @@ export async function GET(
         }
       >();
 
-    for (const row of clicks) {
+    for (
+      const row of clicks
+    ) {
       const country =
         String(
           row.country ||
@@ -533,9 +548,9 @@ export async function GET(
             a.clicks
         );
 
-    /* -----------------------------------------
+    /* =========================================
        11. DEVICE REPORT
-    ----------------------------------------- */
+    ========================================= */
 
     const deviceMap =
       new Map<
@@ -547,7 +562,9 @@ export async function GET(
         }
       >();
 
-    for (const row of clicks) {
+    for (
+      const row of clicks
+    ) {
       const device =
         String(
           row.device ||
@@ -615,9 +632,9 @@ export async function GET(
             a.clicks
         );
 
-    /* -----------------------------------------
-       12. SUCCESS RESPONSE
-    ----------------------------------------- */
+    /* =========================================
+       12. RESPONSE
+    ========================================= */
 
     return NextResponse.json(
       {
