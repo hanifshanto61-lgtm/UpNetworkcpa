@@ -731,9 +731,10 @@ export default function AffiliatePage() {
 
               <button
                 onClick={() => {
-                  setProfileOpen(false);
-                  setSettingsOpen(true);
-                }}
+  setProfileOpen(false);
+  setSettingsOpen(false);
+  router.push("/affiliate/settings");
+}}
                 className={`mt-3 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm ${
                   dark
                     ? "text-slate-400 hover:bg-white/5 hover:text-white"
