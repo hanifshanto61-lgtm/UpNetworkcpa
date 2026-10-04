@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import {
   Menu,
@@ -45,6 +45,13 @@ type ClickRow = {
   payout?: number | string;
   converted_at?: string | null;
   created_at?: string;
+};
+
+type DashboardStats = {
+  totalClicks: number;
+  conversions: number;
+  earnings: number;
+  conversionRate: number;
 };
 
 type Manager = {
@@ -131,6 +138,19 @@ export default function AffiliatePage() {
 
   const [clicks, setClicks] = useState<ClickRow[]>([]);
 
+  /*
+   * IMPORTANT:
+   * Dashboard metrics come directly from the server API.
+   * We do NOT calculate Total Clicks from clicks.length,
+   * because the API intentionally returns only recent clicks.
+   */
+  const [stats, setStats] = useState<DashboardStats>({
+    totalClicks: 0,
+    conversions: 0,
+    earnings: 0,
+    conversionRate: 0,
+  });
+
   const dark = theme === "dark";
 
   useEffect(() => {
@@ -172,7 +192,8 @@ export default function AffiliatePage() {
 
       if (!response.ok) {
         throw new Error(
-          data?.error || "Unable to load dashboard."
+          data?.error ||
+            "Unable to load dashboard."
         );
       }
 
@@ -183,8 +204,29 @@ export default function AffiliatePage() {
           ? data.clicks
           : []
       );
+
+      /*
+       * Use server-side stats.
+       * This is the important fix.
+       */
+      setStats({
+        totalClicks:
+          Number(data?.stats?.totalClicks) || 0,
+
+        conversions:
+          Number(data?.stats?.conversions) || 0,
+
+        earnings:
+          Number(data?.stats?.earnings) || 0,
+
+        conversionRate:
+          Number(data?.stats?.conversionRate) || 0,
+      });
     } catch (err: any) {
-      console.error(err);
+      console.error(
+        "Affiliate dashboard error:",
+        err
+      );
 
       setError(
         err?.message ||
@@ -232,60 +274,13 @@ export default function AffiliatePage() {
     }
   }
 
-  const totalClicks = clicks.length;
-
-  const conversions = useMemo(() => {
-    return clicks.filter((row) => {
-      const status = String(
-        row.status || ""
-      ).toLowerCase();
-
-      return (
-        [
-          "converted",
-          "conversion",
-          "approved",
-          "paid",
-        ].includes(status) ||
-        Boolean(row.converted_at)
-      );
-    }).length;
-  }, [clicks]);
-
-  const earnings = useMemo(() => {
-    return clicks.reduce((total, row) => {
-      const status = String(
-        row.status || ""
-      ).toLowerCase();
-
-      const converted =
-        [
-          "converted",
-          "conversion",
-          "approved",
-          "paid",
-        ].includes(status) ||
-        Boolean(row.converted_at);
-
-      if (!converted) {
-        return total;
-      }
-
-      const payout = Number(row.payout || 0);
-
-      return (
-        total +
-        (Number.isFinite(payout) ? payout : 0)
-      );
-    }, 0);
-  }, [clicks]);
+  const totalClicks = stats.totalClicks;
+  const conversions = stats.conversions;
+  const earnings = stats.earnings;
 
   const conversionRate =
-    totalClicks > 0
-      ? (
-          (conversions / totalClicks) *
-          100
-        ).toFixed(2)
+    Number.isFinite(stats.conversionRate)
+      ? stats.conversionRate.toFixed(2)
       : "0.00";
 
   const affiliateId =
@@ -376,11 +371,11 @@ export default function AffiliatePage() {
         />
 
         <div
-          className="absolute left-1/2 top-1/2 h-[520px] w-[520px] -translate-x-1/2 -translate-y-1/2 bg-contain bg-center bg-no-repeat opacity-20 sm:h-[700px] sm:w-[700px]"
+          className="absolute left-1/2 top-1/2 h-[520px] w-[520px] -translate-x-1/2 -translate-y-1/2 bg-contain bg-center bg-no-repeat sm:h-[700px] sm:w-[700px]"
           style={{
             backgroundImage:
               "url('/file_000000013688207a03d42a2550c1954.png')",
-            opacity: dark ? 0.20 : 0.06,
+            opacity: dark ? 0.2 : 0.06,
           }}
         />
 
@@ -394,6 +389,7 @@ export default function AffiliatePage() {
         />
 
         <div className="absolute -left-40 top-20 h-80 w-80 rounded-full bg-cyan-500/5 blur-3xl" />
+
         <div className="absolute -right-40 top-80 h-96 w-96 rounded-full bg-purple-500/5 blur-3xl" />
       </div>
 
@@ -666,6 +662,7 @@ export default function AffiliatePage() {
             }`}
           >
             <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-cyan-400/10 blur-3xl" />
+
             <div className="absolute -bottom-28 right-24 h-56 w-56 rounded-full bg-purple-500/10 blur-3xl" />
 
             <div className="relative z-10 flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
@@ -725,7 +722,7 @@ export default function AffiliatePage() {
             <StatCard
               title="Total Clicks"
               value={totalClicks.toLocaleString()}
-              subtitle="Tracked traffic"
+              subtitle="All tracked traffic"
               icon={
                 <MousePointerClick size={21} />
               }
@@ -850,7 +847,9 @@ export default function AffiliatePage() {
                 </h2>
               </div>
 
-              <p className={`hidden text-xs sm:block ${faint}`}>
+              <p
+                className={`hidden text-xs sm:block ${faint}`}
+              >
                 Jump directly to important sections
               </p>
             </div>
@@ -968,14 +967,14 @@ export default function AffiliatePage() {
                 <p
                   className={`text-sm font-semibold ${muted}`}
                 >
-                  No activity yet
+                  No recent activity
                 </p>
 
                 <p
                   className={`mt-1 text-xs ${faint}`}
                 >
-                  Start sharing your Smart Link to
-                  generate traffic.
+                  Start sharing your Smart Link or Offer
+                  link to generate traffic.
                 </p>
               </div>
             ) : (
@@ -1393,7 +1392,11 @@ function StatCard({
   value: string;
   subtitle: string;
   icon: ReactNode;
-  accent: "cyan" | "emerald" | "purple" | "amber";
+  accent:
+    | "cyan"
+    | "emerald"
+    | "purple"
+    | "amber";
   dark: boolean;
 }) {
   const styles = {
@@ -1402,7 +1405,8 @@ function StatCard({
         "border-cyan-400/15 bg-gradient-to-br from-cyan-500/[0.12] via-cyan-500/[0.035] to-transparent shadow-[0_0_35px_rgba(34,211,238,0.06)]",
       lightCard:
         "border-cyan-200 bg-gradient-to-br from-cyan-50 via-white to-white shadow-sm",
-      icon: "bg-cyan-500/10 text-cyan-400",
+      icon:
+        "bg-cyan-500/10 text-cyan-400",
       value: "text-cyan-400",
       line: "bg-cyan-400",
       glow: "bg-cyan-400/10",
@@ -1413,7 +1417,8 @@ function StatCard({
         "border-emerald-400/15 bg-gradient-to-br from-emerald-500/[0.12] via-emerald-500/[0.035] to-transparent shadow-[0_0_35px_rgba(16,185,129,0.06)]",
       lightCard:
         "border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-white shadow-sm",
-      icon: "bg-emerald-500/10 text-emerald-400",
+      icon:
+        "bg-emerald-500/10 text-emerald-400",
       value: "text-emerald-400",
       line: "bg-emerald-400",
       glow: "bg-emerald-400/10",
@@ -1424,7 +1429,8 @@ function StatCard({
         "border-purple-400/15 bg-gradient-to-br from-purple-500/[0.12] via-purple-500/[0.035] to-transparent shadow-[0_0_35px_rgba(168,85,247,0.06)]",
       lightCard:
         "border-purple-200 bg-gradient-to-br from-purple-50 via-white to-white shadow-sm",
-      icon: "bg-purple-500/10 text-purple-400",
+      icon:
+        "bg-purple-500/10 text-purple-400",
       value: "text-purple-400",
       line: "bg-purple-400",
       glow: "bg-purple-400/10",
@@ -1435,7 +1441,8 @@ function StatCard({
         "border-amber-400/15 bg-gradient-to-br from-amber-500/[0.12] via-amber-500/[0.035] to-transparent shadow-[0_0_35px_rgba(245,158,11,0.06)]",
       lightCard:
         "border-amber-200 bg-gradient-to-br from-amber-50 via-white to-white shadow-sm",
-      icon: "bg-amber-500/10 text-amber-400",
+      icon:
+        "bg-amber-500/10 text-amber-400",
       value: "text-amber-400",
       line: "bg-amber-400",
       glow: "bg-amber-400/10",
@@ -1516,7 +1523,11 @@ function QuickAction({
   title: string;
   subtitle: string;
   icon: ReactNode;
-  accent: "blue" | "cyan" | "purple" | "green";
+  accent:
+    | "blue"
+    | "cyan"
+    | "purple"
+    | "green";
   onClick: () => void;
   dark: boolean;
 }) {
@@ -1526,8 +1537,10 @@ function QuickAction({
         "border-blue-400/15 bg-blue-500/[0.05] hover:border-blue-400/30 hover:bg-blue-500/[0.09]",
       light:
         "border-blue-100 bg-blue-50/60 hover:border-blue-200 hover:bg-blue-50",
-      icon: "bg-blue-500/10 text-blue-400",
-      arrow: "group-hover:text-blue-400",
+      icon:
+        "bg-blue-500/10 text-blue-400",
+      arrow:
+        "group-hover:text-blue-400",
     },
 
     cyan: {
@@ -1535,8 +1548,10 @@ function QuickAction({
         "border-cyan-400/15 bg-cyan-500/[0.05] hover:border-cyan-400/30 hover:bg-cyan-500/[0.09]",
       light:
         "border-cyan-100 bg-cyan-50/60 hover:border-cyan-200 hover:bg-cyan-50",
-      icon: "bg-cyan-500/10 text-cyan-400",
-      arrow: "group-hover:text-cyan-400",
+      icon:
+        "bg-cyan-500/10 text-cyan-400",
+      arrow:
+        "group-hover:text-cyan-400",
     },
 
     purple: {
@@ -1544,8 +1559,10 @@ function QuickAction({
         "border-purple-400/15 bg-purple-500/[0.05] hover:border-purple-400/30 hover:bg-purple-500/[0.09]",
       light:
         "border-purple-100 bg-purple-50/60 hover:border-purple-200 hover:bg-purple-50",
-      icon: "bg-purple-500/10 text-purple-400",
-      arrow: "group-hover:text-purple-400",
+      icon:
+        "bg-purple-500/10 text-purple-400",
+      arrow:
+        "group-hover:text-purple-400",
     },
 
     green: {
@@ -1553,8 +1570,10 @@ function QuickAction({
         "border-emerald-400/15 bg-emerald-500/[0.05] hover:border-emerald-400/30 hover:bg-emerald-500/[0.09]",
       light:
         "border-emerald-100 bg-emerald-50/60 hover:border-emerald-200 hover:bg-emerald-50",
-      icon: "bg-emerald-500/10 text-emerald-400",
-      arrow: "group-hover:text-emerald-400",
+      icon:
+        "bg-emerald-500/10 text-emerald-400",
+      arrow:
+        "group-hover:text-emerald-400",
     },
   };
 
