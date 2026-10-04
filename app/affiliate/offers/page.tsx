@@ -1,17 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  ArrowLeft,
-  Copy,
-  Check,
-  ExternalLink,
-  Target,
-  Globe,
-  Smartphone,
-  Monitor,
-  RefreshCw,
-} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -20,25 +9,34 @@ type Offer = {
   name: string;
   description: string | null;
   advertiser: string | null;
-  payout: number;
-  currency: string;
+  payout: number | null;
+  currency: string | null;
   country: string | null;
   category: string | null;
   device: string | null;
-  offer_url: string;
+  tracking_url: string | null;
   image_url: string | null;
-  status: "active" | "paused";
-  created_at: string;
+  status: string | null;
+};
+
+type Profile = {
+  affiliate_id: string;
+  full_name: string | null;
+  email: string | null;
+  status: string | null;
 };
 
 export default function AffiliateOffersPage() {
   const router = useRouter();
 
   const [offers, setOffers] = useState<Offer[]>([]);
-  const [affiliateId, setAffiliateId] = useState("");
+  const [profile, setProfile] = useState<Profile | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("All");
 
   async function loadOffers() {
     try {
@@ -46,9 +44,7 @@ export default function AffiliateOffersPage() {
       setError("");
 
       if (!supabase) {
-        throw new Error(
-          "Supabase is not configured."
-        );
+        throw new Error("Supabase client is not configured.");
       }
 
       const {
@@ -56,8 +52,28 @@ export default function AffiliateOffersPage() {
       } = await supabase.auth.getSession();
 
       if (!session?.access_token) {
-        router.replace("/login");
+        router.push("/login");
         return;
+      }
+
+      const dashboardResponse = await fetch(
+        "/api/affiliate/dashboard",
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        }
+      );
+
+      const dashboardResult =
+        await dashboardResponse.json();
+
+      if (
+        dashboardResponse.ok &&
+        dashboardResult?.profile
+      ) {
+        setProfile(dashboardResult.profile);
       }
 
       const response = await fetch(
@@ -67,31 +83,28 @@ export default function AffiliateOffersPage() {
           headers: {
             Authorization: `Bearer ${session.access_token}`,
           },
-          cache: "no-store",
         }
       );
 
-      const data = await response.json();
+      const result = await response.json();
 
-      if (!response.ok || !data.success) {
+      if (!response.ok || !result.success) {
         throw new Error(
-          data.message ||
-            "Unable to load offers."
+          result.message ||
+            "Unable to load available offers."
         );
       }
 
-      setAffiliateId(
-        data.affiliateId || ""
+      const activeOffers = (
+        result.offers || []
+      ).filter(
+        (offer: Offer) =>
+          !offer.status ||
+          offer.status === "active"
       );
 
-      setOffers(
-        Array.isArray(data.offers)
-          ? data.offers
-          : []
-      );
+      setOffers(activeOffers);
     } catch (err) {
-      console.error(err);
-
       setError(
         err instanceof Error
           ? err.message
@@ -106,51 +119,109 @@ export default function AffiliateOffersPage() {
     loadOffers();
   }, []);
 
+  const categories = useMemo(() => {
+    const values = offers
+      .map((offer) => offer.category)
+      .filter(
+        (value): value is string =>
+          Boolean(value)
+      );
+
+    return [
+      "All",
+      ...Array.from(new Set(values)),
+    ];
+  }, [offers]);
+
+  const filteredOffers = useMemo(() => {
+    const query = search
+      .trim()
+      .toLowerCase();
+
+    return offers.filter((offer) => {
+      const matchesSearch =
+        !query ||
+        offer.name
+          .toLowerCase()
+          .includes(query) ||
+        (offer.advertiser || "")
+          .toLowerCase()
+          .includes(query) ||
+        (offer.category || "")
+          .toLowerCase()
+          .includes(query) ||
+        (offer.country || "")
+          .toLowerCase()
+          .includes(query);
+
+      const matchesCategory =
+        category === "All" ||
+        offer.category === category;
+
+      return (
+        matchesSearch &&
+        matchesCategory
+      );
+    });
+  }, [offers, search, category]);
+
   function getTrackingLink(
-    offerId: string
+    offer: Offer
   ) {
-    if (
-      typeof window === "undefined" ||
-      !affiliateId
-    ) {
+    if (!profile?.affiliate_id) {
       return "";
     }
 
-    return `${window.location.origin}/api/track?aid=${encodeURIComponent(
-      affiliateId
-    )}&offerId=${encodeURIComponent(
-      offerId
-    )}`;
+    if (typeof window === "undefined") {
+      return "";
+    }
+
+    const baseUrl = `${window.location.origin}/api/track`;
+
+    const params = new URLSearchParams({
+      aid: profile.affiliate_id,
+      offer: offer.id,
+    });
+
+    return `${baseUrl}?${params.toString()}`;
   }
 
-  async function copyLink(offerId: string) {
-    try {
-      const link =
-        getTrackingLink(offerId);
+  async function copyOfferLink(
+    offer: Offer
+  ) {
+    const link = getTrackingLink(offer);
 
-      if (!link) return;
-
-      await navigator.clipboard.writeText(
-        link
+    if (!link) {
+      setError(
+        "Affiliate ID is unavailable. Please login again."
       );
+      return;
+    }
 
-      setCopiedId(offerId);
+    try {
+      await navigator.clipboard.writeText(link);
 
-      setTimeout(() => {
+      setCopiedId(offer.id);
+
+      window.setTimeout(() => {
         setCopiedId(null);
       }, 2000);
-    } catch (err) {
-      console.error(err);
+    } catch {
+      setError(
+        "Unable to copy the offer link."
+      );
     }
   }
 
-  function openTrackingLink(
-    offerId: string
-  ) {
-    const link =
-      getTrackingLink(offerId);
+  function openOffer(offer: Offer) {
+    const link = getTrackingLink(offer);
 
-    if (!link) return;
+    if (!link) {
+      setError(
+        "Affiliate ID is unavailable. Please login again."
+      );
+      return;
+    }
 
     window.open(
       link,
@@ -160,302 +231,358 @@ export default function AffiliateOffersPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#05070c] text-white">
+    <main className="min-h-screen bg-slate-950 text-white">
       {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-white/10 bg-[#05070c]/95 backdrop-blur-xl">
-        <div className="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-slate-950/95 backdrop-blur">
+        <div className="mx-auto flex min-h-20 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() =>
                 router.push("/affiliate")
               }
-              className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-300 transition hover:border-cyan-400/30 hover:bg-cyan-400/10 hover:text-cyan-400"
+              className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10"
             >
-              <ArrowLeft size={19} />
+              ← Dashboard
             </button>
 
-            <div>
-              <div className="text-lg font-extrabold tracking-tight">
-                UpNetwork
-                <span className="text-cyan-400">
-                  CPA
-                </span>
-              </div>
+            <div className="hidden sm:block">
+              <p className="text-lg font-bold">
+                Offers
+              </p>
 
-              <div className="text-[9px] uppercase tracking-[0.22em] text-slate-600">
-                Available Offers
-              </div>
+              <p className="text-xs text-slate-400">
+                Available CPA campaigns
+              </p>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={loadOffers}
-            disabled={loading}
-            className="flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-xs font-semibold text-slate-300 transition hover:border-cyan-400/30 hover:bg-cyan-400/10 hover:text-cyan-400 disabled:opacity-50"
-          >
-            <RefreshCw
-              size={15}
-              className={
-                loading
-                  ? "animate-spin"
-                  : ""
-              }
-            />
+          <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-right">
+            <p className="text-[10px] uppercase tracking-wider text-slate-500">
+              Affiliate ID
+            </p>
 
-            <span className="hidden sm:block">
-              Refresh
-            </span>
-          </button>
+            <p className="text-sm font-bold text-cyan-300">
+              {profile?.affiliate_id ||
+                "Loading..."}
+            </p>
+          </div>
         </div>
       </header>
 
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-        {/* Heading */}
-        <div className="mb-8">
-          <div className="mb-3 flex items-center gap-2 text-cyan-400">
-            <Target size={20} />
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        {/* Hero */}
+        <section className="mb-8 overflow-hidden rounded-3xl border border-cyan-400/20 bg-gradient-to-br from-cyan-500/10 via-blue-500/10 to-purple-500/10 p-6 shadow-2xl shadow-cyan-950/20 sm:p-8">
+          <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
+            <div>
+              <div className="mb-3 inline-flex rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-cyan-300">
+                CPA Offers
+              </div>
 
-            <span className="text-xs font-bold uppercase tracking-[0.18em]">
-              CPA Offers
-            </span>
+              <h1 className="text-3xl font-black tracking-tight sm:text-4xl">
+                Find Offers & Start Earning
+              </h1>
+
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400 sm:text-base">
+                Browse active campaigns available
+                for your affiliate account. Copy
+                your unique tracking link and
+                promote the offer.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-white/10 bg-black/20 px-5 py-4">
+                <p className="text-xs text-slate-500">
+                  Active Offers
+                </p>
+
+                <p className="mt-1 text-2xl font-black text-white">
+                  {offers.length}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-black/20 px-5 py-4">
+                <p className="text-xs text-slate-500">
+                  Showing
+                </p>
+
+                <p className="mt-1 text-2xl font-black text-cyan-300">
+                  {filteredOffers.length}
+                </p>
+              </div>
+            </div>
           </div>
-
-          <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
-            Available Offers
-          </h1>
-
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-            এখান থেকে Active Offer বেছে নিয়ে আপনার
-            affiliate tracking link কপি করুন।
-          </p>
-        </div>
+        </section>
 
         {/* Error */}
         {error && (
-          <div className="mb-6 rounded-2xl border border-red-500/20 bg-red-500/5 p-5 text-sm text-red-400">
-            <p className="font-bold">
-              Unable to load offers
-            </p>
+          <div className="mb-6 flex items-start justify-between gap-4 rounded-2xl border border-red-500/20 bg-red-500/10 px-5 py-4 text-sm text-red-300">
+            <span>{error}</span>
 
-            <p className="mt-1">
-              {error}
-            </p>
+            <button
+              type="button"
+              onClick={() => setError("")}
+              className="text-red-300 hover:text-white"
+            >
+              ×
+            </button>
           </div>
         )}
 
-        {/* Loading */}
-        {loading ? (
-          <div className="flex min-h-72 items-center justify-center rounded-3xl border border-white/10 bg-white/[0.02]">
-            <div className="text-center">
-              <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-slate-700 border-t-cyan-400" />
+        {/* Filters */}
+        <section className="mb-7 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <div className="flex flex-col gap-4 lg:flex-row">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                value={search}
+                onChange={(e) =>
+                  setSearch(e.target.value)
+                }
+                placeholder="Search offers, advertiser, country..."
+                className="w-full rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-600 focus:border-cyan-400/50"
+              />
+            </div>
 
-              <p className="mt-4 text-sm text-slate-500">
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {categories.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() =>
+                    setCategory(item)
+                  }
+                  className={`whitespace-nowrap rounded-xl px-4 py-3 text-sm font-bold transition ${
+                    category === item
+                      ? "bg-cyan-500 text-slate-950"
+                      : "border border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+                  }`}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Loading */}
+        {loading && (
+          <div className="flex min-h-72 items-center justify-center rounded-3xl border border-white/10 bg-white/[0.03]">
+            <div className="text-center">
+              <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-white/10 border-t-cyan-400" />
+
+              <p className="mt-4 text-sm font-semibold text-slate-400">
                 Loading available offers...
               </p>
             </div>
           </div>
-        ) : offers.length === 0 ? (
-          /* Empty */
-          <div className="flex min-h-72 items-center justify-center rounded-3xl border border-white/10 bg-white/[0.02] p-8">
-            <div className="text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-cyan-400/10 text-cyan-400">
-                <Target size={28} />
+        )}
+
+        {/* Empty */}
+        {!loading &&
+          filteredOffers.length === 0 && (
+            <div className="rounded-3xl border border-white/10 bg-white/[0.03] px-6 py-16 text-center">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5 text-2xl">
+                ◇
               </div>
 
-              <h2 className="mt-5 text-lg font-bold">
-                No active offers
+              <h2 className="mt-5 text-xl font-bold">
+                No offers found
               </h2>
 
-              <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">
-                বর্তমানে কোনো Active Offer নেই।
-                Admin নতুন Offer Active করলে এখানে
-                automatically দেখা যাবে।
+              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+                There are currently no active offers
+                matching your search or category.
+                Please check again later.
               </p>
             </div>
-          </div>
-        ) : (
-          /* Offers */
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-            {offers.map((offer) => {
-              const trackingLink =
-                getTrackingLink(offer.id);
+          )}
 
-              return (
-                <article
-                  key={offer.id}
-                  className="group overflow-hidden rounded-3xl border border-white/10 bg-white/[0.025] transition hover:border-cyan-400/25 hover:bg-white/[0.04]"
-                >
-                  {/* Image */}
-                  {offer.image_url ? (
-                    <div className="h-44 overflow-hidden bg-slate-900">
-                      <img
-                        src={offer.image_url}
-                        alt={offer.name}
-                        className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-                      />
-                    </div>
-                  ) : (
-                    <div className="flex h-44 items-center justify-center bg-gradient-to-br from-cyan-400/10 to-blue-500/5">
-                      <Target
-                        size={48}
-                        className="text-cyan-400/40"
-                      />
-                    </div>
-                  )}
+        {/* Offers Grid */}
+        {!loading &&
+          filteredOffers.length > 0 && (
+            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {filteredOffers.map((offer) => {
+                const trackingLink =
+                  getTrackingLink(offer);
 
-                  <div className="p-5">
-                    {/* Title */}
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <h2 className="truncate text-lg font-bold text-white">
-                          {offer.name}
-                        </h2>
+                return (
+                  <article
+                    key={offer.id}
+                    className="group overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04] shadow-xl shadow-black/10 transition duration-300 hover:-translate-y-1 hover:border-cyan-400/30 hover:bg-white/[0.06]"
+                  >
+                    {/* Image */}
+                    <div className="relative h-48 overflow-hidden bg-gradient-to-br from-slate-800 to-slate-900">
+                      {offer.image_url ? (
+                        <img
+                          src={offer.image_url}
+                          alt={offer.name}
+                          className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center bg-gradient-to-br from-cyan-500/10 via-blue-500/10 to-purple-500/10">
+                          <span className="text-6xl font-black text-cyan-400/30">
+                            $
+                          </span>
+                        </div>
+                      )}
 
-                        <p className="mt-1 text-xs text-slate-500">
-                          {offer.advertiser ||
-                            "UpNetworkCPA"}
-                        </p>
+                      <div className="absolute left-4 top-4 rounded-full border border-emerald-400/20 bg-emerald-500/90 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-white">
+                        Active
                       </div>
-
-                      <div className="shrink-0 rounded-xl bg-emerald-400/10 px-3 py-2 text-right">
-                        <p className="text-[9px] uppercase tracking-wider text-emerald-400/70">
-                          Payout
-                        </p>
-
-                        <p className="text-sm font-extrabold text-emerald-400">
-                          {offer.currency === "USD"
-                            ? "$"
-                            : offer.currency}{" "}
-                          {Number(
-                            offer.payout || 0
-                          ).toFixed(2)}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Description */}
-                    {offer.description && (
-                      <p className="mt-4 line-clamp-3 text-sm leading-6 text-slate-400">
-                        {offer.description}
-                      </p>
-                    )}
-
-                    {/* Meta */}
-                    <div className="mt-5 flex flex-wrap gap-2">
-                      <span className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[11px] text-slate-400">
-                        <Globe size={12} />
-
-                        {offer.country ||
-                          "Worldwide"}
-                      </span>
-
-                      <span className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[11px] text-slate-400">
-                        {String(
-                          offer.device || "All"
-                        ).toLowerCase() ===
-                        "desktop" ? (
-                          <Monitor size={12} />
-                        ) : (
-                          <Smartphone size={12} />
-                        )}
-
-                        {offer.device ||
-                          "All"}
-                      </span>
 
                       {offer.category && (
-                        <span className="rounded-lg border border-cyan-400/10 bg-cyan-400/5 px-2.5 py-1.5 text-[11px] text-cyan-400">
+                        <div className="absolute right-4 top-4 rounded-full border border-white/10 bg-black/60 px-3 py-1 text-[10px] font-bold text-white backdrop-blur">
                           {offer.category}
-                        </span>
+                        </div>
                       )}
                     </div>
 
-                    {/* Tracking URL */}
-                    <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-3">
-                      <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-600">
-                        Your Tracking Link
-                      </p>
+                    {/* Content */}
+                    <div className="p-5">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <h2 className="truncate text-xl font-black text-white">
+                            {offer.name}
+                          </h2>
 
-                      <div className="flex items-center gap-2">
-                        <input
-                          readOnly
-                          value={trackingLink}
-                          className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-[11px] text-slate-400 outline-none"
-                        />
+                          <p className="mt-1 text-xs font-semibold text-slate-500">
+                            {offer.advertiser ||
+                              "Direct Advertiser"}
+                          </p>
+                        </div>
+
+                        <div className="shrink-0 rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-right">
+                          <p className="text-[9px] uppercase tracking-wider text-emerald-400/70">
+                            Payout
+                          </p>
+
+                          <p className="font-black text-emerald-300">
+                            {offer.currency ||
+                              "USD"}{" "}
+                            {Number(
+                              offer.payout || 0
+                            ).toFixed(2)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {offer.description && (
+                        <p className="mt-4 line-clamp-3 text-sm leading-6 text-slate-400">
+                          {offer.description}
+                        </p>
+                      )}
+
+                      {/* Details */}
+                      <div className="mt-5 grid grid-cols-2 gap-2">
+                        <div className="rounded-xl border border-white/5 bg-black/20 px-3 py-2">
+                          <p className="text-[9px] uppercase tracking-wider text-slate-600">
+                            Country
+                          </p>
+
+                          <p className="mt-1 truncate text-xs font-bold text-slate-300">
+                            {offer.country ||
+                              "Worldwide"}
+                          </p>
+                        </div>
+
+                        <div className="rounded-xl border border-white/5 bg-black/20 px-3 py-2">
+                          <p className="text-[9px] uppercase tracking-wider text-slate-600">
+                            Device
+                          </p>
+
+                          <p className="mt-1 truncate text-xs font-bold text-slate-300">
+                            {offer.device ||
+                              "All"}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Tracking Link */}
+                      <div className="mt-5 rounded-xl border border-cyan-400/10 bg-cyan-400/5 p-3">
+                        <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-cyan-400/70">
+                          Your Tracking Link
+                        </p>
+
+                        <div className="flex items-center gap-2">
+                          <input
+                            readOnly
+                            value={
+                              trackingLink
+                            }
+                            className="min-w-0 flex-1 rounded-lg border border-white/5 bg-slate-950 px-3 py-2 text-[10px] text-slate-400 outline-none"
+                          />
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              copyOfferLink(
+                                offer
+                              )
+                            }
+                            className="shrink-0 rounded-lg bg-cyan-500 px-3 py-2 text-xs font-black text-slate-950 transition hover:bg-cyan-400"
+                          >
+                            {copiedId ===
+                            offer.id
+                              ? "Copied!"
+                              : "Copy"}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Buttons */}
+                      <div className="mt-5 grid grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            copyOfferLink(
+                              offer
+                            )
+                          }
+                          className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+                        >
+                          {copiedId ===
+                          offer.id
+                            ? "✓ Link Copied"
+                            : "Copy Link"}
+                        </button>
 
                         <button
                           type="button"
                           onClick={() =>
-                            copyLink(
-                              offer.id
+                            openOffer(
+                              offer
                             )
                           }
-                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-400 transition hover:bg-cyan-400/20"
-                          title="Copy tracking link"
+                          className="rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-3 text-sm font-black text-slate-950 transition hover:opacity-90"
                         >
-                          {copiedId ===
-                          offer.id ? (
-                            <Check
-                              size={17}
-                            />
-                          ) : (
-                            <Copy
-                              size={17}
-                            />
-                          )}
+                          Open Offer →
                         </button>
                       </div>
                     </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
 
-                    {/* Buttons */}
-                    <div className="mt-4 grid grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          copyLink(
-                            offer.id
-                          )
-                        }
-                        className="flex items-center justify-center gap-2 rounded-xl border border-cyan-400/20 bg-cyan-400/5 px-4 py-3 text-xs font-bold text-cyan-400 transition hover:bg-cyan-400/10"
-                      >
-                        {copiedId ===
-                        offer.id ? (
-                          <>
-                            <Check size={15} />
-                            Copied
-                          </>
-                        ) : (
-                          <>
-                            <Copy size={15} />
-                            Copy Link
-                          </>
-                        )}
-                      </button>
+        {/* Bottom Info */}
+        <section className="mt-8 rounded-2xl border border-cyan-400/10 bg-cyan-400/5 p-5">
+          <h3 className="font-bold text-cyan-300">
+            How your tracking works
+          </h3>
 
-                      <button
-                        type="button"
-                        onClick={() =>
-                          openTrackingLink(
-                            offer.id
-                          )
-                        }
-                        className="flex items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-3 text-xs font-bold text-black transition hover:bg-cyan-400"
-                      >
-                        <ExternalLink
-                          size={15}
-                        />
-                        Open Offer
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        )}
+          <p className="mt-2 text-sm leading-6 text-slate-400">
+            প্রতিটি Offer-এর জন্য আপনার Affiliate
+            ID ব্যবহার করে আলাদা tracking link তৈরি
+            হচ্ছে। এই link দিয়ে visitor এলে আগে
+            UpNetwork CPA tracking system-এর মাধ্যমে
+            click record হবে, তারপর advertiser-এর
+            offer URL-এ redirect হবে।
+          </p>
+        </section>
       </div>
     </main>
   );
-                  }
+  }
