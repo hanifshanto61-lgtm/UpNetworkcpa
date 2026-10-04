@@ -1,413 +1,807 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  Activity,
+  BarChart3,
+  CheckCircle2,
+  ChevronRight,
+  CreditCard,
+  DollarSign,
+  FileText,
+  Link2,
+  LogOut,
+  Menu,
+  MousePointerClick,
+  Settings,
+  ShieldCheck,
+  Target,
+  TrendingUp,
+  UserCheck,
+  Users,
+  Wallet,
+  X,
+} from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 const ADMIN_EMAIL = "islamhanif122@gmail.com";
 
-const stats = [
+type MenuItem = {
+  label: string;
+  icon: React.ElementType;
+  action: string;
+  available: boolean;
+};
+
+const menuItems: MenuItem[] = [
   {
-    label: "Total Clicks",
-    value: "0",
-    icon: "↗",
-    note: "All tracked clicks",
+    label: "Dashboard",
+    icon: BarChart3,
+    action: "/admin",
+    available: true,
   },
   {
-    label: "Conversions",
-    value: "0",
-    icon: "✓",
-    note: "Confirmed conversions",
+    label: "Offers",
+    icon: Target,
+    action: "/admin/offers",
+    available: true,
   },
   {
-    label: "Revenue",
-    value: "$0.00",
-    icon: "$",
-    note: "Total advertiser revenue",
+    label: "Affiliates",
+    icon: Users,
+    action: "/admin/affiliates",
+    available: true,
   },
   {
-    label: "Payout",
-    value: "$0.00",
-    icon: "◈",
-    note: "Affiliate payouts",
+    label: "Smart Links",
+    icon: Link2,
+    action: "smart-links",
+    available: false,
+  },
+  {
+    label: "Statistics",
+    icon: Activity,
+    action: "statistics",
+    available: false,
+  },
+  {
+    label: "Earnings",
+    icon: DollarSign,
+    action: "earnings",
+    available: false,
+  },
+  {
+    label: "Referrals",
+    icon: UserCheck,
+    action: "referrals",
+    available: false,
+  },
+  {
+    label: "Payments",
+    icon: CreditCard,
+    action: "payments",
+    available: false,
+  },
+  {
+    label: "Settings",
+    icon: Settings,
+    action: "settings",
+    available: false,
   },
 ];
 
-const menu = [
-  ["Dashboard", "⌂"],
-  ["Offers & Links", "▣"],
-  ["Clicks", "↗"],
-  ["Conversions", "✓"],
-  ["Affiliates", "♙"],
-  ["Postbacks", "↻"],
-  ["Reports", "▤"],
-  ["Settings", "⚙"],
+type ControlCard = {
+  title: string;
+  description: string;
+  icon: React.ElementType;
+  status: "Active" | "Coming next";
+  action?: string;
+};
+
+const controlCards: ControlCard[] = [
+  {
+    title: "Affiliate Management",
+    description:
+      "View affiliates, approve or reject accounts, suspend users and manage affiliate status.",
+    icon: Users,
+    status: "Active",
+    action: "/admin/affiliates",
+  },
+  {
+    title: "Offer Management",
+    description:
+      "Create, edit, pause, activate and delete CPA offers from the admin panel.",
+    icon: Target,
+    status: "Active",
+    action: "/admin/offers",
+  },
+  {
+    title: "Smart Links",
+    description:
+      "Manage smart links, tracking destinations and affiliate smart-link access.",
+    icon: Link2,
+    status: "Coming next",
+  },
+  {
+    title: "Statistics",
+    description:
+      "Control clicks, conversions, conversion rate, revenue and payout reporting.",
+    icon: BarChart3,
+    status: "Coming next",
+  },
+  {
+    title: "Earnings",
+    description:
+      "Review affiliate earnings and manage earning-related information.",
+    icon: Wallet,
+    status: "Coming next",
+  },
+  {
+    title: "Referral System",
+    description:
+      "Control referral rates, referral earnings and commission status.",
+    icon: TrendingUp,
+    status: "Coming next",
+  },
+  {
+    title: "Payments",
+    description:
+      "Manage payment methods, pending payments, paid payments and payment status.",
+    icon: CreditCard,
+    status: "Coming next",
+  },
+  {
+    title: "Panel Settings",
+    description:
+      "Control which features are visible and available inside the affiliate panel.",
+    icon: Settings,
+    status: "Coming next",
+  },
 ];
 
 export default function AdminPage() {
   const router = useRouter();
-  const [checking, setChecking] = useState(true);
+
+  const [loading, setLoading] = useState(true);
+  const [authorized, setAuthorized] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeMenu, setActiveMenu] = useState("Dashboard");
+  const [adminEmail, setAdminEmail] = useState("");
+  const [affiliateCount, setAffiliateCount] = useState(0);
+  const [offerCount, setOfferCount] = useState(0);
+  const [activeOfferCount, setActiveOfferCount] = useState(0);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    async function checkAdmin() {
-      if (!supabase) {
-        router.replace("/login");
-        return;
+    let mounted = true;
+
+    async function loadAdmin() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const { data, error: sessionError } =
+          await supabase.auth.getSession();
+
+        if (sessionError) {
+          throw sessionError;
+        }
+
+        const session = data.session;
+
+        if (!session?.user?.email) {
+          router.replace("/login");
+          return;
+        }
+
+        const email = session.user.email.toLowerCase();
+
+        if (email !== ADMIN_EMAIL.toLowerCase()) {
+          router.replace("/affiliate");
+          return;
+        }
+
+        if (!mounted) return;
+
+        setAuthorized(true);
+        setAdminEmail(session.user.email);
+
+        await loadStats(session.access_token);
+      } catch (err) {
+        console.error("Admin dashboard error:", err);
+
+        if (!mounted) return;
+
+        setError("Unable to load admin dashboard.");
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
       }
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!session) {
-        router.replace("/login");
-        return;
-      }
-
-      if (
-        session.user.email?.toLowerCase() !==
-        ADMIN_EMAIL.toLowerCase()
-      ) {
-        await supabase.auth.signOut();
-        router.replace("/login");
-        return;
-      }
-
-      setChecking(false);
     }
 
-    checkAdmin();
+    async function loadStats(accessToken: string) {
+      try {
+        const headers = {
+          Authorization: `Bearer ${accessToken}`,
+        };
+
+        const [affiliateResponse, offerResponse] = await Promise.all([
+          fetch("/api/admin/affiliates", {
+            method: "GET",
+            headers,
+            cache: "no-store",
+          }),
+          fetch("/api/admin/offers", {
+            method: "GET",
+            headers,
+            cache: "no-store",
+          }),
+        ]);
+
+        if (affiliateResponse.ok) {
+          const affiliateData = await affiliateResponse.json();
+
+          const affiliates = Array.isArray(affiliateData?.affiliates)
+            ? affiliateData.affiliates
+            : [];
+
+          setAffiliateCount(
+            typeof affiliateData?.total === "number"
+              ? affiliateData.total
+              : affiliates.length
+          );
+        }
+
+        if (offerResponse.ok) {
+          const offerData = await offerResponse.json();
+
+          const offers = Array.isArray(offerData)
+            ? offerData
+            : Array.isArray(offerData?.offers)
+              ? offerData.offers
+              : [];
+
+          setOfferCount(offers.length);
+
+          setActiveOfferCount(
+            offers.filter(
+              (offer: { status?: string }) =>
+                String(offer?.status || "").toLowerCase() === "active"
+            ).length
+          );
+        }
+      } catch (err) {
+        console.error("Admin stats error:", err);
+      }
+    }
+
+    loadAdmin();
+
+    return () => {
+      mounted = false;
+    };
   }, [router]);
 
-  async function handleLogout() {
-    if (supabase) {
-      await supabase.auth.signOut();
-    }
+  const summaryCards = useMemo(
+    () => [
+      {
+        title: "Total Affiliates",
+        value: affiliateCount,
+        icon: Users,
+        description: "Registered affiliate accounts",
+      },
+      {
+        title: "Total Offers",
+        value: offerCount,
+        icon: Target,
+        description: "Offers in the network",
+      },
+      {
+        title: "Active Offers",
+        value: activeOfferCount,
+        icon: CheckCircle2,
+        description: "Currently active offers",
+      },
+      {
+        title: "Control Modules",
+        value: controlCards.length,
+        icon: ShieldCheck,
+        description: "Admin management sections",
+      },
+    ],
+    [affiliateCount, offerCount, activeOfferCount]
+  );
 
+  async function handleLogout() {
+    await supabase.auth.signOut();
     router.replace("/login");
   }
 
-  if (checking) {
+  function handleMenu(item: MenuItem) {
+    setActiveMenu(item.label);
+    setSidebarOpen(false);
+
+    if (!item.available) {
+      const element = document.getElementById("control-center");
+
+      if (element) {
+        element.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }
+
+      return;
+    }
+
+    router.push(item.action);
+  }
+
+  function handleControlAction(card: ControlCard) {
+    if (!card.action) {
+      const element = document.getElementById("control-center");
+
+      if (element) {
+        element.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }
+
+      return;
+    }
+
+    router.push(card.action);
+  }
+
+  if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
+      <main className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
         <div className="text-center">
-          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-white/20 border-t-blue-500" />
-          <p className="text-sm text-slate-300">
-            Checking authentication...
-          </p>
+          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-slate-700 border-t-cyan-400" />
+          <p className="text-sm text-slate-400">Loading Admin Panel...</p>
         </div>
       </main>
     );
   }
 
+  if (!authorized) {
+    return null;
+  }
+
   return (
-    <main className="min-h-screen bg-slate-100 text-slate-900">
-      <div className="flex min-h-screen">
+    <main className="min-h-screen bg-slate-950 text-white">
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <button
+          type="button"
+          aria-label="Close menu"
+          onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 z-40 bg-black/70 lg:hidden"
+        />
+      )}
 
-        {/* Sidebar */}
-        <aside className="hidden w-64 shrink-0 bg-slate-950 text-white lg:flex lg:flex-col">
-          <div className="flex h-20 items-center gap-3 border-b border-white/10 px-6">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 font-black">
-              UP
-            </div>
+      {/* Sidebar */}
+      <aside
+        className={`fixed left-0 top-0 z-50 h-screen w-72 border-r border-slate-800 bg-slate-950/95 backdrop-blur-xl transition-transform duration-300 ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        } lg:translate-x-0`}
+      >
+        <div className="flex h-full flex-col">
+          <div className="border-b border-slate-800 px-6 py-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xl font-black tracking-tight">
+                  UpNetwork<span className="text-cyan-400">CPA</span>
+                </div>
+                <div className="mt-1 text-[11px] uppercase tracking-[0.25em] text-slate-500">
+                  Admin Control Center
+                </div>
+              </div>
 
-            <div>
-              <h1 className="font-bold">UpNetwork Cpa</h1>
-              <p className="text-xs text-slate-400">
-                Admin Panel
-              </p>
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(false)}
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white lg:hidden"
+              >
+                <X size={20} />
+              </button>
             </div>
           </div>
 
-          <nav className="flex-1 space-y-1 p-4">
-            {menu.map(([label, icon], index) => (
-              <button
-                key={label}
-                type="button"
-                className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-medium transition ${
-                  index === 0
-                    ? "bg-blue-600 text-white"
-                    : "text-slate-300 hover:bg-white/10 hover:text-white"
-                }`}
-              >
-                <span className="w-5 text-center text-lg">
-                  {icon}
-                </span>
+          <nav className="flex-1 overflow-y-auto px-4 py-5">
+            <div className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
+              Management
+            </div>
 
-                {label}
-              </button>
-            ))}
+            <div className="space-y-1">
+              {menuItems.map((item) => {
+                const Icon = item.icon;
+                const active = activeMenu === item.label;
+
+                return (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={() => handleMenu(item)}
+                    className={`group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition ${
+                      active
+                        ? "bg-cyan-500/10 text-cyan-300 ring-1 ring-cyan-500/20"
+                        : "text-slate-400 hover:bg-slate-900 hover:text-white"
+                    }`}
+                  >
+                    <Icon
+                      size={18}
+                      className={
+                        active
+                          ? "text-cyan-400"
+                          : "text-slate-500 group-hover:text-slate-300"
+                      }
+                    />
+
+                    <span className="flex-1">{item.label}</span>
+
+                    {!item.available && (
+                      <span className="rounded-full border border-slate-700 px-1.5 py-0.5 text-[8px] uppercase tracking-wide text-slate-500">
+                        Soon
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </nav>
 
-          <div className="border-t border-white/10 p-4">
+          <div className="border-t border-slate-800 p-4">
+            <div className="mb-3 rounded-xl border border-slate-800 bg-slate-900/70 p-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-cyan-500/10 text-cyan-400">
+                  <ShieldCheck size={18} />
+                </div>
+
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-white">
+                    Administrator
+                  </div>
+                  <div className="truncate text-[10px] text-slate-500">
+                    {adminEmail}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <button
               type="button"
               onClick={handleLogout}
-              className="w-full rounded-xl px-4 py-3 text-left text-sm font-medium text-slate-300 transition hover:bg-red-500/10 hover:text-red-300"
+              className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-red-400 transition hover:bg-red-500/10"
             >
-              ↪ Sign out
+              <LogOut size={18} />
+              Logout
             </button>
           </div>
-        </aside>
+        </div>
+      </aside>
 
-        {/* Main Content */}
-        <section className="min-w-0 flex-1">
-
-          {/* Header */}
-          <header className="flex h-20 items-center justify-between border-b border-slate-200 bg-white px-5 sm:px-8">
-            <div>
-              <h2 className="text-xl font-bold sm:text-2xl">
-                Dashboard
-              </h2>
-
-              <p className="text-xs text-slate-500 sm:text-sm">
-                Monitor your CPA network performance
-              </p>
-            </div>
-
+      {/* Main content */}
+      <section className="min-h-screen lg:pl-72">
+        {/* Top bar */}
+        <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-950/90 backdrop-blur-xl">
+          <div className="flex items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-3">
-              <div className="hidden text-right sm:block">
-                <p className="text-sm font-semibold">
-                  Administrator
-                </p>
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(true)}
+                className="rounded-xl border border-slate-800 bg-slate-900 p-2.5 text-slate-300 hover:text-white lg:hidden"
+              >
+                <Menu size={20} />
+              </button>
 
-                <p className="text-xs text-slate-500">
-                  {ADMIN_EMAIL}
-                </p>
-              </div>
-
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 font-bold text-blue-700">
-                A
+              <div>
+                <div className="text-lg font-bold">Admin Dashboard</div>
+                <div className="text-xs text-slate-500">
+                  Manage your entire CPA network from one place
+                </div>
               </div>
             </div>
-          </header>
 
-          {/* Dashboard */}
-          <div className="p-5 sm:p-8">
-
-            {/* Welcome */}
-            <div className="mb-7 rounded-2xl bg-gradient-to-r from-blue-700 to-indigo-700 p-6 text-white shadow-lg">
-              <div className="flex flex-col justify-between gap-5 md:flex-row md:items-center">
-                <div>
-                  <p className="mb-1 text-sm font-medium text-blue-100">
-                    Welcome to UpNetwork Cpa
-                  </p>
-
-                  <h3 className="text-2xl font-extrabold sm:text-3xl">
-                    Your network control center
-                  </h3>
-
-                  <p className="mt-2 max-w-2xl text-sm text-blue-100">
-                    Manage offers, tracking links, affiliates,
-                    conversions, postbacks and reports from one place.
-                  </p>
+            <div className="hidden items-center gap-3 sm:flex">
+              <div className="rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-right">
+                <div className="text-[9px] uppercase tracking-wider text-slate-500">
+                  Admin
                 </div>
+                <div className="max-w-[220px] truncate text-xs text-slate-300">
+                  {adminEmail}
+                </div>
+              </div>
 
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="rounded-xl border border-slate-800 bg-slate-900 p-2.5 text-slate-400 transition hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-400"
+                title="Logout"
+              >
+                <LogOut size={18} />
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <div className="px-4 py-6 sm:px-6 lg:px-8">
+          {/* Hero */}
+          <section className="relative overflow-hidden rounded-3xl border border-cyan-500/20 bg-gradient-to-br from-cyan-500/10 via-slate-900 to-slate-950 p-6 sm:p-8">
+            <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-cyan-400/10 blur-3xl" />
+            <div className="absolute -bottom-24 left-1/3 h-64 w-64 rounded-full bg-blue-500/10 blur-3xl" />
+
+            <div className="relative">
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-300">
+                <ShieldCheck size={13} />
+                Full Network Control
+              </div>
+
+              <h1 className="max-w-3xl text-2xl font-black tracking-tight sm:text-4xl">
+                Welcome to the{" "}
+                <span className="text-cyan-400">UpNetwork CPA</span> Admin
+                Control Center
+              </h1>
+
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400 sm:text-base">
+                Manage affiliates, offers and all future affiliate-panel
+                features from one central administration system.
+              </p>
+
+              <div className="mt-6 flex flex-wrap gap-3">
                 <button
                   type="button"
                   onClick={() => router.push("/admin/offers")}
-                  className="rounded-xl bg-white px-5 py-3 text-sm font-bold text-blue-700 shadow-md transition hover:bg-blue-50"
+                  className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-3 text-sm font-bold text-slate-950 transition hover:bg-cyan-400"
                 >
-                  + Add New Offer
+                  <Target size={17} />
+                  Manage Offers
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => router.push("/admin/affiliates")}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm font-bold text-white transition hover:border-cyan-500/40 hover:bg-slate-800"
+                >
+                  <Users size={17} />
+                  Manage Affiliates
                 </button>
               </div>
             </div>
+          </section>
 
-            {/* Statistics */}
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              {stats.map((stat) => (
+          {/* Error */}
+          {error && (
+            <div className="mt-5 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+              {error}
+            </div>
+          )}
+
+          {/* Summary */}
+          <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {summaryCards.map((card) => {
+              const Icon = card.icon;
+
+              return (
                 <div
-                  key={stat.label}
-                  className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                  key={card.title}
+                  className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5"
                 >
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-sm font-medium text-slate-500">
-                        {stat.label}
-                      </p>
-
-                      <p className="mt-2 text-3xl font-extrabold tracking-tight">
-                        {stat.value}
-                      </p>
+                      <div className="text-xs font-medium text-slate-500">
+                        {card.title}
+                      </div>
+                      <div className="mt-2 text-3xl font-black text-white">
+                        {card.value}
+                      </div>
                     </div>
 
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-lg font-bold text-blue-600">
-                      {stat.icon}
+                    <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 text-cyan-400">
+                      <Icon size={20} />
                     </div>
                   </div>
 
-                  <p className="mt-4 text-xs text-slate-400">
-                    {stat.note}
-                  </p>
+                  <div className="mt-4 text-[11px] text-slate-500">
+                    {card.description}
+                  </div>
                 </div>
-              ))}
+              );
+            })}
+          </section>
+
+          {/* Quick actions */}
+          <section className="mt-8">
+            <div className="mb-4 flex items-end justify-between">
+              <div>
+                <h2 className="text-xl font-bold">Quick Actions</h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  Frequently used administration tools
+                </p>
+              </div>
             </div>
 
-            {/* Overview */}
-            <div className="mt-6 grid gap-6 xl:grid-cols-3">
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm xl:col-span-2">
+            <div className="grid gap-4 md:grid-cols-3">
+              <button
+                type="button"
+                onClick={() => router.push("/admin/offers")}
+                className="group rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-left transition hover:-translate-y-0.5 hover:border-cyan-500/30 hover:bg-slate-900"
+              >
                 <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-bold">
-                      Network Overview
-                    </h3>
-
-                    <p className="mt-1 text-sm text-slate-500">
-                      Performance data will appear here after
-                      tracking is connected.
-                    </p>
+                  <div className="rounded-xl bg-cyan-500/10 p-3 text-cyan-400">
+                    <Target size={21} />
                   </div>
-
-                  <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
-                    Waiting for data
-                  </span>
+                  <ChevronRight
+                    size={18}
+                    className="text-slate-600 transition group-hover:translate-x-1 group-hover:text-cyan-400"
+                  />
                 </div>
 
-                <div className="mt-6 flex h-56 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50">
-                  <div className="text-center">
-                    <div className="text-4xl">▥</div>
-
-                    <p className="mt-3 font-semibold text-slate-700">
-                      No tracking data yet
-                    </p>
-
-                    <p className="mt-1 text-sm text-slate-400">
-                      Add an offer and generate your first tracking link.
-                    </p>
-                  </div>
+                <div className="mt-5 text-sm font-bold">Create / Manage Offer</div>
+                <div className="mt-1 text-xs leading-5 text-slate-500">
+                  Add new CPA offers or edit existing offers.
                 </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => router.push("/admin/affiliates")}
+                className="group rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-left transition hover:-translate-y-0.5 hover:border-cyan-500/30 hover:bg-slate-900"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="rounded-xl bg-cyan-500/10 p-3 text-cyan-400">
+                    <Users size={21} />
+                  </div>
+                  <ChevronRight
+                    size={18}
+                    className="text-slate-600 transition group-hover:translate-x-1 group-hover:text-cyan-400"
+                  />
+                </div>
+
+                <div className="mt-5 text-sm font-bold">
+                  Manage Affiliates
+                </div>
+                <div className="mt-1 text-xs leading-5 text-slate-500">
+                  Review accounts and change affiliate status.
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  document
+                    .getElementById("control-center")
+                    ?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "start",
+                    })
+                }
+                className="group rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-left transition hover:-translate-y-0.5 hover:border-cyan-500/30 hover:bg-slate-900"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="rounded-xl bg-cyan-500/10 p-3 text-cyan-400">
+                    <Settings size={21} />
+                  </div>
+                  <ChevronRight
+                    size={18}
+                    className="text-slate-600 transition group-hover:translate-x-1 group-hover:text-cyan-400"
+                  />
+                </div>
+
+                <div className="mt-5 text-sm font-bold">
+                  Control Center
+                </div>
+                <div className="mt-1 text-xs leading-5 text-slate-500">
+                  See all network management modules.
+                </div>
+              </button>
+            </div>
+          </section>
+
+          {/* Control center */}
+          <section id="control-center" className="mt-10 scroll-mt-24">
+            <div className="mb-5">
+              <div className="flex items-center gap-2">
+                <Settings size={20} className="text-cyan-400" />
+                <h2 className="text-xl font-bold">Network Control Center</h2>
               </div>
 
-              {/* Quick Actions */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <h3 className="font-bold">
-                  Quick Actions
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+                This is the central place for controlling every major section
+                of the affiliate panel. Existing modules are already connected;
+                the remaining modules will be connected one by one.
+              </p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {controlCards.map((card) => {
+                const Icon = card.icon;
+                const active = card.status === "Active";
+
+                return (
+                  <button
+                    key={card.title}
+                    type="button"
+                    onClick={() => handleControlAction(card)}
+                    className={`group rounded-2xl border p-5 text-left transition ${
+                      active
+                        ? "border-cyan-500/20 bg-slate-900/70 hover:-translate-y-0.5 hover:border-cyan-500/40"
+                        : "border-slate-800 bg-slate-900/40 hover:border-slate-700"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div
+                        className={`rounded-xl p-3 ${
+                          active
+                            ? "bg-cyan-500/10 text-cyan-400"
+                            : "bg-slate-800 text-slate-500"
+                        }`}
+                      >
+                        <Icon size={21} />
+                      </div>
+
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider ${
+                          active
+                            ? "bg-emerald-500/10 text-emerald-400"
+                            : "bg-slate-800 text-slate-500"
+                        }`}
+                      >
+                        {card.status}
+                      </span>
+                    </div>
+
+                    <div className="mt-5 flex items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-bold text-white">
+                          {card.title}
+                        </h3>
+                        <p className="mt-2 text-xs leading-5 text-slate-500">
+                          {card.description}
+                        </p>
+                      </div>
+
+                      <ChevronRight
+                        size={17}
+                        className="shrink-0 text-slate-700 transition group-hover:translate-x-1 group-hover:text-cyan-400"
+                      />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          {/* Current status */}
+          <section className="mt-10 rounded-2xl border border-slate-800 bg-slate-900/50 p-5 sm:p-6">
+            <div className="flex items-start gap-4">
+              <div className="rounded-xl bg-emerald-500/10 p-3 text-emerald-400">
+                <CheckCircle2 size={22} />
+              </div>
+
+              <div>
+                <h3 className="font-bold text-white">
+                  Admin system connected
                 </h3>
 
-                <div className="mt-5 space-y-3">
-
-                  <button
-                    type="button"
-                    onClick={() => router.push("/admin/offers")}
-                    className="flex w-full items-center gap-3 rounded-xl border border-slate-200 p-4 text-left transition hover:border-blue-300 hover:bg-blue-50"
-                  >
-                    <span className="text-xl">＋</span>
-
-                    <span>
-                      <b className="block text-sm">
-                        Create Offer
-                      </b>
-
-                      <small className="text-slate-500">
-                        Add a new CPA offer
-                      </small>
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-3 rounded-xl border border-slate-200 p-4 text-left transition hover:border-blue-300 hover:bg-blue-50"
-                  >
-                    <span className="text-xl">↗</span>
-
-                    <span>
-                      <b className="block text-sm">
-                        Tracking Links
-                      </b>
-
-                      <small className="text-slate-500">
-                        Manage generated links
-                      </small>
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-3 rounded-xl border border-slate-200 p-4 text-left transition hover:border-blue-300 hover:bg-blue-50"
-                  >
-                    <span className="text-xl">▤</span>
-
-                    <span>
-                      <b className="block text-sm">
-                        View Reports
-                      </b>
-
-                      <small className="text-slate-500">
-                        Analyze network results
-                      </small>
-                    </span>
-                  </button>
-
-                </div>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  Your admin authentication is active. Affiliate and Offer
+                  management are connected to the current backend. We will now
+                  connect the remaining modules to the same control system.
+                </p>
               </div>
             </div>
+          </section>
 
-            {/* Modules */}
-            <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-                <div>
-                  <h3 className="font-bold">
-                    CPA Network Modules
-                  </h3>
-
-                  <p className="mt-1 text-sm text-slate-500">
-                    The panel is ready to be connected to your Supabase data.
-                  </p>
-                </div>
-
-                <span className="text-xs font-semibold text-emerald-600">
-                  ● Admin access active
-                </span>
-              </div>
-
-              <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <p className="text-sm font-semibold">
-                    Offers & Links
-                  </p>
-
-                  <p className="mt-1 text-xs leading-5 text-slate-500">
-                    Create offers and tracking URLs
-                  </p>
-                </div>
-
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <p className="text-sm font-semibold">
-                    Conversions
-                  </p>
-
-                  <p className="mt-1 text-xs leading-5 text-slate-500">
-                    Track approved conversions
-                  </p>
-                </div>
-
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <p className="text-sm font-semibold">
-                    Affiliates
-                  </p>
-
-                  <p className="mt-1 text-xs leading-5 text-slate-500">
-                    Manage publishers
-                  </p>
-                </div>
-
-                <div className="rounded-xl bg-slate-50 p-4">
-                  <p className="text-sm font-semibold">
-                    Postbacks
-                  </p>
-
-                  <p className="mt-1 text-xs leading-5 text-slate-500">
-                    Receive conversion callbacks
-                  </p>
-                </div>
-
-              </div>
-            </div>
-
-          </div>
-        </section>
-      </div>
+          {/* Footer */}
+          <footer className="py-8 text-center text-[11px] text-slate-600">
+            UpNetwork CPA Admin Control Center
+          </footer>
+        </div>
+      </section>
     </main>
   );
-                        }
+}
