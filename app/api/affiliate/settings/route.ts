@@ -22,14 +22,13 @@ const supabaseAdmin = createClient(
 );
 
 type Profile = {
-  id?: string | null;
-  user_id?: string | null;
-  auth_id?: string | null;
+  id: string;
+  affiliate_id: string;
+  full_name?: string | null;
   email?: string | null;
-  affiliate_id?: string | null;
-  affiliateId?: string | null;
-  affiliate_code?: string | null;
-  code?: string | null;
+  status?: string | null;
+  referral_code?: string | null;
+  referral_rate?: number | null;
 };
 
 type AffiliateSettings = {
@@ -94,49 +93,46 @@ async function authenticate(request: NextRequest) {
   };
 }
 
-async function getProfile(userId: string, email?: string | null) {
-  const attempts = [
-    { column: "id", value: userId },
-    { column: "user_id", value: userId },
-    { column: "auth_id", value: userId },
-  ];
+/**
+ * Get affiliate profile from the current database structure.
+ *
+ * IMPORTANT:
+ * We use affiliate_profiles instead of the old profiles table.
+ */
+async function getProfile(userId: string) {
+  const {
+    data,
+    error,
+  } = await supabaseAdmin
+    .from("affiliate_profiles")
+    .select(
+      "id, affiliate_id, full_name, email, status, referral_code, referral_rate"
+    )
+    .eq("id", userId)
+    .maybeSingle();
 
-  for (const attempt of attempts) {
-    const { data, error } = await supabaseAdmin
-      .from("profiles")
-      .select("*")
-      .eq(attempt.column, attempt.value)
-      .maybeSingle();
+  if (error) {
+    console.error(
+      "Affiliate profile lookup error:",
+      error
+    );
 
-    if (!error && data) {
-      return data as Profile;
-    }
+    return null;
   }
 
-  if (email) {
-    const { data, error } = await supabaseAdmin
-      .from("profiles")
-      .select("*")
-      .eq("email", email)
-      .maybeSingle();
-
-    if (!error && data) {
-      return data as Profile;
-    }
-  }
-
-  return null;
+  return data as Profile | null;
 }
 
-function getAffiliateId(profile: Profile | null, userId: string) {
-  const existingAffiliateId =
-    profile?.affiliate_id ||
-    profile?.affiliateId ||
-    profile?.affiliate_code ||
-    profile?.code;
+function getAffiliateId(
+  profile: Profile | null,
+  userId: string
+) {
+  if (profile?.affiliate_id) {
+    return String(profile.affiliate_id);
+  }
 
-  if (existingAffiliateId) {
-    return String(existingAffiliateId);
+  if (profile?.referral_code) {
+    return String(profile.referral_code);
   }
 
   return `AFF-${userId.slice(0, 8).toUpperCase()}`;
@@ -183,51 +179,81 @@ function mapSettings(
     userId,
     affiliateId,
 
-    fullName: row?.full_name ?? "",
+    fullName:
+      row?.full_name ??
+      profile?.full_name ??
+      "",
+
     phone: row?.phone ?? "",
     company: row?.company ?? "",
 
-    timezone: row?.timezone || "Asia/Dhaka",
-    currency: row?.currency || "USD",
+    timezone:
+      row?.timezone ||
+      "Asia/Dhaka",
 
-    paymentMethod: row?.payment_method ?? "",
-    paymentAddress: row?.payment_address ?? "",
-    paymentNote: row?.payment_note ?? "",
+    currency:
+      row?.currency ||
+      "USD",
+
+    paymentMethod:
+      row?.payment_method ??
+      "",
+
+    paymentAddress:
+      row?.payment_address ??
+      "",
+
+    paymentNote:
+      row?.payment_note ??
+      "",
 
     emailNotifications:
-      row?.email_notifications ?? true,
+      row?.email_notifications ??
+      true,
 
     conversionNotifications:
-      row?.conversion_notifications ?? true,
+      row?.conversion_notifications ??
+      true,
 
     paymentNotifications:
-      row?.payment_notifications ?? true,
+      row?.payment_notifications ??
+      true,
 
-    email: profile?.email ?? null,
+    email:
+      profile?.email ??
+      null,
 
-    updatedAt: row?.updated_at ?? null,
+    updatedAt:
+      row?.updated_at ??
+      null,
   };
 }
 
-export async function GET(request: NextRequest) {
+export async function GET(
+  request: NextRequest
+) {
   try {
-    const { user, error: authError } =
-      await authenticate(request);
+    const {
+      user,
+      error: authError,
+    } = await authenticate(request);
 
     if (authError || !user) {
       return NextResponse.json(
         {
           success: false,
-          error: authError || "Unauthorized.",
+          error:
+            authError ||
+            "Unauthorized.",
         },
-        { status: 401 }
+        {
+          status: 401,
+        }
       );
     }
 
-    const profile = await getProfile(
-      user.id,
-      user.email
-    );
+    const profile =
+      await getProfile(user.id);
 
     const {
       data,
@@ -251,7 +277,9 @@ export async function GET(request: NextRequest) {
             "Failed to load affiliate settings.",
           details: error.message,
         },
-        { status: 500 }
+        {
+          status: 500,
+        }
       );
     }
 
@@ -272,25 +300,36 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: "Internal server error.",
+        error:
+          "Internal server error.",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
 
-export async function PUT(request: NextRequest) {
+export async function PUT(
+  request: NextRequest
+) {
   try {
-    const { user, error: authError } =
-      await authenticate(request);
+    const {
+      user,
+      error: authError,
+    } = await authenticate(request);
 
     if (authError || !user) {
       return NextResponse.json(
         {
           success: false,
-          error: authError || "Unauthorized.",
+          error:
+            authError ||
+            "Unauthorized.",
         },
-        { status: 401 }
+        {
+          status: 401,
+        }
       );
     }
 
@@ -302,47 +341,75 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "Invalid JSON request body.",
+          error:
+            "Invalid JSON request body.",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
-    const profile = await getProfile(
-      user.id,
-      user.email
-    );
+    const profile =
+      await getProfile(user.id);
 
-    const affiliateId = getAffiliateId(
-      profile,
-      user.id
-    );
+    const affiliateId =
+      getAffiliateId(
+        profile,
+        user.id
+      );
 
     const timezone =
-      cleanString(body.timezone, 100) ||
+      cleanString(
+        body.timezone,
+        100
+      ) ||
       "Asia/Dhaka";
 
     const currency =
-      cleanString(body.currency, 20) ||
+      cleanString(
+        body.currency,
+        20
+      ) ||
       "USD";
 
     const paymentMethod =
-      cleanString(body.paymentMethod, 100);
+      cleanString(
+        body.paymentMethod,
+        100
+      );
 
     const paymentAddress =
-      cleanString(body.paymentAddress, 500);
+      cleanString(
+        body.paymentAddress,
+        500
+      );
 
     const paymentNote =
-      cleanString(body.paymentNote, 1000);
+      cleanString(
+        body.paymentNote,
+        1000
+      );
 
     const fullName =
-      cleanString(body.fullName, 150);
+      cleanString(
+        body.fullName,
+        150
+      ) ||
+      profile?.full_name ||
+      null;
 
     const phone =
-      cleanString(body.phone, 50);
+      cleanString(
+        body.phone,
+        50
+      );
 
     const company =
-      cleanString(body.company, 150);
+      cleanString(
+        body.company,
+        150
+      );
 
     const {
       data: existingSettings,
@@ -364,45 +431,64 @@ export async function PUT(request: NextRequest) {
           success: false,
           error:
             "Failed to read existing settings.",
-          details: existingError.message,
+          details:
+            existingError.message,
         },
-        { status: 500 }
+        {
+          status: 500,
+        }
       );
     }
 
     const payload = {
       user_id: user.id,
-      affiliate_id: affiliateId,
+      affiliate_id:
+        affiliateId,
 
-      full_name: fullName,
+      full_name:
+        fullName,
+
       phone,
       company,
 
       timezone,
       currency,
 
-      payment_method: paymentMethod,
-      payment_address: paymentAddress,
-      payment_note: paymentNote,
+      payment_method:
+        paymentMethod,
 
-      email_notifications: cleanBoolean(
-        body.emailNotifications,
-        existingSettings?.email_notifications ?? true
-      ),
+      payment_address:
+        paymentAddress,
 
-      conversion_notifications: cleanBoolean(
-        body.conversionNotifications,
-        existingSettings?.conversion_notifications ??
-          true
-      ),
+      payment_note:
+        paymentNote,
 
-      payment_notifications: cleanBoolean(
-        body.paymentNotifications,
-        existingSettings?.payment_notifications ??
-          true
-      ),
+      email_notifications:
+        cleanBoolean(
+          body.emailNotifications,
+          existingSettings
+            ?.email_notifications ??
+            true
+        ),
 
-      updated_at: new Date().toISOString(),
+      conversion_notifications:
+        cleanBoolean(
+          body.conversionNotifications,
+          existingSettings
+            ?.conversion_notifications ??
+            true
+        ),
+
+      payment_notifications:
+        cleanBoolean(
+          body.paymentNotifications,
+          existingSettings
+            ?.payment_notifications ??
+            true
+        ),
+
+      updated_at:
+        new Date().toISOString(),
     };
 
     const {
@@ -410,9 +496,13 @@ export async function PUT(request: NextRequest) {
       error,
     } = await supabaseAdmin
       .from("affiliate_settings")
-      .upsert(payload, {
-        onConflict: "user_id",
-      })
+      .upsert(
+        payload,
+        {
+          onConflict:
+            "user_id",
+        }
+      )
       .select("*")
       .single();
 
@@ -427,15 +517,19 @@ export async function PUT(request: NextRequest) {
           success: false,
           error:
             "Failed to save affiliate settings.",
-          details: error.message,
+          details:
+            error.message,
         },
-        { status: 500 }
+        {
+          status: 500,
+        }
       );
     }
 
     return NextResponse.json({
       success: true,
-      message: "Settings saved successfully.",
+      message:
+        "Settings saved successfully.",
       settings: mapSettings(
         data as AffiliateSettings,
         user.id,
@@ -451,9 +545,12 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: "Internal server error.",
+        error:
+          "Internal server error.",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
-    }
+        }
