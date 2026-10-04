@@ -9,7 +9,7 @@ type ApplicationStatus =
   | "rejected"
   | "suspended";
 
-function normalizeStatus(value: any): ApplicationStatus {
+function normalizeStatus(value: unknown): ApplicationStatus {
   const status = String(value || "")
     .trim()
     .toLowerCase();
@@ -65,7 +65,8 @@ export async function GET(request: NextRequest) {
     if (!accessToken) {
       return NextResponse.json(
         {
-          error: "Authentication token is missing.",
+          error:
+            "Authentication token is missing.",
         },
         { status: 401 }
       );
@@ -85,9 +86,10 @@ export async function GET(request: NextRequest) {
     const {
       data: authData,
       error: authError,
-    } = await supabaseAdmin.auth.getUser(
-      accessToken
-    );
+    } =
+      await supabaseAdmin.auth.getUser(
+        accessToken
+      );
 
     const user = authData?.user;
 
@@ -101,16 +103,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    /*
+     * Only affiliate accounts are allowed
+     * inside /affiliate.
+     */
     const accountType = String(
       user.user_metadata?.account_type || ""
     )
       .trim()
       .toLowerCase();
 
-    /*
-     * Only affiliate accounts are allowed
-     * inside /affiliate.
-     */
     if (
       accountType &&
       accountType !== "affiliate"
@@ -128,51 +130,18 @@ export async function GET(request: NextRequest) {
     }
 
     /*
-     * Approval status is controlled from the
-     * Admin Affiliates system through Auth metadata.
+     * Affiliate approval status is controlled
+     * through Supabase Auth user metadata.
      *
-     * Default = pending.
+     * Default status = pending.
      */
-    let status = normalizeStatus(
+    const status = normalizeStatus(
       user.user_metadata?.application_status
     );
 
     /*
-     * Try profiles as a compatibility fallback.
-     * Some older accounts may have the status there.
+     * APPROVED
      */
-    try {
-      const lookupColumns = [
-        "id",
-        "user_id",
-        "auth_id",
-      ];
-
-      for (const column of lookupColumns) {
-        const result =
-          await supabaseAdmin
-            .from("profiles")
-            .select("application_status")
-            .eq(column, user.id)
-            .maybeSingle();
-
-        if (
-          !result.error &&
-          result.data?.application_status
-        ) {
-          status = normalizeStatus(
-            result.data.application_status
-          );
-          break;
-        }
-      }
-    } catch (error) {
-      console.warn(
-        "Affiliate profile status lookup failed:",
-        error
-      );
-    }
-
     if (status === "approved") {
       return NextResponse.json(
         {
@@ -193,6 +162,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    /*
+     * REJECTED
+     */
     if (status === "rejected") {
       return NextResponse.json(
         {
@@ -212,6 +184,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    /*
+     * SUSPENDED
+     */
     if (status === "suspended") {
       return NextResponse.json(
         {
@@ -231,6 +206,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    /*
+     * PENDING
+     */
     return NextResponse.json(
       {
         allowed: false,
