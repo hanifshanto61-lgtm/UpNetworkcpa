@@ -21,8 +21,46 @@ function normalizePayout(value: unknown) {
   return Number(payout.toFixed(2));
 }
 
-export async function GET(request: NextRequest) {
+function detectDevice(userAgent: string) {
+  if (/tablet|ipad/i.test(userAgent)) {
+    return "Tablet";
+  }
+
+  if (/mobile|android|iphone/i.test(userAgent)) {
+    return "Mobile";
+  }
+
+  return "Desktop";
+}
+
+function detectBrowser(userAgent: string) {
+  if (/edg/i.test(userAgent)) {
+    return "Edge";
+  }
+
+  if (/chrome/i.test(userAgent)) {
+    return "Chrome";
+  }
+
+  if (/firefox/i.test(userAgent)) {
+    return "Firefox";
+  }
+
+  if (/safari/i.test(userAgent)) {
+    return "Safari";
+  }
+
+  return "Other";
+}
+
+export async function GET(
+  request: NextRequest
+) {
   try {
+    /* ------------------------------------------
+       1. SUPABASE CONFIGURATION
+    ------------------------------------------ */
+
     const supabaseUrl =
       process.env.NEXT_PUBLIC_SUPABASE_URL;
 
@@ -39,16 +77,21 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const supabase = createClient(
-      supabaseUrl,
-      serviceRoleKey,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
-    );
+    const supabase =
+      createClient(
+        supabaseUrl,
+        serviceRoleKey,
+        {
+          auth: {
+            autoRefreshToken: false,
+            persistSession: false,
+          },
+        }
+      );
+
+    /* ------------------------------------------
+       2. READ PARAMETERS
+    ------------------------------------------ */
 
     const { searchParams } =
       new URL(request.url);
@@ -61,9 +104,9 @@ export async function GET(request: NextRequest) {
       searchParams.get("offerId") ||
       searchParams.get("offer_id");
 
-    const smartlinkId =
+    const smartlinkSlug =
       searchParams.get("sl") ||
-      "rotating-smartlink";
+      "default-smartlink";
 
     if (!affiliateId) {
       return NextResponse.json(
@@ -75,18 +118,26 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // ==========================================
-    // VALIDATE AFFILIATE
-    // ==========================================
+    /* ------------------------------------------
+       3. VALIDATE AFFILIATE
+       Current schema:
+       public.affiliate_profiles
+    ------------------------------------------ */
 
     const {
       data: affiliate,
       error: affiliateError,
-    } = await supabase
-      .from("profiles")
-      .select("id, affiliate_id")
-      .eq("affiliate_id", affiliateId)
-      .maybeSingle();
+    } =
+      await supabase
+        .from("affiliate_profiles")
+        .select(
+          "id, affiliate_id, status"
+        )
+        .eq(
+          "affiliate_id",
+          affiliateId
+        )
+        .maybeSingle();
 
     if (affiliateError) {
       console.error(
@@ -113,21 +164,49 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // ==========================================
-    // GENERATE CLICK ID
-    // ==========================================
+    /* ------------------------------------------
+       4. CHECK AFFILIATE STATUS
+    ------------------------------------------ */
+
+    const affiliateStatus =
+      String(
+        affiliate.status || "active"
+      )
+        .trim()
+        .toLowerCase();
+
+    if (
+      affiliateStatus === "suspended" ||
+      affiliateStatus === "rejected"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Affiliate account is not active.",
+        },
+        { status: 403 }
+      );
+    }
+
+    /* ------------------------------------------
+       5. GENERATE CLICK ID
+    ------------------------------------------ */
 
     const clickId = randomUUID();
 
-    // ==========================================
-    // REQUEST INFORMATION
-    // ==========================================
+    /* ------------------------------------------
+       6. REQUEST INFORMATION
+    ------------------------------------------ */
 
     const userAgent =
-      request.headers.get("user-agent") || "";
+      request.headers.get(
+        "user-agent"
+      ) || "";
 
     const referer =
-      request.headers.get("referer") || "";
+      request.headers.get(
+        "referer"
+      ) || null;
 
     const country =
       request.headers.get(
@@ -138,52 +217,36 @@ export async function GET(request: NextRequest) {
       ) ||
       null;
 
-    // ==========================================
-    // DEVICE
-    // ==========================================
+    const device =
+      detectDevice(userAgent);
 
-    let device = "Desktop";
+    const browser =
+      detectBrowser(userAgent);
 
-    if (/tablet|ipad/i.test(userAgent)) {
-      device = "Tablet";
-    } else if (
-      /mobile|android|iphone/i.test(userAgent)
-    ) {
-      device = "Mobile";
-    }
-
-    // ==========================================
-    // BROWSER
-    // ==========================================
-
-    let browser = "Other";
-
-    if (/edg/i.test(userAgent)) {
-      browser = "Edge";
-    } else if (/chrome/i.test(userAgent)) {
-      browser = "Chrome";
-    } else if (/firefox/i.test(userAgent)) {
-      browser = "Firefox";
-    } else if (/safari/i.test(userAgent)) {
-      browser = "Safari";
-    }
-
-    // ==========================================
-    // OFFER TRACKING
-    // ==========================================
+    /* ------------------------------------------
+       7. OFFER TRACKING
+    ------------------------------------------ */
 
     if (offerId) {
       const {
         data: offer,
         error: offerError,
-      } = await supabase
-        .from("offers")
-        .select(
-          "id, offer_url, payout, currency, status"
-        )
-        .eq("id", offerId)
-        .eq("status", "active")
-        .maybeSingle();
+      } =
+        await supabase
+          .from("offers")
+          .select(
+            `
+              id,
+              name,
+              payout,
+              tracking_url,
+              image_url,
+              status
+            `
+          )
+          .eq("id", offerId)
+          .eq("status", "active")
+          .maybeSingle();
 
       if (offerError) {
         console.error(
@@ -210,74 +273,51 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      // ==========================================
-      // ADMIN CONTROLLED PAYOUT
-      // ==========================================
+      /* ----------------------------------------
+         OFFER PAYOUT
+      ---------------------------------------- */
 
       const offerPayout =
         normalizePayout(
           offer.payout
         );
 
-      // ==========================================
-      // SAVE OFFER CLICK
-      //
-      // First try with offer_id.
-      // If the current database does not have
-      // offer_id, retry without it.
-      // ==========================================
+      /* ----------------------------------------
+         SAVE OFFER CLICK
+      ---------------------------------------- */
 
-      const clickWithOfferId = {
+      const clickData = {
         click_id: clickId,
-        affiliate_id: affiliateId,
-        offer_id: offer.id,
-        smartlink_id: `offer-${offer.id}`,
+
+        affiliate_id:
+          affiliateId,
+
+        offer_id:
+          offer.id,
+
+        smartlink_id:
+          null,
+
         country,
+
         device,
+
         browser,
+
         referer,
-        payout: offerPayout,
+
+        status: "click",
+
+        payout:
+          offerPayout,
       };
 
-      let {
+      const {
         error: clickError,
-      } = await supabase
-        .from("clicks")
-        .insert(clickWithOfferId);
-
-      // ==========================================
-      // FALLBACK
-      // ==========================================
-
-      if (clickError) {
-        console.warn(
-          "Offer click insert with offer_id failed. Retrying without offer_id:",
-          clickError
-        );
-
-        const clickWithoutOfferId = {
-          click_id: clickId,
-          affiliate_id: affiliateId,
-          smartlink_id: `offer-${offer.id}`,
-          country,
-          device,
-          browser,
-          referer,
-          payout: offerPayout,
-        };
-
-        const fallbackResult =
-          await supabase
-            .from("clicks")
-            .insert(clickWithoutOfferId);
-
-        clickError =
-          fallbackResult.error;
-      }
-
-      // ==========================================
-      // FINAL CLICK INSERT ERROR
-      // ==========================================
+      } =
+        await supabase
+          .from("clicks")
+          .insert(clickData);
 
       if (clickError) {
         console.error(
@@ -297,13 +337,31 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      // ==========================================
-      // REDIRECT TO OFFER
-      // ==========================================
+      /* ----------------------------------------
+         VALIDATE TRACKING URL
+      ---------------------------------------- */
+
+      if (
+        !offer.tracking_url
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "This offer does not have a tracking URL.",
+          },
+          { status: 500 }
+        );
+      }
 
       try {
         const redirectUrl =
-          new URL(offer.offer_url);
+          new URL(
+            offer.tracking_url
+          );
+
+        /* --------------------------------------
+           SUB PARAMETERS
+        -------------------------------------- */
 
         redirectUrl.searchParams.set(
           "sub1",
@@ -315,14 +373,14 @@ export async function GET(request: NextRequest) {
           affiliateId
         );
 
-        /*
-         * Keep offer_id in the outgoing URL
-         * for the advertiser/postback system.
-         */
         redirectUrl.searchParams.set(
           "offer_id",
           String(offer.id)
         );
+
+        /* --------------------------------------
+           REDIRECT
+        -------------------------------------- */
 
         return NextResponse.redirect(
           redirectUrl.toString(),
@@ -337,32 +395,100 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(
           {
             error:
-              "Offer URL is invalid.",
+              "Offer tracking URL is invalid.",
           },
           { status: 500 }
         );
       }
     }
 
-    // ==========================================
-    // EXISTING SMARTLINK TRACKING
-    // ==========================================
+    /* ------------------------------------------
+       8. SMARTLINK DATABASE LOOKUP
+    ------------------------------------------ */
+
+    let smartlinkUuid:
+      string | null = null;
+
+    try {
+      const {
+        data: smartlink,
+        error: smartlinkError,
+      } =
+        await supabase
+          .from("smart_links")
+          .select(
+            "id, affiliate_id, slug, destination_url, status"
+          )
+          .eq(
+            "affiliate_id",
+            affiliateId
+          )
+          .eq(
+            "slug",
+            smartlinkSlug
+          )
+          .eq(
+            "status",
+            "active"
+          )
+          .maybeSingle();
+
+      if (
+        !smartlinkError &&
+        smartlink
+      ) {
+        smartlinkUuid =
+          smartlink.id;
+      }
+    } catch (error) {
+      console.warn(
+        "Smartlink lookup failed:",
+        error
+      );
+    }
+
+    /* ------------------------------------------
+       9. SAVE SMARTLINK CLICK
+    ------------------------------------------ */
+
+    const smartlinkClickData = {
+      click_id:
+        clickId,
+
+      affiliate_id:
+        affiliateId,
+
+      smartlink_id:
+        smartlinkUuid,
+
+      country,
+
+      device,
+
+      browser,
+
+      referer,
+
+      status:
+        "click",
+
+      payout:
+        0,
+    };
 
     const {
-      error: smartlinkClickError,
-    } = await supabase
-      .from("clicks")
-      .insert({
-        click_id: clickId,
-        affiliate_id: affiliateId,
-        smartlink_id: smartlinkId,
-        country,
-        device,
-        browser,
-        referer,
-      });
+      error:
+        smartlinkClickError,
+    } =
+      await supabase
+        .from("clicks")
+        .insert(
+          smartlinkClickData
+        );
 
-    if (smartlinkClickError) {
+    if (
+      smartlinkClickError
+    ) {
       console.error(
         "Smartlink click tracking error:",
         smartlinkClickError
@@ -380,9 +506,71 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // ==========================================
-    // ROTATE SMARTLINK
-    // ==========================================
+    /* ------------------------------------------
+       10. USE DATABASE SMARTLINK DESTINATION
+    ------------------------------------------ */
+
+    if (smartlinkUuid) {
+      try {
+        const {
+          data: smartlink,
+        } =
+          await supabase
+            .from("smart_links")
+            .select(
+              "destination_url,status"
+            )
+            .eq(
+              "id",
+              smartlinkUuid
+            )
+            .eq(
+              "status",
+              "active"
+            )
+            .maybeSingle();
+
+        if (
+          smartlink?.destination_url
+        ) {
+          try {
+            const redirectUrl =
+              new URL(
+                smartlink.destination_url
+              );
+
+            redirectUrl.searchParams.set(
+              "sub1",
+              clickId
+            );
+
+            redirectUrl.searchParams.set(
+              "sub2",
+              affiliateId
+            );
+
+            return NextResponse.redirect(
+              redirectUrl.toString(),
+              302
+            );
+          } catch (error) {
+            console.warn(
+              "Database smartlink destination URL is invalid:",
+              error
+            );
+          }
+        }
+      } catch (error) {
+        console.warn(
+          "Smartlink destination lookup failed:",
+          error
+        );
+      }
+    }
+
+    /* ------------------------------------------
+       11. FALLBACK SMARTLINK ROTATION
+    ------------------------------------------ */
 
     const firstByte =
       Number.parseInt(
