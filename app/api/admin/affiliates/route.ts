@@ -27,20 +27,30 @@ async function getAdminUser(request: NextRequest) {
     return null;
   }
 
-  const authorization = request.headers.get("authorization");
+  const authorization =
+    request.headers.get("authorization");
 
-  if (!authorization || !authorization.startsWith("Bearer ")) {
+  if (
+    !authorization ||
+    !authorization.startsWith("Bearer ")
+  ) {
     return null;
   }
 
-  const accessToken = authorization.replace("Bearer ", "").trim();
+  const accessToken = authorization
+    .replace("Bearer ", "")
+    .trim();
 
   if (!accessToken) {
     return null;
   }
 
-  const { data, error } =
-    await supabaseAdmin.auth.getUser(accessToken);
+  const {
+    data,
+    error,
+  } = await supabaseAdmin.auth.getUser(
+    accessToken
+  );
 
   if (error || !data.user) {
     return null;
@@ -49,7 +59,9 @@ async function getAdminUser(request: NextRequest) {
   const email =
     data.user.email?.trim().toLowerCase();
 
-  if (email !== ADMIN_EMAIL.toLowerCase()) {
+  if (
+    email !== ADMIN_EMAIL.toLowerCase()
+  ) {
     return null;
   }
 
@@ -81,7 +93,9 @@ function normalizeStatus(value: unknown) {
    GET AFFILIATES
 ========================================= */
 
-export async function GET(request: NextRequest) {
+export async function GET(
+  request: NextRequest
+) {
   try {
     if (!supabaseAdmin) {
       return NextResponse.json(
@@ -94,7 +108,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const admin = await getAdminUser(request);
+    const admin =
+      await getAdminUser(request);
 
     if (!admin) {
       return NextResponse.json(
@@ -127,11 +142,16 @@ export async function GET(request: NextRequest) {
     const perPage = 1000;
 
     while (true) {
-      const { data, error } =
-        await supabaseAdmin.auth.admin.listUsers({
-          page,
-          perPage,
-        });
+      const {
+        data,
+        error,
+      } =
+        await supabaseAdmin.auth.admin.listUsers(
+          {
+            page,
+            perPage,
+          }
+        );
 
       if (error) {
         console.error(
@@ -150,11 +170,14 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      const pageUsers = data?.users || [];
+      const pageUsers =
+        data?.users || [];
 
       users.push(...pageUsers);
 
-      if (pageUsers.length < perPage) {
+      if (
+        pageUsers.length < perPage
+      ) {
         break;
       }
 
@@ -177,15 +200,18 @@ export async function GET(request: NextRequest) {
             .trim()
             .toLowerCase();
 
-        return accountType === "affiliate";
+        return (
+          accountType === "affiliate"
+        );
       })
       .map((user) => {
         const metadata =
           user.user_metadata || {};
 
-        const status = normalizeStatus(
-          metadata.application_status
-        );
+        const status =
+          normalizeStatus(
+            metadata.application_status
+          );
 
         const firstName =
           String(
@@ -222,49 +248,81 @@ export async function GET(request: NextRequest) {
                 .toUpperCase()}`
           ).trim();
 
-        const affiliate = {
+        return {
           id: user.id,
-          affiliate_id: affiliateId,
+
+          affiliate_id:
+            affiliateId,
+
           name: fullName,
-          first_name: firstName,
-          last_name: lastName,
-          email: user.email || "",
+
+          first_name:
+            firstName,
+
+          last_name:
+            lastName,
+
+          email:
+            user.email || "",
+
           phone:
             metadata.phone ||
             metadata.phone_number ||
             "",
+
           country:
             metadata.country || "",
+
           city:
             metadata.city || "",
+
           traffic_source:
-            metadata.traffic_source || "",
+            metadata.traffic_source ||
+            "",
+
           monthly_traffic:
-            metadata.monthly_traffic || "",
+            metadata.monthly_traffic ||
+            "",
+
           promotion_method:
-            metadata.promotion_method || "",
+            metadata.promotion_method ||
+            "",
+
           experience:
-            metadata.experience || "",
+            metadata.experience ||
+            "",
+
           previous_networks:
-            metadata.previous_networks || "",
+            metadata.previous_networks ||
+            "",
+
           company_name:
-            metadata.company_name || "",
+            metadata.company_name ||
+            "",
+
           payment_method:
-            metadata.payment_method || "",
+            metadata.payment_method ||
+            "",
+
           referred_by:
-            metadata.referred_by || "",
-          application_status: status,
+            metadata.referred_by ||
+            "",
+
+          application_status:
+            status,
+
           created_at:
             user.created_at || null,
+
           last_sign_in_at:
-            user.last_sign_in_at || null,
+            user.last_sign_in_at ||
+            null,
+
           email_confirmed:
             Boolean(
               user.email_confirmed_at
             ),
         };
-
-        return affiliate;
       })
       .filter((affiliate) => {
         if (
@@ -295,22 +353,30 @@ export async function GET(request: NextRequest) {
           .join(" ")
           .toLowerCase();
 
-        return searchable.includes(search);
+        return searchable.includes(
+          search
+        );
       })
       .sort((a, b) => {
-        const aTime = a.created_at
-          ? new Date(a.created_at).getTime()
-          : 0;
+        const aTime =
+          a.created_at
+            ? new Date(
+                a.created_at
+              ).getTime()
+            : 0;
 
-        const bTime = b.created_at
-          ? new Date(b.created_at).getTime()
-          : 0;
+        const bTime =
+          b.created_at
+            ? new Date(
+                b.created_at
+              ).getTime()
+            : 0;
 
         return bTime - aTime;
       });
 
-    const allAffiliateUsers = users.filter(
-      (user) => {
+    const allAffiliateUsers =
+      users.filter((user) => {
         const metadata =
           user.user_metadata || {};
 
@@ -319,13 +385,14 @@ export async function GET(request: NextRequest) {
             metadata.account_type || ""
           )
             .trim()
-            .toLowerCase() === "affiliate"
+            .toLowerCase() ===
+          "affiliate"
         );
-      }
-    );
+      });
 
     const totals = {
-      total: allAffiliateUsers.length,
+      total:
+        allAffiliateUsers.length,
       pending: 0,
       approved: 0,
       rejected: 0,
@@ -333,13 +400,16 @@ export async function GET(request: NextRequest) {
       unknown: 0,
     };
 
-    for (const user of allAffiliateUsers) {
+    for (
+      const user of allAffiliateUsers
+    ) {
       const metadata =
         user.user_metadata || {};
 
-      const status = normalizeStatus(
-        metadata.application_status
-      );
+      const status =
+        normalizeStatus(
+          metadata.application_status
+        );
 
       if (
         status in totals
@@ -367,7 +437,8 @@ export async function GET(request: NextRequest) {
         message:
           "Unexpected server error.",
         details:
-          error?.message || "Unknown error.",
+          error?.message ||
+          "Unknown error.",
       },
       { status: 500 }
     );
@@ -378,7 +449,9 @@ export async function GET(request: NextRequest) {
    UPDATE AFFILIATE STATUS
 ========================================= */
 
-export async function PATCH(request: NextRequest) {
+export async function PATCH(
+  request: NextRequest
+) {
   try {
     if (!supabaseAdmin) {
       return NextResponse.json(
@@ -391,7 +464,8 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const admin = await getAdminUser(request);
+    const admin =
+      await getAdminUser(request);
 
     if (!admin) {
       return NextResponse.json(
@@ -411,7 +485,8 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: "Invalid JSON body.",
+          message:
+            "Invalid JSON body.",
         },
         { status: 400 }
       );
@@ -424,7 +499,9 @@ export async function PATCH(request: NextRequest) {
 
     const requestedStatus =
       typeof body?.status === "string"
-        ? body.status.trim().toLowerCase()
+        ? body.status
+            .trim()
+            .toLowerCase()
         : "";
 
     const allowedStatuses = [
@@ -496,7 +573,9 @@ export async function PATCH(request: NextRequest) {
         .trim()
         .toLowerCase();
 
-    if (accountType !== "affiliate") {
+    if (
+      accountType !== "affiliate"
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -507,12 +586,19 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    /*
+     * Auth metadata is the single source
+     * of truth for affiliate approval.
+     */
     const updatedMetadata = {
       ...currentMetadata,
+
       application_status:
         requestedStatus,
+
       application_status_updated_at:
         new Date().toISOString(),
+
       application_status_updated_by:
         admin.id,
     };
@@ -551,48 +637,31 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    /*
-     * Try to synchronize the profile table
-     * when application_status exists there.
-     *
-     * This does not break the request if the
-     * column/table is not available because
-     * auth metadata remains the source of truth.
-     */
-    try {
-      await supabaseAdmin
-        .from("profiles")
-        .update({
-          application_status:
-            requestedStatus,
-        })
-        .eq("id", userId);
-    } catch (profileError) {
-      console.warn(
-        "Profile status sync skipped:",
-        profileError
-      );
-    }
+    const updatedMetadataResult =
+      updatedUserData.user
+        .user_metadata || {};
+
+    const affiliateId =
+      String(
+        updatedMetadataResult.affiliate_id ||
+          updatedMetadataResult.affiliateId ||
+          updatedMetadataResult.username ||
+          ""
+      ).trim();
 
     return NextResponse.json({
       success: true,
+
       message:
         `Affiliate status changed to ${requestedStatus}.`,
+
       affiliate: {
-        id: updatedUserData.user.id,
+        id:
+          updatedUserData.user.id,
+
         affiliate_id:
-          String(
-            updatedUserData.user
-              .user_metadata
-              ?.affiliate_id ||
-              updatedUserData.user
-                .user_metadata
-                ?.affiliateId ||
-              updatedUserData.user
-                .user_metadata
-                ?.username ||
-              ""
-          ),
+          affiliateId,
+
         application_status:
           requestedStatus,
       },
@@ -609,7 +678,8 @@ export async function PATCH(request: NextRequest) {
         message:
           "Unexpected server error.",
         details:
-          error?.message || "Unknown error.",
+          error?.message ||
+          "Unknown error.",
       },
       { status: 500 }
     );
