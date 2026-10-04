@@ -10,11 +10,14 @@ type Offer = {
   description: string | null;
   advertiser: string | null;
   payout: number;
-  currency: string;
+  currency: string | null;
   country: string | null;
   category: string | null;
   device: string | null;
-  offer_url: string;
+
+  // Database column
+  tracking_url: string | null;
+
   image_url: string | null;
   status: "active" | "paused";
   created_at: string;
@@ -58,7 +61,9 @@ export default function OffersPage() {
     } = await supabase.auth.getSession();
 
     if (!session?.access_token) {
-      throw new Error("Your admin session has expired. Please login again.");
+      throw new Error(
+        "Your admin session has expired. Please login again."
+      );
     }
 
     return session.access_token;
@@ -81,13 +86,17 @@ export default function OffersPage() {
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        throw new Error(result.message || "Failed to load offers.");
+        throw new Error(
+          result.message || "Failed to load offers."
+        );
       }
 
       setOffers(result.offers || []);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Failed to load offers."
+        err instanceof Error
+          ? err.message
+          : "Failed to load offers."
       );
     } finally {
       setLoading(false);
@@ -110,7 +119,12 @@ export default function OffersPage() {
     setForm({
       name: offer.name || "",
       advertiser: offer.advertiser || "",
-      offer_url: offer.offer_url || "",
+
+      // IMPORTANT:
+      // Database uses tracking_url
+      // Form uses offer_url
+      offer_url: offer.tracking_url || "",
+
       payout: String(offer.payout ?? ""),
       country: offer.country || "Worldwide",
       category: offer.category || "",
@@ -140,7 +154,9 @@ export default function OffersPage() {
     }));
   }
 
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(
+    e: FormEvent<HTMLFormElement>
+  ) {
     e.preventDefault();
 
     try {
@@ -207,25 +223,31 @@ export default function OffersPage() {
       const token = await getAccessToken();
 
       const nextStatus =
-        offer.status === "active" ? "paused" : "active";
+        offer.status === "active"
+          ? "paused"
+          : "active";
 
-      const response = await fetch("/api/admin/offers", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          id: offer.id,
-          status: nextStatus,
-        }),
-      });
+      const response = await fetch(
+        "/api/admin/offers",
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            id: offer.id,
+            status: nextStatus,
+          }),
+        }
+      );
 
       const result = await response.json();
 
       if (!response.ok || !result.success) {
         throw new Error(
-          result.message || "Failed to change offer status."
+          result.message ||
+            "Failed to change offer status."
         );
       }
 
@@ -261,7 +283,9 @@ export default function OffersPage() {
       const token = await getAccessToken();
 
       const response = await fetch(
-        `/api/admin/offers?id=${encodeURIComponent(offer.id)}`,
+        `/api/admin/offers?id=${encodeURIComponent(
+          offer.id
+        )}`,
         {
           method: "DELETE",
           headers: {
@@ -274,11 +298,14 @@ export default function OffersPage() {
 
       if (!response.ok || !result.success) {
         throw new Error(
-          result.message || "Failed to delete offer."
+          result.message ||
+            "Failed to delete offer."
         );
       }
 
-      setMessage("Offer deleted successfully.");
+      setMessage(
+        "Offer deleted successfully."
+      );
 
       await loadOffers();
     } catch (err) {
@@ -367,7 +394,9 @@ export default function OffersPage() {
           <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="mb-6">
               <h3 className="text-xl font-bold">
-                {editingId ? "Edit Offer" : "Create New Offer"}
+                {editingId
+                  ? "Edit Offer"
+                  : "Create New Offer"}
               </h3>
 
               <p className="mt-1 text-sm text-slate-500">
@@ -392,7 +421,10 @@ export default function OffersPage() {
                   required
                   value={form.name}
                   onChange={(e) =>
-                    handleChange("name", e.target.value)
+                    handleChange(
+                      "name",
+                      e.target.value
+                    )
                   }
                   placeholder="Example: Survey Offer"
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
@@ -410,7 +442,10 @@ export default function OffersPage() {
                   required
                   value={form.advertiser}
                   onChange={(e) =>
-                    handleChange("advertiser", e.target.value)
+                    handleChange(
+                      "advertiser",
+                      e.target.value
+                    )
                   }
                   placeholder="Example: Advertiser Name"
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
@@ -428,11 +463,19 @@ export default function OffersPage() {
                   required
                   value={form.offer_url}
                   onChange={(e) =>
-                    handleChange("offer_url", e.target.value)
+                    handleChange(
+                      "offer_url",
+                      e.target.value
+                    )
                   }
                   placeholder="https://example.com/offer"
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
                 />
+
+                <p className="mt-1 text-xs text-slate-400">
+                  This URL is securely stored in the database as
+                  tracking_url.
+                </p>
               </div>
 
               {/* Payout */}
@@ -448,7 +491,10 @@ export default function OffersPage() {
                   step="0.01"
                   value={form.payout}
                   onChange={(e) =>
-                    handleChange("payout", e.target.value)
+                    handleChange(
+                      "payout",
+                      e.target.value
+                    )
                   }
                   placeholder="10.00"
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
@@ -464,19 +510,40 @@ export default function OffersPage() {
                 <select
                   value={form.country}
                   onChange={(e) =>
-                    handleChange("country", e.target.value)
+                    handleChange(
+                      "country",
+                      e.target.value
+                    )
                   }
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
                 >
-                  <option value="Worldwide">Worldwide</option>
-                  <option value="United States">United States</option>
-                  <option value="United Kingdom">United Kingdom</option>
-                  <option value="Canada">Canada</option>
-                  <option value="Australia">Australia</option>
-                  <option value="Germany">Germany</option>
-                  <option value="France">France</option>
-                  <option value="Bangladesh">Bangladesh</option>
-                  <option value="India">India</option>
+                  <option value="Worldwide">
+                    Worldwide
+                  </option>
+                  <option value="United States">
+                    United States
+                  </option>
+                  <option value="United Kingdom">
+                    United Kingdom
+                  </option>
+                  <option value="Canada">
+                    Canada
+                  </option>
+                  <option value="Australia">
+                    Australia
+                  </option>
+                  <option value="Germany">
+                    Germany
+                  </option>
+                  <option value="France">
+                    France
+                  </option>
+                  <option value="Bangladesh">
+                    Bangladesh
+                  </option>
+                  <option value="India">
+                    India
+                  </option>
                 </select>
               </div>
 
@@ -490,7 +557,10 @@ export default function OffersPage() {
                   type="text"
                   value={form.category}
                   onChange={(e) =>
-                    handleChange("category", e.target.value)
+                    handleChange(
+                      "category",
+                      e.target.value
+                    )
                   }
                   placeholder="Survey, Dating, App, Finance..."
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
@@ -506,15 +576,28 @@ export default function OffersPage() {
                 <select
                   value={form.device}
                   onChange={(e) =>
-                    handleChange("device", e.target.value)
+                    handleChange(
+                      "device",
+                      e.target.value
+                    )
                   }
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
                 >
-                  <option value="All">All Devices</option>
-                  <option value="Mobile">Mobile</option>
-                  <option value="Desktop">Desktop</option>
-                  <option value="Android">Android</option>
-                  <option value="iOS">iOS</option>
+                  <option value="All">
+                    All Devices
+                  </option>
+                  <option value="Mobile">
+                    Mobile
+                  </option>
+                  <option value="Desktop">
+                    Desktop
+                  </option>
+                  <option value="Android">
+                    Android
+                  </option>
+                  <option value="iOS">
+                    iOS
+                  </option>
                 </select>
               </div>
 
@@ -528,7 +611,10 @@ export default function OffersPage() {
                   rows={4}
                   value={form.description}
                   onChange={(e) =>
-                    handleChange("description", e.target.value)
+                    handleChange(
+                      "description",
+                      e.target.value
+                    )
                   }
                   placeholder="Describe the offer..."
                   className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
@@ -545,7 +631,10 @@ export default function OffersPage() {
                   type="url"
                   value={form.image_url}
                   onChange={(e) =>
-                    handleChange("image_url", e.target.value)
+                    handleChange(
+                      "image_url",
+                      e.target.value
+                    )
                   }
                   placeholder="https://example.com/image.jpg"
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
@@ -561,12 +650,20 @@ export default function OffersPage() {
                 <select
                   value={form.status}
                   onChange={(e) =>
-                    handleChange("status", e.target.value)
+                    handleChange(
+                      "status",
+                      e.target.value
+                    )
                   }
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
                 >
-                  <option value="active">Active</option>
-                  <option value="paused">Paused</option>
+                  <option value="active">
+                    Active
+                  </option>
+
+                  <option value="paused">
+                    Paused
+                  </option>
                 </select>
               </div>
 
@@ -646,7 +743,7 @@ export default function OffersPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[900px] text-left">
+              <table className="w-full min-w-[950px] text-left">
                 <thead className="border-b border-slate-200 bg-slate-50">
                   <tr>
                     <th className="px-5 py-4 text-xs font-bold uppercase tracking-wide text-slate-500">
@@ -659,6 +756,10 @@ export default function OffersPage() {
 
                     <th className="px-5 py-4 text-xs font-bold uppercase tracking-wide text-slate-500">
                       Country
+                    </th>
+
+                    <th className="px-5 py-4 text-xs font-bold uppercase tracking-wide text-slate-500">
+                      Device
                     </th>
 
                     <th className="px-5 py-4 text-xs font-bold uppercase tracking-wide text-slate-500">
@@ -701,7 +802,8 @@ export default function OffersPage() {
                             </p>
 
                             <p className="mt-1 max-w-xs truncate text-xs text-slate-400">
-                              {offer.category || "General"}
+                              {offer.category ||
+                                "General"}
                             </p>
                           </div>
                         </div>
@@ -712,12 +814,20 @@ export default function OffersPage() {
                       </td>
 
                       <td className="px-5 py-5 text-sm text-slate-600">
-                        {offer.country || "Worldwide"}
+                        {offer.country ||
+                          "Worldwide"}
+                      </td>
+
+                      <td className="px-5 py-5 text-sm text-slate-600">
+                        {offer.device || "All"}
                       </td>
 
                       <td className="px-5 py-5">
                         <span className="font-bold text-emerald-600">
-                          ${Number(offer.payout).toFixed(2)}
+                          {offer.currency || "USD"}{" "}
+                          {Number(
+                            offer.payout
+                          ).toFixed(2)}
                         </span>
                       </td>
 
@@ -729,7 +839,8 @@ export default function OffersPage() {
                               : "bg-amber-100 text-amber-700"
                           }`}
                         >
-                          {offer.status === "active"
+                          {offer.status ===
+                          "active"
                             ? "Active"
                             : "Paused"}
                         </span>
@@ -739,7 +850,9 @@ export default function OffersPage() {
                         <div className="flex justify-end gap-2">
                           <button
                             type="button"
-                            onClick={() => startEdit(offer)}
+                            onClick={() =>
+                              startEdit(offer)
+                            }
                             className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
                           >
                             Edit
@@ -747,21 +860,31 @@ export default function OffersPage() {
 
                           <button
                             type="button"
-                            onClick={() => toggleStatus(offer)}
+                            onClick={() =>
+                              toggleStatus(
+                                offer
+                              )
+                            }
                             className={`rounded-lg px-3 py-2 text-xs font-bold transition ${
-                              offer.status === "active"
+                              offer.status ===
+                              "active"
                                 ? "bg-amber-50 text-amber-700 hover:bg-amber-100"
                                 : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
                             }`}
                           >
-                            {offer.status === "active"
+                            {offer.status ===
+                            "active"
                               ? "Pause"
                               : "Activate"}
                           </button>
 
                           <button
                             type="button"
-                            onClick={() => deleteOffer(offer)}
+                            onClick={() =>
+                              deleteOffer(
+                                offer
+                              )
+                            }
                             className="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-600 transition hover:bg-red-100"
                           >
                             Delete
@@ -783,10 +906,11 @@ export default function OffersPage() {
           </h3>
 
           <p className="mt-1 text-sm leading-6 text-blue-800">
-            এখন Admin Panel থেকে Offer তৈরি করলে সেটি Supabase database-এ
-            save হবে। এখান থেকেই Offer edit, pause, activate এবং delete
-            করা যাবে। পরের ধাপে এই Active Offer-গুলো Affiliate/Trader
-            panel-এ দেখানো হবে।
+            Admin Panel থেকে Offer তৈরি করলে সেটি
+            Supabase database-এ save হবে। এখান থেকেই
+            Offer edit, pause, activate এবং delete করা
+            যাবে। Active Offer পরবর্তী ধাপে Affiliate
+            Panel-এ দেখানো হবে।
           </p>
         </div>
       </div>
