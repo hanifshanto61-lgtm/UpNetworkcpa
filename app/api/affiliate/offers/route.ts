@@ -3,40 +3,49 @@ import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+type AnyRecord = Record<string, any>;
 
-const supabaseAdmin =
-  supabaseUrl && serviceRoleKey
-    ? createClient(supabaseUrl, serviceRoleKey, {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      })
-    : null;
+function getSupabaseAdmin() {
+  const supabaseUrl =
+    process.env.NEXT_PUBLIC_SUPABASE_URL;
 
-function makeAffiliateId(userId: string) {
-  return `UP${userId
-    .replace(/-/g, "")
-    .slice(0, 10)
-    .toUpperCase()}`;
-}
+  const serviceRoleKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-async function getAffiliate(request: NextRequest) {
-  if (!supabaseAdmin) {
+  if (!supabaseUrl || !serviceRoleKey) {
     return null;
   }
 
+  return createClient(
+    supabaseUrl,
+    serviceRoleKey,
+    {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    }
+  );
+}
+
+async function getAuthenticatedUser(
+  supabaseAdmin: any,
+  request: NextRequest
+) {
   const authorization =
     request.headers.get("authorization");
 
-  if (!authorization?.startsWith("Bearer ")) {
+  if (
+    !authorization ||
+    !authorization.startsWith("Bearer ")
+  ) {
     return null;
   }
 
   const accessToken =
-    authorization.replace("Bearer ", "").trim();
+    authorization
+      .replace("Bearer ", "")
+      .trim();
 
   if (!accessToken) {
     return null;
@@ -45,162 +54,50 @@ async function getAffiliate(request: NextRequest) {
   const {
     data: authData,
     error: authError,
-  } = await supabaseAdmin.auth.getUser(accessToken);
+  } =
+    await supabaseAdmin.auth.getUser(
+      accessToken
+    );
 
-  const user = authData?.user;
-
-  if (authError || !user) {
+  if (authError || !authData?.user) {
     return null;
   }
 
-  /*
-   * Try all common profile relationships.
-   * We use select("*") so this route does not depend
-   * on a specific profile column such as "name".
-   */
-  const possibleProfiles = [
-    {
-      column: "id",
-      value: user.id,
-    },
-    {
-      column: "user_id",
-      value: user.id,
-    },
-    {
-      column: "auth_id",
-      value: user.id,
-    },
-    {
-      column: "email",
-      value: user.email,
-    },
-  ];
+  return authData.user;
+}
 
-  for (const item of possibleProfiles) {
-    if (!item.value) {
-      continue;
-    }
-
-    try {
-      const result = await supabaseAdmin
-        .from("profiles")
-        .select("*")
-        .eq(item.column, item.value)
+async function getAffiliateProfile(
+  supabaseAdmin: any,
+  user: any
+) {
+  try {
+    const result =
+      await supabaseAdmin
+        .from("affiliate_profiles")
+        .select(
+          "id,affiliate_id,full_name,email,status,referral_code,referral_rate"
+        )
+        .eq("id", user.id)
         .maybeSingle();
 
-      if (!result.error && result.data) {
-        const profile = result.data;
+    if (
+      !result.error &&
+      result.data
+    ) {
+      return result.data as AnyRecord;
+    }
 
-        let affiliateId =
-          profile.affiliate_id ||
-          profile.affiliateId ||
-          profile.affiliate_code ||
-          profile.code ||
-          "";
-
-        /*
-         * If the profile exists but has no affiliate ID,
-         * create a stable ID from the Supabase user ID.
-         */
-        if (!affiliateId) {
-          affiliateId = makeAffiliateId(user.id);
-
-          try {
-            const updateResult =
-              await supabaseAdmin
-                .from("profiles")
-                .update({
-                  affiliate_id: affiliateId,
-                })
-                .eq(item.column, item.value)
-                .select("*")
-                .maybeSingle();
-
-            if (
-              !updateResult.error &&
-              updateResult.data
-            ) {
-              return {
-                ...updateResult.data,
-                affiliate_id:
-                  updateResult.data.affiliate_id ||
-                  affiliateId,
-              };
-            }
-          } catch (error) {
-            console.warn(
-              "Affiliate ID update error:",
-              error
-            );
-          }
-        }
-
-        return {
-          ...profile,
-          affiliate_id:
-            affiliateId ||
-            makeAffiliateId(user.id),
-        };
-      }
-    } catch (error) {
-      console.warn(
-        "Profile lookup error:",
-        error
+    if (result.error) {
+      console.error(
+        "Affiliate profile lookup error:",
+        result.error
       );
     }
-  }
-
-  /*
-   * Profile was not found.
-   * Try creating one using the available
-   * profile key formats.
-   *
-   * Record<string, string>[] is intentional here.
-   * It prevents TypeScript from locking the array
-   * to the first object's shape.
-   */
-  const affiliateId =
-    makeAffiliateId(user.id);
-
-  const createAttempts: Record<string, string>[] = [
-    {
-      id: user.id,
-      affiliate_id: affiliateId,
-    },
-    {
-      user_id: user.id,
-      affiliate_id: affiliateId,
-    },
-    {
-      auth_id: user.id,
-      affiliate_id: affiliateId,
-    },
-  ];
-
-  for (const payload of createAttempts) {
-    try {
-      const result =
-        await supabaseAdmin
-          .from("profiles")
-          .insert(payload)
-          .select("*")
-          .maybeSingle();
-
-      if (!result.error && result.data) {
-        return {
-          ...result.data,
-          affiliate_id:
-            result.data.affiliate_id ||
-            affiliateId,
-        };
-      }
-    } catch (error) {
-      console.warn(
-        "Profile creation error:",
-        error
-      );
-    }
+  } catch (error) {
+    console.error(
+      "Affiliate profile exception:",
+      error
+    );
   }
 
   return null;
@@ -210,11 +107,14 @@ export async function GET(
   request: NextRequest
 ) {
   try {
-    if (
-      !supabaseUrl ||
-      !serviceRoleKey ||
-      !supabaseAdmin
-    ) {
+    /* ------------------------------------------
+       1. SUPABASE CONFIGURATION
+    ------------------------------------------ */
+
+    const supabaseAdmin =
+      getSupabaseAdmin();
+
+    if (!supabaseAdmin) {
       return NextResponse.json(
         {
           success: false,
@@ -225,13 +125,17 @@ export async function GET(
       );
     }
 
-    /*
-     * Authenticate affiliate.
-     */
-    const affiliate =
-      await getAffiliate(request);
+    /* ------------------------------------------
+       2. AUTHENTICATE AFFILIATE
+    ------------------------------------------ */
 
-    if (!affiliate) {
+    const user =
+      await getAuthenticatedUser(
+        supabaseAdmin,
+        request
+      );
+
+    if (!user) {
       return NextResponse.json(
         {
           success: false,
@@ -242,14 +146,63 @@ export async function GET(
       );
     }
 
-    /*
-     * Get affiliate ID.
-     */
+    /* ------------------------------------------
+       3. LOAD AFFILIATE PROFILE
+    ------------------------------------------ */
+
+    const affiliate =
+      await getAffiliateProfile(
+        supabaseAdmin,
+        user
+      );
+
+    if (!affiliate) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Affiliate profile could not be found.",
+          code:
+            "AFFILIATE_PROFILE_NOT_FOUND",
+        },
+        { status: 404 }
+      );
+    }
+
+    /* ------------------------------------------
+       4. CHECK ACCOUNT STATUS
+    ------------------------------------------ */
+
+    const accountStatus =
+      String(
+        affiliate.status || "active"
+      )
+        .trim()
+        .toLowerCase();
+
+    if (
+      accountStatus === "suspended" ||
+      accountStatus === "rejected"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Your affiliate account does not have access to offers.",
+          code:
+            "AFFILIATE_ACCESS_DENIED",
+        },
+        { status: 403 }
+      );
+    }
+
+    /* ------------------------------------------
+       5. AFFILIATE ID
+    ------------------------------------------ */
+
     const affiliateId =
       String(
-        affiliate.affiliate_id ||
-          affiliate.affiliateId ||
-          ""
+        affiliate.affiliate_id || ""
       ).trim();
 
     if (!affiliateId) {
@@ -258,31 +211,46 @@ export async function GET(
           success: false,
           message:
             "Affiliate ID is unavailable.",
+          code:
+            "AFFILIATE_ID_UNAVAILABLE",
         },
         { status: 400 }
       );
     }
 
-    /*
-     * Only Active Offers are visible
-     * to affiliates.
-     */
+    /* ------------------------------------------
+       6. LOAD ACTIVE OFFERS
+    ------------------------------------------ */
+
     const {
       data,
       error,
-    } = await supabaseAdmin
-      .from("offers")
-      .select(
-        "id,name,description,advertiser,payout,currency,country,category,device,offer_url,image_url,status,created_at"
-      )
-      .eq("status", "active")
-      .order("created_at", {
-        ascending: false,
-      });
+    } =
+      await supabaseAdmin
+        .from("offers")
+        .select(
+          `
+            id,
+            name,
+            description,
+            category,
+            country,
+            payout,
+            tracking_url,
+            image_url,
+            status,
+            created_at,
+            updated_at
+          `
+        )
+        .eq("status", "active")
+        .order("created_at", {
+          ascending: false,
+        });
 
     if (error) {
       console.error(
-        "Affiliate offers error:",
+        "Affiliate offers database error:",
         error
       );
 
@@ -296,17 +264,88 @@ export async function GET(
       );
     }
 
+    /* ------------------------------------------
+       7. FORMAT OFFERS
+    ------------------------------------------ */
+
+    const offers =
+      (data || []).map(
+        (offer: AnyRecord) => ({
+          id: offer.id,
+
+          name:
+            offer.name || "Untitled Offer",
+
+          description:
+            offer.description || "",
+
+          category:
+            offer.category || "",
+
+          country:
+            offer.country || "",
+
+          payout:
+            Number(
+              offer.payout || 0
+            ),
+
+          trackingUrl:
+            offer.tracking_url || "",
+
+          /*
+           * Keep offer_url as an alias so the
+           * existing frontend can continue using
+           * the same field if it expects it.
+           */
+          offer_url:
+            offer.tracking_url || "",
+
+          imageUrl:
+            offer.image_url || "",
+
+          image_url:
+            offer.image_url || "",
+
+          status:
+            offer.status || "active",
+
+          createdAt:
+            offer.created_at || null,
+
+          created_at:
+            offer.created_at || null,
+
+          updatedAt:
+            offer.updated_at || null,
+
+          updated_at:
+            offer.updated_at || null,
+        })
+      );
+
+    /* ------------------------------------------
+       8. FINAL RESPONSE
+    ------------------------------------------ */
+
     return NextResponse.json(
       {
         success: true,
+
         affiliateId,
-        offers: data || [],
+
+        offers,
+
+        totalOffers:
+          offers.length,
       },
       {
         status: 200,
+
         headers: {
           "Cache-Control":
             "no-store, no-cache, must-revalidate",
+
           Pragma: "no-cache",
         },
       }
