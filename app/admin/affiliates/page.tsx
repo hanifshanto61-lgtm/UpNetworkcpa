@@ -17,6 +17,8 @@ import {
   ChevronLeft,
   ShieldCheck,
   UserRound,
+  UserPlus,
+  X,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -137,6 +139,16 @@ export default function AdminAffiliatesPage() {
   const [checking, setChecking] = useState(true);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  // Add Affiliate state
+  const [addOpen, setAddOpen] = useState(false);
+  const [addLoading, setAddLoading] = useState(false);
+
+  const [addName, setAddName] = useState("");
+  const [addEmail, setAddEmail] = useState("");
+  const [addPassword, setAddPassword] = useState("");
+  const [addAffiliateId, setAddAffiliateId] = useState("");
+  const [addReferralRate, setAddReferralRate] = useState("5");
 
   const [affiliates, setAffiliates] = useState<Affiliate[]>([]);
   const [totals, setTotals] = useState<Totals>(emptyTotals);
@@ -267,7 +279,9 @@ export default function AdminAffiliatesPage() {
     newStatus: Exclude<Status, "unknown">
   ) {
     const confirmed = window.confirm(
-      `Are you sure you want to change ${affiliate.name || "this affiliate"}'s status to ${newStatus}?`
+      `Are you sure you want to change ${
+        affiliate.name || "this affiliate"
+      }'s status to ${newStatus}?`
     );
 
     if (!confirmed) return;
@@ -324,6 +338,112 @@ export default function AdminAffiliatesPage() {
     }
   }
 
+  async function createAffiliate() {
+    const name = addName.trim();
+    const email = addEmail.trim().toLowerCase();
+    const password = addPassword;
+    const affiliateId = addAffiliateId.trim();
+    const referralRate = Number(addReferralRate || 5);
+
+    if (!name) {
+      setError("Please enter the affiliate name.");
+      return;
+    }
+
+    if (!email) {
+      setError("Please enter the affiliate email.");
+      return;
+    }
+
+    if (!password || password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+
+    if (
+      !Number.isFinite(referralRate) ||
+      referralRate < 0 ||
+      referralRate > 100
+    ) {
+      setError("Referral rate must be between 0 and 100.");
+      return;
+    }
+
+    try {
+      setAddLoading(true);
+      setError("");
+      setSuccess("");
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        router.replace("/login");
+        return;
+      }
+
+      const response = await fetch("/api/admin/affiliates", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          affiliate_id: affiliateId || undefined,
+          referral_rate: referralRate,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(
+          result.message || "Unable to create affiliate."
+        );
+      }
+
+      setSuccess(
+        `Affiliate account created successfully for ${email}.`
+      );
+
+      setAddOpen(false);
+
+      setAddName("");
+      setAddEmail("");
+      setAddPassword("");
+      setAddAffiliateId("");
+      setAddReferralRate("5");
+
+      await loadAffiliates();
+    } catch (err: unknown) {
+      console.error("Create affiliate error:", err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to create affiliate."
+      );
+    } finally {
+      setAddLoading(false);
+    }
+  }
+
+  function closeAddModal() {
+    if (addLoading) return;
+
+    setAddOpen(false);
+
+    setAddName("");
+    setAddEmail("");
+    setAddPassword("");
+    setAddAffiliateId("");
+    setAddReferralRate("5");
+  }
+
   if (checking) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
@@ -367,22 +487,44 @@ export default function AdminAffiliatesPage() {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={loadAffiliates}
-            disabled={loading}
-            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold hover:bg-slate-50 disabled:opacity-50"
-          >
-            <RefreshCw
-              className={`h-4 w-4 ${
-                loading ? "animate-spin" : ""
-              }`}
-            />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setError("");
+                setSuccess("");
+                setAddOpen(true);
+              }}
+              className="flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700"
+            >
+              <UserPlus className="h-4 w-4" />
 
-            <span className="hidden sm:inline">
-              Refresh
-            </span>
-          </button>
+              <span className="hidden sm:inline">
+                Add Affiliate
+              </span>
+
+              <span className="sm:hidden">
+                Add
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={loadAffiliates}
+              disabled={loading}
+              className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold hover:bg-slate-50 disabled:opacity-50"
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${
+                  loading ? "animate-spin" : ""
+                }`}
+              />
+
+              <span className="hidden sm:inline">
+                Refresh
+              </span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -850,12 +992,201 @@ export default function AdminAffiliatesPage() {
 
             <p className="mt-1 text-xs leading-5 text-blue-700">
               Affiliate data is loaded through the protected
-              admin API. Status changes require the authenticated
-              administrator session.
+              admin API. Status changes and affiliate creation
+              require the authenticated administrator session.
             </p>
           </div>
         </div>
       </div>
+
+      {/* Add Affiliate Modal */}
+      {addOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl">
+            {/* Modal header */}
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+              <div>
+                <h2 className="text-lg font-extrabold text-slate-900">
+                  Add Affiliate
+                </h2>
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Create and approve an affiliate account directly.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeAddModal}
+                disabled={addLoading}
+                className="flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 disabled:opacity-50"
+                title="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal body */}
+            <div className="max-h-[75vh] overflow-y-auto px-5 py-5">
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-1.5 block text-sm font-bold text-slate-700">
+                    Full Name
+                  </label>
+
+                  <input
+                    type="text"
+                    value={addName}
+                    onChange={(e) =>
+                      setAddName(e.target.value)
+                    }
+                    placeholder="Affiliate full name"
+                    disabled={addLoading}
+                    className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100 disabled:opacity-60"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-bold text-slate-700">
+                    Gmail / Email
+                  </label>
+
+                  <input
+                    type="email"
+                    value={addEmail}
+                    onChange={(e) =>
+                      setAddEmail(e.target.value)
+                    }
+                    placeholder="affiliate@gmail.com"
+                    disabled={addLoading}
+                    autoComplete="off"
+                    className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100 disabled:opacity-60"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-bold text-slate-700">
+                    Temporary Password
+                  </label>
+
+                  <input
+                    type="password"
+                    value={addPassword}
+                    onChange={(e) =>
+                      setAddPassword(e.target.value)
+                    }
+                    placeholder="Minimum 6 characters"
+                    disabled={addLoading}
+                    autoComplete="new-password"
+                    className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100 disabled:opacity-60"
+                  />
+
+                  <p className="mt-1.5 text-xs text-slate-400">
+                    Give this password to the affiliate securely.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-bold text-slate-700">
+                    Affiliate ID
+                    <span className="ml-1 font-normal text-slate-400">
+                      (Optional)
+                    </span>
+                  </label>
+
+                  <input
+                    type="text"
+                    value={addAffiliateId}
+                    onChange={(e) =>
+                      setAddAffiliateId(e.target.value)
+                    }
+                    placeholder="Leave empty to auto-generate"
+                    disabled={addLoading}
+                    className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100 disabled:opacity-60"
+                  />
+
+                  <p className="mt-1.5 text-xs text-slate-400">
+                    Example: UNCPA1001
+                  </p>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-bold text-slate-700">
+                    Referral Rate (%)
+                  </label>
+
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    value={addReferralRate}
+                    onChange={(e) =>
+                      setAddReferralRate(e.target.value)
+                    }
+                    disabled={addLoading}
+                    className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100 disabled:opacity-60"
+                  />
+                </div>
+
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+
+                    <div>
+                      <p className="text-sm font-bold text-emerald-900">
+                        Account will be approved immediately
+                      </p>
+
+                      <p className="mt-1 text-xs leading-5 text-emerald-700">
+                        The new affiliate will be created as an
+                        approved account and the email will be
+                        automatically confirmed.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal footer */}
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={closeAddModal}
+                disabled={addLoading}
+                className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={createAffiliate}
+                disabled={
+                  addLoading ||
+                  !addName.trim() ||
+                  !addEmail.trim() ||
+                  addPassword.length < 6
+                }
+                className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {addLoading ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="h-4 w-4" />
+                    Create & Approve Affiliate
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
-  }
+                          }
