@@ -9,11 +9,9 @@ import {
   ChevronRight,
   CreditCard,
   DollarSign,
-  FileText,
   Link2,
   LogOut,
   Menu,
-  MousePointerClick,
   Settings,
   ShieldCheck,
   Target,
@@ -151,14 +149,30 @@ const controlCards: ControlCard[] = [
     icon: CreditCard,
     status: "Coming next",
   },
-  {
-    title: "Panel Settings",
-    description:
-      "Control which features are visible and available inside the affiliate panel.",
-    icon: Settings,
-    status: "Coming next",
-  },
 ];
+
+type PanelSetting = {
+  id: number;
+  feature_key: string;
+  label: string;
+  description: string | null;
+  enabled: boolean;
+  display_order: number;
+  updated_at: string;
+};
+
+const featureDescriptions: Record<string, string> = {
+  dashboard: "Controls the main affiliate dashboard.",
+  offers: "Controls access to available CPA offers.",
+  smart_links: "Controls the Smart Links section.",
+  statistics: "Controls statistics and performance reports.",
+  earnings: "Controls affiliate earnings information.",
+  referrals: "Controls referrals and commission information.",
+  payments: "Controls payment information and payment requests.",
+  profile: "Controls affiliate profile management.",
+  settings: "Controls affiliate account settings.",
+  manager_contact: "Controls Telegram manager contact options.",
+};
 
 export default function AdminPage() {
   const router = useRouter();
@@ -168,9 +182,15 @@ export default function AdminPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeMenu, setActiveMenu] = useState("Dashboard");
   const [adminEmail, setAdminEmail] = useState("");
+
   const [affiliateCount, setAffiliateCount] = useState(0);
   const [offerCount, setOfferCount] = useState(0);
   const [activeOfferCount, setActiveOfferCount] = useState(0);
+
+  const [settings, setSettings] = useState<PanelSetting[]>([]);
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [updatingFeature, setUpdatingFeature] = useState<string | null>(null);
+
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -208,6 +228,7 @@ export default function AdminPage() {
         setAdminEmail(session.user.email);
 
         await loadStats(session.access_token);
+        await loadPanelSettings(session.access_token);
       } catch (err) {
         console.error("Admin dashboard error:", err);
 
@@ -277,6 +298,44 @@ export default function AdminPage() {
       }
     }
 
+    async function loadPanelSettings(accessToken: string) {
+      try {
+        setSettingsLoading(true);
+
+        const response = await fetch("/api/admin/panel-settings", {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+          cache: "no-store",
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data?.success) {
+          throw new Error(
+            data?.error || "Unable to load panel settings."
+          );
+        }
+
+        if (mounted) {
+          setSettings(
+            Array.isArray(data.settings) ? data.settings : []
+          );
+        }
+      } catch (err) {
+        console.error("Panel settings error:", err);
+
+        if (mounted) {
+          setError("Unable to load affiliate panel feature settings.");
+        }
+      } finally {
+        if (mounted) {
+          setSettingsLoading(false);
+        }
+      }
+    }
+
     loadAdmin();
 
     return () => {
@@ -305,13 +364,13 @@ export default function AdminPage() {
         description: "Currently active offers",
       },
       {
-        title: "Control Modules",
-        value: controlCards.length,
+        title: "Controlled Features",
+        value: settings.length,
         icon: ShieldCheck,
-        description: "Admin management sections",
+        description: "Affiliate panel features",
       },
     ],
-    [affiliateCount, offerCount, activeOfferCount]
+    [affiliateCount, offerCount, activeOfferCount, settings.length]
   );
 
   async function handleLogout() {
@@ -319,11 +378,25 @@ export default function AdminPage() {
     router.replace("/login");
   }
 
+  function scrollToSettings() {
+    setTimeout(() => {
+      document.getElementById("feature-settings")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 50);
+  }
+
   function handleMenu(item: MenuItem) {
     setActiveMenu(item.label);
     setSidebarOpen(false);
 
     if (!item.available) {
+      if (item.label === "Settings") {
+        scrollToSettings();
+        return;
+      }
+
       const element = document.getElementById("control-center");
 
       if (element) {
@@ -356,12 +429,72 @@ export default function AdminPage() {
     router.push(card.action);
   }
 
+  async function toggleFeature(setting: PanelSetting) {
+    if (updatingFeature) return;
+
+    try {
+      setUpdatingFeature(setting.feature_key);
+      setError("");
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        router.replace("/login");
+        return;
+      }
+
+      const response = await fetch("/api/admin/panel-settings", {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          feature_key: setting.feature_key,
+          enabled: !setting.enabled,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data?.success) {
+        throw new Error(
+          data?.error || "Unable to update feature setting."
+        );
+      }
+
+      const updatedSetting = data.setting as PanelSetting;
+
+      setSettings((current) =>
+        current.map((item) =>
+          item.feature_key === updatedSetting.feature_key
+            ? updatedSetting
+            : item
+        )
+      );
+    } catch (err) {
+      console.error("Feature toggle error:", err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to update feature setting."
+      );
+    } finally {
+      setUpdatingFeature(null);
+    }
+  }
+
   if (loading) {
     return (
       <main className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
         <div className="text-center">
           <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-slate-700 border-t-cyan-400" />
-          <p className="text-sm text-slate-400">Loading Admin Panel...</p>
+          <p className="text-sm text-slate-400">
+            Loading Admin Panel...
+          </p>
         </div>
       </main>
     );
@@ -373,7 +506,6 @@ export default function AdminPage() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
-      {/* Mobile overlay */}
       {sidebarOpen && (
         <button
           type="button"
@@ -394,8 +526,10 @@ export default function AdminPage() {
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-xl font-black tracking-tight">
-                  UpNetwork<span className="text-cyan-400">CPA</span>
+                  UpNetwork
+                  <span className="text-cyan-400">CPA</span>
                 </div>
+
                 <div className="mt-1 text-[11px] uppercase tracking-[0.25em] text-slate-500">
                   Admin Control Center
                 </div>
@@ -443,7 +577,7 @@ export default function AdminPage() {
 
                     <span className="flex-1">{item.label}</span>
 
-                    {!item.available && (
+                    {!item.available && item.label !== "Settings" && (
                       <span className="rounded-full border border-slate-700 px-1.5 py-0.5 text-[8px] uppercase tracking-wide text-slate-500">
                         Soon
                       </span>
@@ -465,6 +599,7 @@ export default function AdminPage() {
                   <div className="text-xs font-semibold text-white">
                     Administrator
                   </div>
+
                   <div className="truncate text-[10px] text-slate-500">
                     {adminEmail}
                   </div>
@@ -484,9 +619,8 @@ export default function AdminPage() {
         </div>
       </aside>
 
-      {/* Main content */}
+      {/* Main */}
       <section className="min-h-screen lg:pl-72">
-        {/* Top bar */}
         <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-950/90 backdrop-blur-xl">
           <div className="flex items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-3">
@@ -499,7 +633,10 @@ export default function AdminPage() {
               </button>
 
               <div>
-                <div className="text-lg font-bold">Admin Dashboard</div>
+                <div className="text-lg font-bold">
+                  Admin Dashboard
+                </div>
+
                 <div className="text-xs text-slate-500">
                   Manage your entire CPA network from one place
                 </div>
@@ -511,6 +648,7 @@ export default function AdminPage() {
                 <div className="text-[9px] uppercase tracking-wider text-slate-500">
                   Admin
                 </div>
+
                 <div className="max-w-[220px] truncate text-xs text-slate-300">
                   {adminEmail}
                 </div>
@@ -542,12 +680,14 @@ export default function AdminPage() {
 
               <h1 className="max-w-3xl text-2xl font-black tracking-tight sm:text-4xl">
                 Welcome to the{" "}
-                <span className="text-cyan-400">UpNetwork CPA</span> Admin
-                Control Center
+                <span className="text-cyan-400">
+                  UpNetwork CPA
+                </span>{" "}
+                Admin Control Center
               </h1>
 
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400 sm:text-base">
-                Manage affiliates, offers and all future affiliate-panel
+                Manage affiliates, offers and all affiliate-panel
                 features from one central administration system.
               </p>
 
@@ -569,11 +709,19 @@ export default function AdminPage() {
                   <Users size={17} />
                   Manage Affiliates
                 </button>
+
+                <button
+                  type="button"
+                  onClick={scrollToSettings}
+                  className="inline-flex items-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-500/20"
+                >
+                  <Settings size={17} />
+                  Feature Settings
+                </button>
               </div>
             </div>
           </section>
 
-          {/* Error */}
           {error && (
             <div className="mt-5 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
               {error}
@@ -595,6 +743,7 @@ export default function AdminPage() {
                       <div className="text-xs font-medium text-slate-500">
                         {card.title}
                       </div>
+
                       <div className="mt-2 text-3xl font-black text-white">
                         {card.value}
                       </div>
@@ -615,13 +764,14 @@ export default function AdminPage() {
 
           {/* Quick actions */}
           <section className="mt-8">
-            <div className="mb-4 flex items-end justify-between">
-              <div>
-                <h2 className="text-xl font-bold">Quick Actions</h2>
-                <p className="mt-1 text-xs text-slate-500">
-                  Frequently used administration tools
-                </p>
-              </div>
+            <div className="mb-4">
+              <h2 className="text-xl font-bold">
+                Quick Actions
+              </h2>
+
+              <p className="mt-1 text-xs text-slate-500">
+                Frequently used administration tools
+              </p>
             </div>
 
             <div className="grid gap-4 md:grid-cols-3">
@@ -634,13 +784,17 @@ export default function AdminPage() {
                   <div className="rounded-xl bg-cyan-500/10 p-3 text-cyan-400">
                     <Target size={21} />
                   </div>
+
                   <ChevronRight
                     size={18}
                     className="text-slate-600 transition group-hover:translate-x-1 group-hover:text-cyan-400"
                   />
                 </div>
 
-                <div className="mt-5 text-sm font-bold">Create / Manage Offer</div>
+                <div className="mt-5 text-sm font-bold">
+                  Create / Manage Offer
+                </div>
+
                 <div className="mt-1 text-xs leading-5 text-slate-500">
                   Add new CPA offers or edit existing offers.
                 </div>
@@ -655,6 +809,7 @@ export default function AdminPage() {
                   <div className="rounded-xl bg-cyan-500/10 p-3 text-cyan-400">
                     <Users size={21} />
                   </div>
+
                   <ChevronRight
                     size={18}
                     className="text-slate-600 transition group-hover:translate-x-1 group-hover:text-cyan-400"
@@ -664,6 +819,7 @@ export default function AdminPage() {
                 <div className="mt-5 text-sm font-bold">
                   Manage Affiliates
                 </div>
+
                 <div className="mt-1 text-xs leading-5 text-slate-500">
                   Review accounts and change affiliate status.
                 </div>
@@ -671,20 +827,14 @@ export default function AdminPage() {
 
               <button
                 type="button"
-                onClick={() =>
-                  document
-                    .getElementById("control-center")
-                    ?.scrollIntoView({
-                      behavior: "smooth",
-                      block: "start",
-                    })
-                }
+                onClick={scrollToSettings}
                 className="group rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-left transition hover:-translate-y-0.5 hover:border-cyan-500/30 hover:bg-slate-900"
               >
                 <div className="flex items-center justify-between">
                   <div className="rounded-xl bg-cyan-500/10 p-3 text-cyan-400">
                     <Settings size={21} />
                   </div>
+
                   <ChevronRight
                     size={18}
                     className="text-slate-600 transition group-hover:translate-x-1 group-hover:text-cyan-400"
@@ -692,27 +842,33 @@ export default function AdminPage() {
                 </div>
 
                 <div className="mt-5 text-sm font-bold">
-                  Control Center
+                  Feature Control
                 </div>
+
                 <div className="mt-1 text-xs leading-5 text-slate-500">
-                  See all network management modules.
+                  Turn affiliate-panel features ON or OFF.
                 </div>
               </button>
             </div>
           </section>
 
           {/* Control center */}
-          <section id="control-center" className="mt-10 scroll-mt-24">
+          <section
+            id="control-center"
+            className="mt-10 scroll-mt-24"
+          >
             <div className="mb-5">
               <div className="flex items-center gap-2">
                 <Settings size={20} className="text-cyan-400" />
-                <h2 className="text-xl font-bold">Network Control Center</h2>
+
+                <h2 className="text-xl font-bold">
+                  Network Control Center
+                </h2>
               </div>
 
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
-                This is the central place for controlling every major section
-                of the affiliate panel. Existing modules are already connected;
-                the remaining modules will be connected one by one.
+                Central management modules for the UpNetwork CPA
+                network.
               </p>
             </div>
 
@@ -759,6 +915,7 @@ export default function AdminPage() {
                         <h3 className="text-sm font-bold text-white">
                           {card.title}
                         </h3>
+
                         <p className="mt-2 text-xs leading-5 text-slate-500">
                           {card.description}
                         </p>
@@ -775,6 +932,170 @@ export default function AdminPage() {
             </div>
           </section>
 
+          {/* Feature settings */}
+          <section
+            id="feature-settings"
+            className="mt-10 scroll-mt-24"
+          >
+            <div className="mb-5">
+              <div className="flex items-center gap-2">
+                <Settings size={20} className="text-cyan-400" />
+
+                <h2 className="text-xl font-bold">
+                  Affiliate Panel Feature Control
+                </h2>
+              </div>
+
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+                Turn individual affiliate-panel features ON or OFF.
+                Changes are saved to the database immediately.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4 sm:p-6">
+              {settingsLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-700 border-t-cyan-400" />
+                </div>
+              ) : settings.length === 0 ? (
+                <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/10 p-5 text-sm text-yellow-300">
+                  No feature settings were found. Please make sure
+                  the Step 3 SQL was executed successfully.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {settings
+                    .slice()
+                    .sort(
+                      (a, b) => a.display_order - b.display_order
+                    )
+                    .map((setting) => {
+                      const isUpdating =
+                        updatingFeature === setting.feature_key;
+
+                      const description =
+                        setting.description ||
+                        featureDescriptions[
+                          setting.feature_key
+                        ] ||
+                        "Affiliate panel feature control.";
+
+                      return (
+                        <div
+                          key={setting.feature_key}
+                          className={`flex flex-col gap-4 rounded-2xl border p-4 transition sm:flex-row sm:items-center sm:justify-between ${
+                            setting.enabled
+                              ? "border-emerald-500/10 bg-slate-950/60"
+                              : "border-slate-800 bg-slate-950/30"
+                          }`}
+                        >
+                          <div className="flex min-w-0 items-start gap-4">
+                            <div
+                              className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+                                setting.enabled
+                                  ? "bg-emerald-500/10 text-emerald-400"
+                                  : "bg-slate-800 text-slate-500"
+                              }`}
+                            >
+                              {setting.enabled ? (
+                                <CheckCircle2 size={19} />
+                              ) : (
+                                <X size={19} />
+                              )}
+                            </div>
+
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="text-sm font-bold text-white">
+                                  {setting.label}
+                                </h3>
+
+                                <span
+                                  className={`rounded-full px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider ${
+                                    setting.enabled
+                                      ? "bg-emerald-500/10 text-emerald-400"
+                                      : "bg-slate-800 text-slate-500"
+                                  }`}
+                                >
+                                  {setting.enabled
+                                    ? "ON"
+                                    : "OFF"}
+                                </span>
+                              </div>
+
+                              <p className="mt-1 text-xs leading-5 text-slate-500">
+                                {description}
+                              </p>
+
+                              <div className="mt-1 text-[9px] uppercase tracking-wider text-slate-700">
+                                {setting.feature_key}
+                              </div>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={isUpdating}
+                            onClick={() =>
+                              toggleFeature(setting)
+                            }
+                            aria-label={`Turn ${setting.label} ${
+                              setting.enabled ? "off" : "on"
+                            }`}
+                            className={`relative h-8 w-14 shrink-0 rounded-full border transition ${
+                              setting.enabled
+                                ? "border-emerald-500/40 bg-emerald-500/20"
+                                : "border-slate-700 bg-slate-800"
+                            } ${
+                              isUpdating
+                                ? "cursor-wait opacity-60"
+                                : "cursor-pointer"
+                            }`}
+                          >
+                            <span
+                              className={`absolute top-1 h-6 w-6 rounded-full shadow-lg transition-all ${
+                                setting.enabled
+                                  ? "left-7 bg-emerald-400"
+                                  : "left-1 bg-slate-500"
+                              }`}
+                            />
+
+                            {isUpdating && (
+                              <span className="absolute inset-0 flex items-center justify-center">
+                                <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                              </span>
+                            )}
+                          </button>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+
+              <div className="mt-5 rounded-xl border border-cyan-500/10 bg-cyan-500/5 p-4">
+                <div className="flex gap-3">
+                  <ShieldCheck
+                    size={18}
+                    className="mt-0.5 shrink-0 text-cyan-400"
+                  />
+
+                  <div>
+                    <div className="text-xs font-bold text-cyan-300">
+                      Important
+                    </div>
+
+                    <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                      These switches are now connected to the admin
+                      database. The next step is to make the
+                      affiliate panel actually respect these ON/OFF
+                      values.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
           {/* Current status */}
           <section className="mt-10 rounded-2xl border border-slate-800 bg-slate-900/50 p-5 sm:p-6">
             <div className="flex items-start gap-4">
@@ -788,15 +1109,15 @@ export default function AdminPage() {
                 </h3>
 
                 <p className="mt-1 text-xs leading-5 text-slate-500">
-                  Your admin authentication is active. Affiliate and Offer
-                  management are connected to the current backend. We will now
-                  connect the remaining modules to the same control system.
+                  Affiliate and Offer management are connected.
+                  Feature settings are now connected to the database.
+                  The next stage is enforcing these settings inside
+                  the affiliate panel.
                 </p>
               </div>
             </div>
           </section>
 
-          {/* Footer */}
           <footer className="py-8 text-center text-[11px] text-slate-600">
             UpNetwork CPA Admin Control Center
           </footer>
@@ -804,4 +1125,4 @@ export default function AdminPage() {
       </section>
     </main>
   );
-}
+          }
