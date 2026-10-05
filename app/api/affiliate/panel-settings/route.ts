@@ -1,4 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+export const dynamic = "force-dynamic";
+
+{ NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL =
