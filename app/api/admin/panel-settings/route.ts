@@ -6,19 +6,24 @@ export const dynamic = "force-dynamic";
 const ADMIN_EMAIL = "islamhanif122@gmail.com";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-function getSupabaseAdmin() {
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+function getSupabaseClient(accessToken: string) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     throw new Error(
-      "Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY"
+      "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY"
     );
   }
 
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
+    },
+    global: {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
     },
   });
 }
@@ -52,7 +57,7 @@ async function verifyAdmin(request: NextRequest) {
     };
   }
 
-  const supabase = getSupabaseAdmin();
+  const supabase = getSupabaseClient(token);
 
   const {
     data: { user },
@@ -93,7 +98,7 @@ async function verifyAdmin(request: NextRequest) {
 
 /**
  * GET
- * Returns all Affiliate Panel feature settings.
+ * Load all Affiliate Panel feature settings.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -105,10 +110,11 @@ export async function GET(request: NextRequest) {
 
     const { supabase } = auth;
 
-    const { data, error } = await supabase
+    const { data, error, count } = await supabase
       .from("affiliate_panel_settings")
       .select(
-        "id, feature_key, label, description, enabled, display_order, updated_at"
+        "id, feature_key, label, description, enabled, display_order, updated_at",
+        { count: "exact" }
       )
       .order("display_order", { ascending: true });
 
@@ -120,15 +126,22 @@ export async function GET(request: NextRequest) {
           success: false,
           error: "Unable to load affiliate panel feature settings",
           details: error.message,
+          code: error.code,
         },
         { status: 500 }
       );
     }
 
+    console.log(
+      "Affiliate panel settings loaded:",
+      count ?? data?.length ?? 0
+    );
+
     return NextResponse.json(
       {
         success: true,
         settings: data ?? [],
+        count: count ?? data?.length ?? 0,
       },
       { status: 200 }
     );
@@ -149,7 +162,7 @@ export async function GET(request: NextRequest) {
 
 /**
  * PATCH
- * Turns an Affiliate Panel feature ON or OFF.
+ * Turn an Affiliate Panel feature ON or OFF.
  */
 export async function PATCH(request: NextRequest) {
   try {
@@ -220,6 +233,7 @@ export async function PATCH(request: NextRequest) {
           success: false,
           error: "Unable to update affiliate panel feature setting",
           details: error.message,
+          code: error.code,
         },
         { status: 500 }
       );
