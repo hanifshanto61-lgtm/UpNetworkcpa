@@ -27,6 +27,9 @@ import {
   Moon,
   Zap,
   ShieldCheck,
+  Bot,
+  Send,
+  HelpCircle,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -168,15 +171,11 @@ export default function AffiliatePage() {
   });
 
   const [panelSettings, setPanelSettings] =
-    useState<PanelSettings>(
-      DEFAULT_PANEL_SETTINGS
-    );
+    useState<PanelSettings>(DEFAULT_PANEL_SETTINGS);
 
   const dark = theme === "dark";
 
-  function featureEnabled(
-    feature: string
-  ): boolean {
+  function featureEnabled(feature: string): boolean {
     return panelSettings[feature] !== false;
   }
 
@@ -199,20 +198,13 @@ export default function AffiliatePage() {
         error: sessionError,
       } = await supabase.auth.getSession();
 
-      if (
-        sessionError ||
-        !sessionData.session
-      ) {
+      if (sessionError || !sessionData.session) {
         router.replace("/login");
         return;
       }
 
-      const accessToken =
-        sessionData.session.access_token;
+      const accessToken = sessionData.session.access_token;
 
-      /*
-       * Load dashboard
-       */
       const dashboardResponse = await fetch(
         "/api/affiliate/dashboard",
         {
@@ -224,8 +216,7 @@ export default function AffiliatePage() {
         }
       );
 
-      const dashboardData =
-        await dashboardResponse.json();
+      const dashboardData = await dashboardResponse.json();
 
       if (!dashboardResponse.ok) {
         throw new Error(
@@ -234,9 +225,7 @@ export default function AffiliatePage() {
         );
       }
 
-      setProfile(
-        dashboardData.profile || null
-      );
+      setProfile(dashboardData.profile || null);
 
       setClicks(
         Array.isArray(dashboardData.clicks)
@@ -266,13 +255,6 @@ export default function AffiliatePage() {
           ) || 0,
       });
 
-      /*
-       * Load Admin-controlled feature settings.
-       *
-       * If this API is temporarily unavailable,
-       * all features remain enabled so the affiliate
-       * panel does not break.
-       */
       try {
         const settingsResponse = await fetch(
           "/api/affiliate/panel-settings",
@@ -377,21 +359,13 @@ export default function AffiliatePage() {
       return;
     }
 
-    const routes: Record<
-      string,
-      string
-    > = {
+    const routes: Record<string, string> = {
       offers: "/affiliate/offers",
-      smartlinks:
-        "/affiliate/smart-link",
-      statistics:
-        "/affiliate/statistics",
-      earnings:
-        "/affiliate/earnings",
-      referrals:
-        "/affiliate/referrals",
-      payments:
-        "/affiliate/payments",
+      smartlinks: "/affiliate/smart-link",
+      statistics: "/affiliate/statistics",
+      earnings: "/affiliate/earnings",
+      referrals: "/affiliate/referrals",
+      payments: "/affiliate/payments",
     };
 
     const route = routes[action];
@@ -426,10 +400,7 @@ export default function AffiliatePage() {
       return;
     }
 
-    setProfileOpen(
-      (value) => !value
-    );
-
+    setProfileOpen((value) => !value);
     setSettingsOpen(false);
   }
 
@@ -438,36 +409,24 @@ export default function AffiliatePage() {
       return;
     }
 
-    setSettingsOpen(
-      (value) => !value
-    );
-
+    setSettingsOpen((value) => !value);
     setProfileOpen(false);
   }
 
-  const totalClicks =
-    stats.totalClicks;
-
-  const conversions =
-    stats.conversions;
-
-  const earnings =
-    stats.earnings;
+  const totalClicks = stats.totalClicks;
+  const conversions = stats.conversions;
+  const earnings = stats.earnings;
 
   const conversionRate =
-    Number.isFinite(
-      stats.conversionRate
-    )
+    Number.isFinite(stats.conversionRate)
       ? stats.conversionRate.toFixed(2)
       : "0.00";
 
   const affiliateId =
-    profile?.affiliateId ||
-    "Loading...";
+    profile?.affiliateId || "Loading...";
 
   const smartLink =
-    typeof window !==
-    "undefined"
+    typeof window !== "undefined"
       ? `${window.location.origin}/api/track?aid=${encodeURIComponent(
           affiliateId
         )}&sl=default-smartlink`
@@ -494,9 +453,7 @@ export default function AffiliatePage() {
   const visibleMenu = useMemo(
     () =>
       mainMenu.filter((item) =>
-        featureEnabled(
-          item.feature
-        )
+        featureEnabled(item.feature)
       ),
     [panelSettings]
   );
@@ -567,9 +524,7 @@ export default function AffiliatePage() {
           style={{
             backgroundImage:
               "url('/file_000000013688207a03d42a2550c1954.png')",
-            opacity: dark
-              ? 0.2
-              : 0.06,
+            opacity: dark ? 0.2 : 0.06,
           }}
         />
 
@@ -756,8 +711,7 @@ export default function AffiliatePage() {
                     <p
                       className={`truncate text-xs ${faint}`}
                     >
-                      {profile?.email ||
-                        ""}
+                      {profile?.email || ""}
                     </p>
                   </div>
                 </div>
@@ -1221,8 +1175,7 @@ export default function AffiliatePage() {
                   )}
                 </div>
 
-                {clicks.length ===
-                0 ? (
+                {clicks.length === 0 ? (
                   <div
                     className={`rounded-xl border border-dashed py-12 text-center ${
                       dark
@@ -1540,9 +1493,7 @@ export default function AffiliatePage() {
                   <button
                     type="button"
                     onClick={() => {
-                      setMenuOpen(
-                        false
-                      );
+                      setMenuOpen(false);
                       openManager();
                     }}
                     className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold ${
@@ -1684,8 +1635,7 @@ export default function AffiliatePage() {
                         <div className="flex-1">
                           <p className="text-sm font-semibold">
                             Manager{" "}
-                            {index +
-                              1}
+                            {index + 1}
                           </p>
 
                           <p className="mt-0.5 text-xs text-cyan-500">
@@ -1710,10 +1660,524 @@ export default function AffiliatePage() {
               </div>
             </div>
           )}
+
+        {/* Support Chat Bot */}
+        <SupportChatBot
+          dark={dark}
+          router={router}
+          openManager={openManager}
+        />
       </div>
     </main>
   );
 }
+
+/* =========================================================
+   SUPPORT CHAT BOT
+   ========================================================= */
+
+type ChatMessage = {
+  id: number;
+  sender: "bot" | "user";
+  text: string;
+};
+
+function SupportChatBot({
+  dark,
+  router,
+  openManager,
+}: {
+  dark: boolean;
+  router: ReturnType<typeof useRouter>;
+  openManager: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const [messages, setMessages] = useState<
+    ChatMessage[]
+  >([
+    {
+      id: 1,
+      sender: "bot",
+      text:
+        "Hello! 👋 Welcome to UpNetwork CPA Support. How can I help you today?",
+    },
+  ]);
+
+  const [input, setInput] = useState("");
+
+  const quickButtons = [
+    {
+      label: "Offers",
+      action: "offers",
+    },
+    {
+      label: "Smart Links",
+      action: "smartlink",
+    },
+    {
+      label: "Earnings",
+      action: "earnings",
+    },
+    {
+      label: "Statistics",
+      action: "statistics",
+    },
+    {
+      label: "Payments",
+      action: "payments",
+    },
+    {
+      label: "Verification",
+      action: "verification",
+    },
+    {
+      label: "Talk to Manager",
+      action: "manager",
+    },
+  ];
+
+  function addMessage(
+    sender: "bot" | "user",
+    text: string
+  ) {
+    setMessages((current) => [
+      ...current,
+      {
+        id:
+          Date.now() +
+          Math.random(),
+        sender,
+        text,
+      },
+    ]);
+  }
+
+  function botReply(action: string) {
+    if (action === "offers") {
+      addMessage(
+        "bot",
+        "You can browse available CPA campaigns from the Offers section. Select an offer and use its tracking link according to the campaign rules."
+      );
+      router.push("/affiliate/offers");
+      return;
+    }
+
+    if (action === "smartlink") {
+      addMessage(
+        "bot",
+        "Your Smart Link is available on the dashboard. Use it to send traffic and track clicks and conversions."
+      );
+      router.push("/affiliate/smart-link");
+      return;
+    }
+
+    if (action === "earnings") {
+      addMessage(
+        "bot",
+        "Your recorded CPA earnings can be checked from the Earnings section."
+      );
+      router.push("/affiliate/earnings");
+      return;
+    }
+
+    if (action === "statistics") {
+      addMessage(
+        "bot",
+        "The Statistics section shows your traffic and conversion performance."
+      );
+      router.push("/affiliate/statistics");
+      return;
+    }
+
+    if (action === "payments") {
+      addMessage(
+        "bot",
+        "You can check your payment information and payment history from the Payments section."
+      );
+      router.push("/affiliate/payments");
+      return;
+    }
+
+    if (action === "verification") {
+      addMessage(
+        "bot",
+        "If your account or email verification has an issue, please contact a manager from the Contact Manager option. They can check your account status."
+      );
+      return;
+    }
+
+    if (action === "manager") {
+      addMessage(
+        "bot",
+        "Sure. I am opening the manager contact options for you."
+      );
+      openManager();
+      return;
+    }
+
+    const text = action.toLowerCase();
+
+    if (
+      text.includes("offer") ||
+      text.includes("campaign")
+    ) {
+      botReply("offers");
+      return;
+    }
+
+    if (
+      text.includes("smart") ||
+      text.includes("link")
+    ) {
+      botReply("smartlink");
+      return;
+    }
+
+    if (
+      text.includes("earning") ||
+      text.includes("income") ||
+      text.includes("money")
+    ) {
+      botReply("earnings");
+      return;
+    }
+
+    if (
+      text.includes("statistic") ||
+      text.includes("stats") ||
+      text.includes("traffic") ||
+      text.includes("click")
+    ) {
+      botReply("statistics");
+      return;
+    }
+
+    if (
+      text.includes("payment") ||
+      text.includes("withdraw")
+    ) {
+      botReply("payments");
+      return;
+    }
+
+    if (
+      text.includes("verify") ||
+      text.includes("verification") ||
+      text.includes("email")
+    ) {
+      botReply("verification");
+      return;
+    }
+
+    if (
+      text.includes("manager") ||
+      text.includes("support") ||
+      text.includes("help")
+    ) {
+      botReply("manager");
+      return;
+    }
+
+    if (
+      text.includes("hello") ||
+      text.includes("hi") ||
+      text.includes("hey") ||
+      text.includes("assalamu")
+    ) {
+      addMessage(
+        "bot",
+        "Hello! 👋 I can help you with Offers, Smart Links, Statistics, Earnings, Payments, verification, or manager support."
+      );
+      return;
+    }
+
+    if (
+      text.includes("ধন্যবাদ") ||
+      text.includes("thanks") ||
+      text.includes("thank")
+    ) {
+      addMessage(
+        "bot",
+        "You're welcome! 😊 If you need anything else, just ask."
+      );
+      return;
+    }
+
+    addMessage(
+      "bot",
+      "I can help with Offers, Smart Links, Statistics, Earnings, Payments, account verification, or contacting a manager. Please choose one of the options below."
+    );
+  }
+
+  function handleQuickAction(
+    action: string
+  ) {
+    const button =
+      quickButtons.find(
+        (item) =>
+          item.action === action
+      );
+
+    if (button) {
+      addMessage(
+        "user",
+        button.label
+      );
+    }
+
+    setTimeout(() => {
+      botReply(action);
+    }, 250);
+  }
+
+  function handleSend() {
+    const value =
+      input.trim();
+
+    if (!value) {
+      return;
+    }
+
+    addMessage(
+      "user",
+      value
+    );
+
+    setInput("");
+
+    setTimeout(() => {
+      botReply(value);
+    }, 250);
+  }
+
+  function handleKeyDown(
+    event: React.KeyboardEvent<HTMLInputElement>
+  ) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      handleSend();
+    }
+  }
+
+  return (
+    <>
+      {/* Floating button */}
+      {!open && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label="Open UpNetwork Support Chat"
+          className="fixed bottom-5 right-5 z-[90] flex items-center gap-3 rounded-full bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-3.5 text-sm font-bold text-white shadow-2xl shadow-cyan-500/30 transition hover:-translate-y-1 hover:shadow-cyan-500/40"
+        >
+          <span className="relative flex h-8 w-8 items-center justify-center rounded-full bg-white/15">
+            <Bot size={19} />
+
+            <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-cyan-500" />
+          </span>
+
+          <span className="hidden sm:block">
+            UpNetwork Support
+          </span>
+        </button>
+      )}
+
+      {/* Chat window */}
+      {open && (
+        <div
+          className={`fixed bottom-4 right-4 z-[90] flex h-[min(680px,calc(100vh-32px))] w-[calc(100vw-32px)] max-w-[390px] flex-col overflow-hidden rounded-3xl border shadow-2xl ${
+            dark
+              ? "border-white/10 bg-[#090d17]"
+              : "border-slate-200 bg-white"
+          }`}
+        >
+          {/* Chat header */}
+          <div className="relative overflow-hidden bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-4 text-white">
+            <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-white/10 blur-2xl" />
+
+            <div className="relative flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15">
+                  <Bot size={22} />
+                </div>
+
+                <div>
+                  <p className="font-black">
+                    UpNetwork Support
+                  </p>
+
+                  <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-cyan-50">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+                    Online Support
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setOpen(false)
+                }
+                aria-label="Close support chat"
+                className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 transition hover:bg-white/20"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div className="flex-1 space-y-3 overflow-y-auto p-4">
+            {messages.map(
+              (message) => (
+                <div
+                  key={message.id}
+                  className={`flex ${
+                    message.sender ===
+                    "user"
+                      ? "justify-end"
+                      : "justify-start"
+                  }`}
+                >
+                  {message.sender ===
+                    "bot" && (
+                    <div className="mr-2 mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-cyan-500/10 text-cyan-500">
+                      <Bot size={14} />
+                    </div>
+                  )}
+
+                  <div
+                    className={`max-w-[82%] rounded-2xl px-3.5 py-2.5 text-xs leading-5 ${
+                      message.sender ===
+                      "user"
+                        ? "rounded-br-md bg-gradient-to-r from-cyan-500 to-blue-600 text-white"
+                        : dark
+                          ? "rounded-bl-md bg-white/[0.06] text-slate-300"
+                          : "rounded-bl-md bg-slate-100 text-slate-700"
+                    }`}
+                  >
+                    {message.text}
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+
+          {/* Quick buttons */}
+          <div
+            className={`border-t px-4 pb-3 pt-3 ${
+              dark
+                ? "border-white/10"
+                : "border-slate-200"
+            }`}
+          >
+            <div className="mb-2 flex items-center gap-1.5">
+              <HelpCircle
+                size={13}
+                className="text-cyan-500"
+              />
+
+              <span
+                className={`text-[10px] font-bold uppercase tracking-wider ${
+                  dark
+                    ? "text-slate-500"
+                    : "text-slate-400"
+                }`}
+              >
+                Quick Help
+              </span>
+            </div>
+
+            <div className="flex gap-1.5 overflow-x-auto pb-1">
+              {quickButtons.map(
+                (button) => (
+                  <button
+                    type="button"
+                    key={
+                      button.action
+                    }
+                    onClick={() =>
+                      handleQuickAction(
+                        button.action
+                      )
+                    }
+                    className={`shrink-0 rounded-full border px-3 py-1.5 text-[10px] font-semibold transition ${
+                      dark
+                        ? "border-white/10 bg-white/[0.03] text-slate-300 hover:border-cyan-400/30 hover:bg-cyan-400/10 hover:text-cyan-300"
+                        : "border-slate-200 bg-slate-50 text-slate-600 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-600"
+                    }`}
+                  >
+                    {button.label}
+                  </button>
+                )
+              )}
+            </div>
+          </div>
+
+          {/* Input */}
+          <div
+            className={`border-t p-3 ${
+              dark
+                ? "border-white/10 bg-[#070a11]"
+                : "border-slate-200 bg-slate-50"
+            }`}
+          >
+            <div
+              className={`flex items-center gap-2 rounded-2xl border p-1.5 ${
+                dark
+                  ? "border-white/10 bg-white/[0.03]"
+                  : "border-slate-200 bg-white"
+              }`}
+            >
+              <input
+                type="text"
+                value={input}
+                onChange={(event) =>
+                  setInput(
+                    event.target.value
+                  )
+                }
+                onKeyDown={
+                  handleKeyDown
+                }
+                placeholder="Ask support..."
+                className={`min-w-0 flex-1 bg-transparent px-2.5 py-2 text-xs outline-none ${
+                  dark
+                    ? "text-white placeholder:text-slate-600"
+                    : "text-slate-900 placeholder:text-slate-400"
+                }`}
+              />
+
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={!input.trim()}
+                aria-label="Send message"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-500 text-white transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Send size={15} />
+              </button>
+            </div>
+
+            <p
+              className={`mt-2 text-center text-[9px] ${
+                dark
+                  ? "text-slate-700"
+                  : "text-slate-400"
+              }`}
+            >
+              UpNetwork CPA Support Assistant
+            </p>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+/* =========================================================
+   STAT CARD
+   ========================================================= */
 
 function StatCard({
   title,
@@ -1847,6 +2311,10 @@ function StatCard({
   );
 }
 
+/* =========================================================
+   QUICK ACTION
+   ========================================================= */
+
 function QuickAction({
   title,
   subtitle,
@@ -1912,8 +2380,7 @@ function QuickAction({
     },
   };
 
-  const style =
-    styles[accent];
+  const style = styles[accent];
 
   return (
     <button
@@ -1963,15 +2430,16 @@ function QuickAction({
   );
 }
 
-function formatDate(
-  value?: string
-) {
+/* =========================================================
+   DATE FORMATTER
+   ========================================================= */
+
+function formatDate(value?: string) {
   if (!value) {
     return "-";
   }
 
-  const date =
-    new Date(value);
+  const date = new Date(value);
 
   if (
     Number.isNaN(
@@ -1991,4 +2459,4 @@ function formatDate(
       minute: "2-digit",
     }
   );
-}
+  }
