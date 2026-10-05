@@ -1,17 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+export const dynamic = "force-dynamic";
+
 const ADMIN_EMAIL = "islamhanif122@gmail.com";
 
-function getAdminClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (!url || !serviceKey) {
-    throw new Error("Supabase environment variables are missing.");
+function getSupabaseAdmin() {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error(
+      "Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY"
+    );
   }
 
-  return createClient(url, serviceKey, {
+  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
@@ -20,51 +24,86 @@ function getAdminClient() {
 }
 
 async function verifyAdmin(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
+  const authorization = request.headers.get("authorization");
 
-  if (!authHeader?.startsWith("Bearer ")) {
-    return null;
+  if (!authorization) {
+    return {
+      error: NextResponse.json(
+        {
+          success: false,
+          error: "Missing authorization header",
+        },
+        { status: 401 }
+      ),
+    };
   }
 
-  const token = authHeader.replace("Bearer ", "").trim();
+  const token = authorization.replace(/^Bearer\s+/i, "").trim();
 
   if (!token) {
-    return null;
+    return {
+      error: NextResponse.json(
+        {
+          success: false,
+          error: "Missing access token",
+        },
+        { status: 401 }
+      ),
+    };
   }
 
-  const supabase = getAdminClient();
+  const supabase = getSupabaseAdmin();
 
   const {
     data: { user },
-    error,
+    error: userError,
   } = await supabase.auth.getUser(token);
 
-  if (error || !user?.email) {
-    return null;
-  }
+  if (userError || !user) {
+    console.error("Admin panel settings auth error:", userError);
 
-  if (user.email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
-    return null;
-  }
-
-  return user;
-}
-
-export async function GET(request: NextRequest) {
-  try {
-    const admin = await verifyAdmin(request);
-
-    if (!admin) {
-      return NextResponse.json(
+    return {
+      error: NextResponse.json(
         {
           success: false,
-          error: "Unauthorized",
+          error: "Invalid or expired authentication token",
         },
         { status: 401 }
-      );
+      ),
+    };
+  }
+
+  if (user.email?.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+    return {
+      error: NextResponse.json(
+        {
+          success: false,
+          error: "Admin access required",
+        },
+        { status: 403 }
+      ),
+    };
+  }
+
+  return {
+    supabase,
+    user,
+  };
+}
+
+/**
+ * GET
+ * Returns all Affiliate Panel feature settings.
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const auth = await verifyAdmin(request);
+
+    if (auth.error) {
+      return auth.error;
     }
 
-    const supabase = getAdminClient();
+    const { supabase } = auth;
 
     const { data, error } = await supabase
       .from("affiliate_panel_settings")
@@ -74,86 +113,97 @@ export async function GET(request: NextRequest) {
       .order("display_order", { ascending: true });
 
     if (error) {
-      console.error("Panel settings GET error:", error);
+      console.error("Panel settings database GET error:", error);
 
       return NextResponse.json(
         {
           success: false,
-          error: error.message,
+          error: "Unable to load affiliate panel feature settings",
+          details: error.message,
         },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      settings: data || [],
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        settings: data ?? [],
+      },
+      { status: 200 }
+    );
   } catch (error) {
-    console.error("Panel settings GET exception:", error);
+    console.error("Affiliate panel settings GET exception:", error);
 
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to load panel settings.",
+        error: "Unable to load affiliate panel feature settings",
+        details:
+          error instanceof Error ? error.message : "Unknown server error",
       },
       { status: 500 }
     );
   }
 }
 
+/**
+ * PATCH
+ * Turns an Affiliate Panel feature ON or OFF.
+ */
 export async function PATCH(request: NextRequest) {
   try {
-    const admin = await verifyAdmin(request);
+    const auth = await verifyAdmin(request);
 
-    if (!admin) {
+    if (auth.error) {
+      return auth.error;
+    }
+
+    const { supabase } = auth;
+
+    let body: {
+      feature_key?: string;
+      enabled?: boolean;
+    };
+
+    try {
+      body = await request.json();
+    } catch {
       return NextResponse.json(
         {
           success: false,
-          error: "Unauthorized",
+          error: "Invalid JSON request body",
         },
-        { status: 401 }
+        { status: 400 }
       );
     }
 
-    const body = await request.json();
-
-    const featureKey =
-      typeof body.feature_key === "string"
-        ? body.feature_key.trim()
-        : "";
-
-    const enabled = body.enabled;
+    const featureKey = body.feature_key?.trim();
 
     if (!featureKey) {
       return NextResponse.json(
         {
           success: false,
-          error: "feature_key is required.",
+          error: "feature_key is required",
         },
         { status: 400 }
       );
     }
 
-    if (typeof enabled !== "boolean") {
+    if (typeof body.enabled !== "boolean") {
       return NextResponse.json(
         {
           success: false,
-          error: "enabled must be true or false.",
+          error: "enabled must be a boolean",
         },
         { status: 400 }
       );
     }
-
-    const supabase = getAdminClient();
 
     const { data, error } = await supabase
       .from("affiliate_panel_settings")
       .update({
-        enabled,
+        enabled: body.enabled,
         updated_at: new Date().toISOString(),
       })
       .eq("feature_key", featureKey)
@@ -163,36 +213,35 @@ export async function PATCH(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error("Panel settings PATCH error:", error);
+      console.error("Panel settings PATCH database error:", error);
 
       return NextResponse.json(
         {
           success: false,
-          error: error.message,
+          error: "Unable to update affiliate panel feature setting",
+          details: error.message,
         },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      setting: data,
-      message: `${featureKey} has been ${
-        enabled ? "enabled" : "disabled"
-      }.`,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        setting: data,
+      },
+      { status: 200 }
+    );
   } catch (error) {
-    console.error("Panel settings PATCH exception:", error);
+    console.error("Affiliate panel settings PATCH exception:", error);
 
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to update panel setting.",
+        error: "Unable to update affiliate panel feature setting",
+        details:
+          error instanceof Error ? error.message : "Unknown server error",
       },
       { status: 500 }
     );
   }
-}
