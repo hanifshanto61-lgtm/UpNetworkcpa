@@ -27,8 +27,7 @@ async function getAdminUser(request: NextRequest) {
     return null;
   }
 
-  const authorization =
-    request.headers.get("authorization");
+  const authorization = request.headers.get("authorization");
 
   if (
     !authorization ||
@@ -45,23 +44,16 @@ async function getAdminUser(request: NextRequest) {
     return null;
   }
 
-  const {
-    data,
-    error,
-  } = await supabaseAdmin.auth.getUser(
-    accessToken
-  );
+  const { data, error } =
+    await supabaseAdmin.auth.getUser(accessToken);
 
   if (error || !data.user) {
     return null;
   }
 
-  const email =
-    data.user.email?.trim().toLowerCase();
+  const email = data.user.email?.trim().toLowerCase();
 
-  if (
-    email !== ADMIN_EMAIL.toLowerCase()
-  ) {
+  if (email !== ADMIN_EMAIL.toLowerCase()) {
     return null;
   }
 
@@ -104,22 +96,18 @@ function makeAffiliateId(userId: string) {
    LOAD AFFILIATE PROFILE
 ========================================= */
 
-async function getAffiliateProfile(
-  userId: string
-) {
+async function getAffiliateProfile(userId: string) {
   if (!supabaseAdmin) {
     return null;
   }
 
   try {
-    const {
-      data,
-      error,
-    } = await supabaseAdmin
-      .from("affiliate_profiles")
-      .select("*")
-      .eq("id", userId)
-      .maybeSingle();
+    const { data, error } =
+      await supabaseAdmin
+        .from("affiliate_profiles")
+        .select("*")
+        .eq("id", userId)
+        .maybeSingle();
 
     if (error) {
       console.error(
@@ -145,9 +133,7 @@ async function getAffiliateProfile(
    GET AFFILIATES
 ========================================= */
 
-export async function GET(
-  request: NextRequest
-) {
+export async function GET(request: NextRequest) {
   try {
     if (!supabaseAdmin) {
       return NextResponse.json(
@@ -160,8 +146,7 @@ export async function GET(
       );
     }
 
-    const admin =
-      await getAdminUser(request);
+    const admin = await getAdminUser(request);
 
     if (!admin) {
       return NextResponse.json(
@@ -173,8 +158,7 @@ export async function GET(
       );
     }
 
-    const searchParams =
-      request.nextUrl.searchParams;
+    const searchParams = request.nextUrl.searchParams;
 
     const requestedStatus =
       searchParams
@@ -198,10 +182,7 @@ export async function GET(
     const perPage = 1000;
 
     while (true) {
-      const {
-        data,
-        error,
-      } =
+      const { data, error } =
         await supabaseAdmin.auth.admin.listUsers({
           page,
           perPage,
@@ -216,23 +197,18 @@ export async function GET(
         return NextResponse.json(
           {
             success: false,
-            message:
-              "Unable to load affiliates.",
-            details:
-              error.message,
+            message: "Unable to load affiliates.",
+            details: error.message,
           },
           { status: 500 }
         );
       }
 
-      const pageUsers =
-        data?.users || [];
+      const pageUsers = data?.users || [];
 
       users.push(...pageUsers);
 
-      if (
-        pageUsers.length < perPage
-      ) {
+      if (pageUsers.length < perPage) {
         break;
       }
 
@@ -250,17 +226,13 @@ export async function GET(
     let profileRows: any[] = [];
 
     try {
-      const {
-        data,
-        error,
-      } =
+      const { data, error } =
         await supabaseAdmin
           .from("affiliate_profiles")
           .select("*");
 
       if (!error) {
-        profileRows =
-          data || [];
+        profileRows = data || [];
       } else {
         console.error(
           "Affiliate profiles query error:",
@@ -274,12 +246,9 @@ export async function GET(
       );
     }
 
-    const profileMap =
-      new Map<string, any>();
+    const profileMap = new Map<string, any>();
 
-    for (
-      const profile of profileRows
-    ) {
+    for (const profile of profileRows) {
       if (profile?.id) {
         profileMap.set(
           String(profile.id),
@@ -294,34 +263,18 @@ export async function GET(
 
     const affiliates = users
       .filter((user) => {
-        const metadata =
-          user.user_metadata || {};
+        const metadata = user.user_metadata || {};
 
         const profile =
-          profileMap.get(
-            String(user.id)
-          );
+          profileMap.get(String(user.id));
 
-        const accountType =
-          String(
-            metadata.account_type ||
-              profile?.account_type ||
-              ""
-          )
-            .trim()
-            .toLowerCase();
-
-        /*
-         * Primary rule:
-         *
-         * Auth metadata says affiliate
-         * OR
-         * affiliate_profiles contains this user.
-         *
-         * This fixes the situation where the
-         * profile exists but Auth metadata is
-         * incomplete.
-         */
+        const accountType = String(
+          metadata.account_type ||
+            profile?.account_type ||
+            ""
+        )
+          .trim()
+          .toLowerCase();
 
         return (
           accountType === "affiliate" ||
@@ -329,37 +282,29 @@ export async function GET(
         );
       })
       .map((user) => {
-        const metadata =
-          user.user_metadata || {};
+        const metadata = user.user_metadata || {};
 
         const profile =
-          profileMap.get(
-            String(user.id)
-          ) || {};
+          profileMap.get(String(user.id)) || {};
 
         /* -------------------------------------
            NAME
         ------------------------------------- */
 
-        const firstName =
-          String(
-            metadata.first_name ||
-              profile.first_name ||
-              ""
-          ).trim();
+        const firstName = String(
+          metadata.first_name ||
+            profile.first_name ||
+            ""
+        ).trim();
 
-        const lastName =
-          String(
-            metadata.last_name ||
-              profile.last_name ||
-              ""
-          ).trim();
+        const lastName = String(
+          metadata.last_name ||
+            profile.last_name ||
+            ""
+        ).trim();
 
         const fullName =
-          [
-            firstName,
-            lastName,
-          ]
+          [firstName, lastName]
             .filter(Boolean)
             .join(" ") ||
           String(
@@ -374,16 +319,13 @@ export async function GET(
            AFFILIATE ID
         ------------------------------------- */
 
-        const affiliateId =
-          String(
-            profile.affiliate_id ||
-              metadata.affiliate_id ||
-              metadata.affiliateId ||
-              metadata.username ||
-              makeAffiliateId(
-                user.id
-              )
-          ).trim();
+        const affiliateId = String(
+          profile.affiliate_id ||
+            metadata.affiliate_id ||
+            metadata.affiliateId ||
+            metadata.username ||
+            makeAffiliateId(user.id)
+        ).trim();
 
         /* -------------------------------------
            STATUS
@@ -395,18 +337,14 @@ export async function GET(
           );
 
         const profileStatus =
-          normalizeStatus(
-            profile.status
-          );
+          normalizeStatus(profile.status);
 
         let status =
           profileStatus !== "unknown"
             ? profileStatus
             : metadataStatus;
 
-        if (
-          status === "unknown"
-        ) {
+        if (status === "unknown") {
           status = "pending";
         }
 
@@ -417,17 +355,13 @@ export async function GET(
         return {
           id: user.id,
 
-          affiliate_id:
-            affiliateId,
+          affiliate_id: affiliateId,
 
-          name:
-            fullName,
+          name: fullName,
 
-          first_name:
-            firstName,
+          first_name: firstName,
 
-          last_name:
-            lastName,
+          last_name: lastName,
 
           email:
             user.email ||
@@ -510,15 +444,13 @@ export async function GET(
             metadata.referral_code ||
             affiliateId,
 
-          referral_rate:
-            Number(
-              profile.referral_rate ??
-                metadata.referral_rate ??
-                5
-            ),
+          referral_rate: Number(
+            profile.referral_rate ??
+              metadata.referral_rate ??
+              5
+          ),
 
-          application_status:
-            status,
+          application_status: status,
 
           created_at:
             user.created_at ||
@@ -534,9 +466,7 @@ export async function GET(
             null,
 
           email_confirmed:
-            Boolean(
-              user.email_confirmed_at
-            ),
+            Boolean(user.email_confirmed_at),
 
           email_confirmed_at:
             user.email_confirmed_at ||
@@ -572,24 +502,16 @@ export async function GET(
           .join(" ")
           .toLowerCase();
 
-        return searchable.includes(
-          search
-        );
+        return searchable.includes(search);
       })
       .sort((a, b) => {
-        const aTime =
-          a.created_at
-            ? new Date(
-                a.created_at
-              ).getTime()
-            : 0;
+        const aTime = a.created_at
+          ? new Date(a.created_at).getTime()
+          : 0;
 
-        const bTime =
-          b.created_at
-            ? new Date(
-                b.created_at
-              ).getTime()
-            : 0;
+        const bTime = b.created_at
+          ? new Date(b.created_at).getTime()
+          : 0;
 
         return bTime - aTime;
       });
@@ -607,17 +529,12 @@ export async function GET(
       unknown: 0,
     };
 
-    for (
-      const affiliate of affiliates
-    ) {
-      const status =
-        normalizeStatus(
-          affiliate.application_status
-        );
+    for (const affiliate of affiliates) {
+      const status = normalizeStatus(
+        affiliate.application_status
+      );
 
-      if (
-        status in totals
-      ) {
+      if (status in totals) {
         totals[
           status as keyof typeof totals
         ] += 1;
@@ -627,18 +544,14 @@ export async function GET(
     return NextResponse.json(
       {
         success: true,
-
         affiliates,
-
         totals,
       },
       {
         status: 200,
-
         headers: {
           "Cache-Control":
             "no-store, no-cache, must-revalidate",
-
           Pragma: "no-cache",
         },
       }
@@ -652,8 +565,7 @@ export async function GET(
     return NextResponse.json(
       {
         success: false,
-        message:
-          "Unexpected server error.",
+        message: "Unexpected server error.",
         details:
           error?.message ||
           "Unknown error.",
@@ -665,6 +577,7 @@ export async function GET(
 
 /* =========================================
    CREATE AFFILIATE DIRECTLY FROM ADMIN
+   SAFE VERSION
 ========================================= */
 
 export async function POST(request: NextRequest) {
@@ -675,282 +588,6 @@ export async function POST(request: NextRequest) {
           success: false,
           message:
             "Supabase server configuration is missing.",
-        },
-        { status: 500 }
-      );
-    }
-
-    const admin = await getAdminUser(request);
-
-    if (!admin) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Unauthorized.",
-        },
-        { status: 401 }
-      );
-    }
-
-    let body: any;
-
-    try {
-      body = await request.json();
-    } catch {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Invalid JSON body.",
-        },
-        { status: 400 }
-      );
-    }
-
-    const name =
-      typeof body?.name === "string"
-        ? body.name.trim()
-        : "";
-
-    const email =
-      typeof body?.email === "string"
-        ? body.email.trim().toLowerCase()
-        : "";
-
-    const password =
-      typeof body?.password === "string"
-        ? body.password
-        : "";
-
-    const requestedAffiliateId =
-      typeof body?.affiliate_id === "string"
-        ? body.affiliate_id.trim()
-        : "";
-
-    const rawReferralRate = Number(
-      body?.referral_rate ?? 5
-    );
-
-    const referralRate = Number.isFinite(
-      rawReferralRate
-    )
-      ? Math.min(
-          100,
-          Math.max(0, rawReferralRate)
-        )
-      : 5;
-
-    /* -----------------------------------------
-       VALIDATION
-    ----------------------------------------- */
-
-    if (!name) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Affiliate name is required.",
-        },
-        { status: 400 }
-      );
-    }
-
-    if (
-      !email ||
-      !email.includes("@")
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "A valid email address is required.",
-        },
-        { status: 400 }
-      );
-    }
-
-    if (password.length < 6) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Password must be at least 6 characters.",
-        },
-        { status: 400 }
-      );
-    }
-
-    /* -----------------------------------------
-       CHECK AFFILIATE ID
-    ----------------------------------------- */
-
-    if (requestedAffiliateId) {
-      const {
-        data: existingProfile,
-        error: profileLookupError,
-      } = await supabaseAdmin
-        .from("affiliate_profiles")
-        .select(
-          "id,affiliate_id"
-        )
-        .eq(
-          "affiliate_id",
-          requestedAffiliateId
-        )
-        .maybeSingle();
-
-      if (profileLookupError) {
-        console.error(
-          "Affiliate ID lookup error:",
-          profileLookupError
-        );
-
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "Unable to validate Affiliate ID.",
-          },
-          { status: 500 }
-        );
-      }
-
-      if (existingProfile) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "That Affiliate ID is already in use.",
-          },
-          { status: 409 }
-        );
-      }
-    }
-
-    /* -----------------------------------------
-       CREATE AUTH USER
-    ----------------------------------------- */
-
-    const {
-      data: created,
-      error: createUserError,
-    } =
-      await supabaseAdmin.auth.admin.createUser({
-        email,
-
-        password,
-
-        email_confirm: true,
-
-        user_metadata: {
-          account_type: "affiliate",
-
-          application_status:
-            "approved",
-
-          full_name: name,
-
-          affiliate_id:
-            requestedAffiliateId ||
-            undefined,
-
-          referral_rate:
-            referralRate,
-
-          created_by_admin:
-            admin.id,
-
-          application_status_updated_by:
-            admin.id,
-
-          application_status_updated_at:
-            new Date().toISOString(),
-        },
-      });
-
-    if (
-      createUserError ||
-      !created?.user
-    ) {
-      console.error(
-        "Admin create affiliate user error:",
-        createUserError
-      );
-
-      const message =
-        createUserError?.message ||
-        "Unable to create affiliate account.";
-
-      return NextResponse.json(
-        {
-          success: false,
-
-          message:
-            message
-              .toLowerCase()
-              .includes("already")
-              ? "An account with this email already exists."
-              : message,
-        },
-        { status: 400 }
-      );
-    }
-
-    const user = created.user;
-
-    /* -----------------------------------------
-       AFFILIATE ID
-    ----------------------------------------- */
-
-    const affiliateId =
-      requestedAffiliateId ||
-      makeAffiliateId(user.id);
-
-    /* -----------------------------------------
-       CREATE AFFILIATE PROFILE
-    ----------------------------------------- */
-
-    const {
-      data: profile,
-      error: profileError,
-    } = await supabaseAdmin
-      .from("affiliate_profiles")
-      .insert({
-        id: user.id,
-
-        affiliate_id:
-          affiliateId,
-
-        full_name:
-          name,
-
-        email:
-          email,
-
-        status:
-          "active",
-
-        referral_code:
-          affiliateId,
-
-        referral_rate:
-          referralRate,
-      })
-      .select("*")
-      .maybeSingle();
-
-    /* -----------------------------------------
-/* =========================================
-   CREATE AFFILIATE DIRECTLY FROM ADMIN
-   SAFE VERSION
-========================================= */
-
-export async function POST(request: NextRequest) {
-  try {
-    if (!supabaseAdmin) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Supabase server configuration is missing.",
         },
         { status: 500 }
       );
@@ -1014,8 +651,13 @@ export async function POST(request: NextRequest) {
       body?.referral_rate ?? 5
     );
 
-    const referralRate = Number.isFinite(rawReferralRate)
-      ? Math.min(100, Math.max(0, rawReferralRate))
+    const referralRate = Number.isFinite(
+      rawReferralRate
+    )
+      ? Math.min(
+          100,
+          Math.max(0, rawReferralRate)
+        )
       : 5;
 
     /* -----------------------------------------
@@ -1026,7 +668,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: "Affiliate name is required.",
+          message:
+            "Affiliate name is required.",
         },
         { status: 400 }
       );
@@ -1036,7 +679,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: "A valid email address is required.",
+          message:
+            "A valid email address is required.",
         },
         { status: 400 }
       );
@@ -1046,7 +690,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: "Password must be at least 6 characters.",
+          message:
+            "Password must be at least 6 characters.",
         },
         { status: 400 }
       );
@@ -1063,7 +708,10 @@ export async function POST(request: NextRequest) {
       } = await supabaseAdmin
         .from("affiliate_profiles")
         .select("id,affiliate_id")
-        .eq("affiliate_id", requestedAffiliateId)
+        .eq(
+          "affiliate_id",
+          requestedAffiliateId
+        )
         .maybeSingle();
 
       if (profileLookupError) {
@@ -1075,7 +723,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            message: "Unable to validate Affiliate ID.",
+            message:
+              "Unable to validate Affiliate ID.",
           },
           { status: 500 }
         );
@@ -1085,7 +734,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            message: "That Affiliate ID is already in use.",
+            message:
+              "That Affiliate ID is already in use.",
           },
           { status: 409 }
         );
@@ -1103,13 +753,17 @@ export async function POST(request: NextRequest) {
     const {
       data: created,
       error: createUserError,
-    } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-    });
+    } =
+      await supabaseAdmin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+      });
 
-    if (createUserError || !created?.user) {
+    if (
+      createUserError ||
+      !created?.user
+    ) {
       console.error(
         "Admin create affiliate user error:",
         createUserError
@@ -1123,7 +777,9 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           message:
-            message.toLowerCase().includes("already")
+            message
+              .toLowerCase()
+              .includes("already")
               ? "An account with this email already exists."
               : message,
         },
@@ -1143,38 +799,39 @@ export async function POST(request: NextRequest) {
 
     /* -----------------------------------------
        UPDATE AUTH METADATA AFTER USER CREATION
-       
-       This is intentionally separate from
-       auth.admin.createUser().
     ----------------------------------------- */
 
     const {
       data: updatedUserData,
       error: metadataError,
-    } = await supabaseAdmin.auth.admin.updateUserById(
-      user.id,
-      {
-        user_metadata: {
-          account_type: "affiliate",
-          application_status: "approved",
-          full_name: name,
-          affiliate_id: affiliateId,
-          referral_rate: referralRate,
-          created_by_admin: admin.id,
-          application_status_updated_by: admin.id,
-          application_status_updated_at:
-            new Date().toISOString(),
-        },
-      }
-    );
+    } =
+      await supabaseAdmin.auth.admin.updateUserById(
+        user.id,
+        {
+          user_metadata: {
+            account_type: "affiliate",
+            application_status: "approved",
+            full_name: name,
+            affiliate_id: affiliateId,
+            referral_rate: referralRate,
+            created_by_admin: admin.id,
+            application_status_updated_by:
+              admin.id,
+            application_status_updated_at:
+              new Date().toISOString(),
+          },
+        }
+      );
 
-    if (metadataError || !updatedUserData?.user) {
+    if (
+      metadataError ||
+      !updatedUserData?.user
+    ) {
       console.error(
         "Admin affiliate metadata update error:",
         metadataError
       );
 
-      /* Roll back Auth user */
       await supabaseAdmin.auth.admin.deleteUser(
         user.id
       );
@@ -1197,31 +854,34 @@ export async function POST(request: NextRequest) {
     const {
       data: profile,
       error: profileError,
-    } = await supabaseAdmin
-      .from("affiliate_profiles")
-      .insert({
-        id: user.id,
-        affiliate_id: affiliateId,
-        full_name: name,
-        email,
-        status: "active",
-        referral_code: affiliateId,
-        referral_rate: referralRate,
-      })
-      .select("*")
-      .maybeSingle();
+    } =
+      await supabaseAdmin
+        .from("affiliate_profiles")
+        .insert({
+          id: user.id,
+          affiliate_id: affiliateId,
+          full_name: name,
+          email,
+          status: "active",
+          referral_code: affiliateId,
+          referral_rate: referralRate,
+        })
+        .select("*")
+        .maybeSingle();
 
     /* -----------------------------------------
        ROLLBACK IF PROFILE FAILED
     ----------------------------------------- */
 
-    if (profileError || !profile) {
+    if (
+      profileError ||
+      !profile
+    ) {
       console.error(
         "Admin affiliate profile creation error:",
         profileError
       );
 
-      /* Roll back Auth user */
       await supabaseAdmin.auth.admin.deleteUser(
         user.id
       );
@@ -1267,7 +927,8 @@ export async function POST(request: NextRequest) {
         success: false,
         message: "Unexpected server error.",
         details:
-          error?.message || "Unknown error.",
+          error?.message ||
+          "Unknown error.",
       },
       { status: 500 }
     );
@@ -1293,8 +954,7 @@ export async function PATCH(
       );
     }
 
-    const admin =
-      await getAdminUser(request);
+    const admin = await getAdminUser(request);
 
     if (!admin) {
       return NextResponse.json(
@@ -1309,14 +969,12 @@ export async function PATCH(
     let body: any;
 
     try {
-      body =
-        await request.json();
+      body = await request.json();
     } catch {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Invalid JSON body.",
+          message: "Invalid JSON body.",
         },
         { status: 400 }
       );
@@ -1329,9 +987,7 @@ export async function PATCH(
 
     const requestedStatus =
       typeof body?.status === "string"
-        ? body.status
-            .trim()
-            .toLowerCase()
+        ? body.status.trim().toLowerCase()
         : "";
 
     const allowedStatuses = [
@@ -1393,25 +1049,21 @@ export async function PATCH(
       );
     }
 
-    const currentUser =
-      userData.user;
+    const currentUser = userData.user;
 
     const currentMetadata =
       currentUser.user_metadata || {};
 
     const currentProfile =
-      await getAffiliateProfile(
-        userId
-      );
+      await getAffiliateProfile(userId);
 
-    const accountType =
-      String(
-        currentMetadata.account_type ||
-          currentProfile?.account_type ||
-          ""
-      )
-        .trim()
-        .toLowerCase();
+    const accountType = String(
+      currentMetadata.account_type ||
+        currentProfile?.account_type ||
+        ""
+    )
+      .trim()
+      .toLowerCase();
 
     if (
       accountType !== "affiliate" &&
@@ -1455,8 +1107,7 @@ export async function PATCH(
       await supabaseAdmin.auth.admin.updateUserById(
         userId,
         {
-          user_metadata:
-            updatedMetadata,
+          user_metadata: updatedMetadata,
         }
       );
 
@@ -1494,20 +1145,13 @@ export async function PATCH(
           await supabaseAdmin
             .from("affiliate_profiles")
             .update({
-              status:
-                requestedStatus,
-
+              status: requestedStatus,
               updated_at:
                 new Date().toISOString(),
             })
-            .eq(
-              "id",
-              userId
-            );
+            .eq("id", userId);
 
-        if (
-          profileUpdateError
-        ) {
+        if (profileUpdateError) {
           console.error(
             "Affiliate profile status update error:",
             profileUpdateError
@@ -1522,17 +1166,15 @@ export async function PATCH(
     }
 
     const updatedMetadataResult =
-      updatedUserData.user
-        .user_metadata || {};
+      updatedUserData.user.user_metadata || {};
 
-    const affiliateId =
-      String(
-        currentProfile?.affiliate_id ||
-          updatedMetadataResult.affiliate_id ||
-          updatedMetadataResult.affiliateId ||
-          updatedMetadataResult.username ||
-          makeAffiliateId(userId)
-      ).trim();
+    const affiliateId = String(
+      currentProfile?.affiliate_id ||
+        updatedMetadataResult.affiliate_id ||
+        updatedMetadataResult.affiliateId ||
+        updatedMetadataResult.username ||
+        makeAffiliateId(userId)
+    ).trim();
 
     return NextResponse.json(
       {
@@ -1542,12 +1184,8 @@ export async function PATCH(
           `Affiliate status changed to ${requestedStatus}.`,
 
         affiliate: {
-          id:
-            updatedUserData.user.id,
-
-          affiliate_id:
-            affiliateId,
-
+          id: updatedUserData.user.id,
+          affiliate_id: affiliateId,
           application_status:
             requestedStatus,
         },
@@ -1574,4 +1212,4 @@ export async function PATCH(
       { status: 500 }
     );
   }
-}
+      }
