@@ -664,6 +664,362 @@ export async function GET(
 }
 
 /* =========================================
+   CREATE AFFILIATE DIRECTLY FROM ADMIN
+========================================= */
+
+export async function POST(request: NextRequest) {
+  try {
+    if (!supabaseAdmin) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Supabase server configuration is missing.",
+        },
+        { status: 500 }
+      );
+    }
+
+    const admin = await getAdminUser(request);
+
+    if (!admin) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Unauthorized.",
+        },
+        { status: 401 }
+      );
+    }
+
+    let body: any;
+
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Invalid JSON body.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const name =
+      typeof body?.name === "string"
+        ? body.name.trim()
+        : "";
+
+    const email =
+      typeof body?.email === "string"
+        ? body.email.trim().toLowerCase()
+        : "";
+
+    const password =
+      typeof body?.password === "string"
+        ? body.password
+        : "";
+
+    const requestedAffiliateId =
+      typeof body?.affiliate_id === "string"
+        ? body.affiliate_id.trim()
+        : "";
+
+    const rawReferralRate = Number(
+      body?.referral_rate ?? 5
+    );
+
+    const referralRate = Number.isFinite(
+      rawReferralRate
+    )
+      ? Math.min(
+          100,
+          Math.max(0, rawReferralRate)
+        )
+      : 5;
+
+    /* -----------------------------------------
+       VALIDATION
+    ----------------------------------------- */
+
+    if (!name) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Affiliate name is required.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (
+      !email ||
+      !email.includes("@")
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "A valid email address is required.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (password.length < 6) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Password must be at least 6 characters.",
+        },
+        { status: 400 }
+      );
+    }
+
+    /* -----------------------------------------
+       CHECK AFFILIATE ID
+    ----------------------------------------- */
+
+    if (requestedAffiliateId) {
+      const {
+        data: existingProfile,
+        error: profileLookupError,
+      } = await supabaseAdmin
+        .from("affiliate_profiles")
+        .select(
+          "id,affiliate_id"
+        )
+        .eq(
+          "affiliate_id",
+          requestedAffiliateId
+        )
+        .maybeSingle();
+
+      if (profileLookupError) {
+        console.error(
+          "Affiliate ID lookup error:",
+          profileLookupError
+        );
+
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "Unable to validate Affiliate ID.",
+          },
+          { status: 500 }
+        );
+      }
+
+      if (existingProfile) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              "That Affiliate ID is already in use.",
+          },
+          { status: 409 }
+        );
+      }
+    }
+
+    /* -----------------------------------------
+       CREATE AUTH USER
+    ----------------------------------------- */
+
+    const {
+      data: created,
+      error: createUserError,
+    } =
+      await supabaseAdmin.auth.admin.createUser({
+        email,
+
+        password,
+
+        email_confirm: true,
+
+        user_metadata: {
+          account_type: "affiliate",
+
+          application_status:
+            "approved",
+
+          full_name: name,
+
+          affiliate_id:
+            requestedAffiliateId ||
+            undefined,
+
+          referral_rate:
+            referralRate,
+
+          created_by_admin:
+            admin.id,
+
+          application_status_updated_by:
+            admin.id,
+
+          application_status_updated_at:
+            new Date().toISOString(),
+        },
+      });
+
+    if (
+      createUserError ||
+      !created?.user
+    ) {
+      console.error(
+        "Admin create affiliate user error:",
+        createUserError
+      );
+
+      const message =
+        createUserError?.message ||
+        "Unable to create affiliate account.";
+
+      return NextResponse.json(
+        {
+          success: false,
+
+          message:
+            message
+              .toLowerCase()
+              .includes("already")
+              ? "An account with this email already exists."
+              : message,
+        },
+        { status: 400 }
+      );
+    }
+
+    const user = created.user;
+
+    /* -----------------------------------------
+       AFFILIATE ID
+    ----------------------------------------- */
+
+    const affiliateId =
+      requestedAffiliateId ||
+      makeAffiliateId(user.id);
+
+    /* -----------------------------------------
+       CREATE AFFILIATE PROFILE
+    ----------------------------------------- */
+
+    const {
+      data: profile,
+      error: profileError,
+    } = await supabaseAdmin
+      .from("affiliate_profiles")
+      .insert({
+        id: user.id,
+
+        affiliate_id:
+          affiliateId,
+
+        full_name:
+          name,
+
+        email:
+          email,
+
+        status:
+          "active",
+
+        referral_code:
+          affiliateId,
+
+        referral_rate:
+          referralRate,
+      })
+      .select("*")
+      .maybeSingle();
+
+    /* -----------------------------------------
+       ROLLBACK IF PROFILE FAILED
+    ----------------------------------------- */
+
+    if (
+      profileError ||
+      !profile
+    ) {
+      console.error(
+        "Admin affiliate profile creation error:",
+        profileError
+      );
+
+      await supabaseAdmin.auth.admin.deleteUser(
+        user.id
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+
+          message:
+            profileError?.message ||
+            "Affiliate profile setup failed. The account was rolled back.",
+        },
+        { status: 500 }
+      );
+    }
+
+    /* -----------------------------------------
+       SUCCESS
+    ----------------------------------------- */
+
+    return NextResponse.json(
+      {
+        success: true,
+
+        message:
+          "Affiliate account created and approved successfully.",
+
+        affiliate: {
+          id:
+            user.id,
+
+          affiliate_id:
+            affiliateId,
+
+          email:
+            email,
+
+          name:
+            name,
+
+          application_status:
+            "approved",
+        },
+      },
+      { status: 201 }
+    );
+  } catch (error: any) {
+    console.error(
+      "Admin affiliates POST error:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+
+        message:
+          "Unexpected server error.",
+
+        details:
+          error?.message ||
+          "Unknown error.",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/* =========================================
    UPDATE AFFILIATE STATUS
 ========================================= */
 
