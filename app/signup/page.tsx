@@ -7,7 +7,6 @@ import {
   type FormEvent,
 } from "react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
 
 type FormState = {
   firstName: string;
@@ -86,83 +85,11 @@ export default function SignupPage() {
     }));
   }
 
-  async function getRawAuthError(email: string, password: string) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-    if (!supabaseUrl || !anonKey) {
-      return {
-        status: "N/A",
-        body: "Supabase environment variables are missing.",
-      };
-    }
-
-    try {
-      const response = await fetch(
-        `${supabaseUrl.replace(/\/$/, "")}/auth/v1/signup`,
-        {
-          method: "POST",
-          headers: {
-            apikey: anonKey,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email,
-            password,
-            data: {
-              account_type: "affiliate",
-              first_name: form.firstName.trim(),
-              last_name: form.lastName.trim(),
-              username: form.username.trim(),
-              phone: form.phone.trim(),
-              country: form.country.trim(),
-              city: form.city.trim(),
-              address: form.address.trim(),
-              traffic_source: form.trafficSource,
-              traffic_url: form.trafficUrl.trim(),
-              social_profile: form.socialProfile.trim(),
-              monthly_traffic: form.monthlyTraffic,
-              promotion_method: form.promotionMethod,
-              experience: form.experience,
-              previous_networks: form.previousNetworks.trim(),
-              company_name: form.companyName.trim(),
-              payment_method: form.paymentMethod,
-              application_status: "pending",
-              referred_by: referralCode || null,
-            },
-          }),
-        }
-      );
-
-      const rawText = await response.text();
-
-      return {
-        status: String(response.status),
-        body: rawText || "(empty response)",
-      };
-    } catch (error) {
-      return {
-        status: "FETCH_FAILED",
-        body:
-          error instanceof Error
-            ? error.message
-            : "Unable to perform diagnostic request.",
-      };
-    }
-  }
-
   async function handleSignup(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     setMessage("");
     setSuccess(false);
-
-    if (!supabase) {
-      setMessage(
-        "Supabase configuration is missing. Please contact the administrator."
-      );
-      return;
-    }
 
     if (form.password !== form.confirmPassword) {
       setMessage("Passwords do not match.");
@@ -184,92 +111,80 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      const email = form.email.trim();
+      const email = form.email.trim().toLowerCase();
 
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password: form.password,
-        options: {
-          data: {
-            account_type: "affiliate",
-            first_name: form.firstName.trim(),
-            last_name: form.lastName.trim(),
-            username: form.username.trim(),
-            phone: form.phone.trim(),
-            country: form.country.trim(),
-            city: form.city.trim(),
-            address: form.address.trim(),
-            traffic_source: form.trafficSource,
-            traffic_url: form.trafficUrl.trim(),
-            social_profile: form.socialProfile.trim(),
-            monthly_traffic: form.monthlyTraffic,
-            promotion_method: form.promotionMethod,
-            experience: form.experience,
-            previous_networks: form.previousNetworks.trim(),
-            company_name: form.companyName.trim(),
-            payment_method: form.paymentMethod,
-            application_status: "pending",
-            referred_by: referralCode || null,
-          },
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
+        body: JSON.stringify({
+          firstName: form.firstName.trim(),
+          lastName: form.lastName.trim(),
+          username: form.username.trim(),
+          email,
+          password: form.password,
+          phone: form.phone.trim(),
+          country: form.country.trim(),
+          city: form.city.trim(),
+          address: form.address.trim(),
+          trafficSource: form.trafficSource,
+          trafficUrl: form.trafficUrl.trim(),
+          socialProfile: form.socialProfile.trim(),
+          monthlyTraffic: form.monthlyTraffic,
+          promotionMethod: form.promotionMethod,
+          experience: form.experience,
+          previousNetworks: form.previousNetworks.trim(),
+          companyName: form.companyName.trim(),
+          paymentMethod: form.paymentMethod,
+          referralCode: referralCode.trim(),
+        }),
       });
 
-      console.log("Supabase signup response:", {
-        data,
-        error,
-      });
+      let result: {
+        success?: boolean;
+        message?: string;
+        error?: string;
+        affiliate?: {
+          id?: string;
+          affiliate_id?: string;
+          email?: string;
+          status?: string;
+        };
+      } | null = null;
 
-      if (error) {
-        console.error("Supabase signup error:", {
-          message: error.message,
-          code: error.code,
-          status: error.status,
-          name: error.name,
-        });
-
-        const rawError = await getRawAuthError(email, form.password);
-
-        console.error("RAW SUPABASE AUTH RESPONSE:", rawError);
-
-        const errorDetails = [
-          `Message: ${error.message || "Unknown error"}`,
-          `Code: ${error.code || "N/A"}`,
-          `Status: ${error.status || "N/A"}`,
-          `Name: ${error.name || "N/A"}`,
-          "",
-          "Raw Auth HTTP Status:",
-          rawError.status,
-          "",
-          "Raw Auth Response:",
-          rawError.body,
-        ].join("\n");
-
-        setMessage(errorDetails);
-        return;
+      try {
+        result = await response.json();
+      } catch {
+        result = null;
       }
 
-      if (!data.user) {
+      if (!response.ok) {
         setMessage(
-          "Signup did not create a user. Supabase returned no user and no error."
+          result?.error ||
+            "Registration failed. Please check your information and try again."
         );
         return;
       }
+
+      if (!result?.success || !result?.affiliate) {
+        setMessage(
+          result?.error ||
+            "Registration could not be completed. Please try again."
+        );
+        return;
+      }
+
+      const affiliateId =
+        result.affiliate.affiliate_id || form.username.trim();
 
       setSuccess(true);
 
-      if (data.session) {
-        setMessage(
-          referralCode
-            ? "Application submitted successfully with referral attribution. Your account has been created and you are signed in."
-            : "Application submitted successfully. Your account has been created and you are signed in."
-        );
-      } else {
-        setMessage(
-          referralCode
-            ? "Application submitted successfully with referral attribution. Please check your email to verify your account. Your affiliate application is now pending admin approval."
-            : "Application submitted successfully. Please check your email to verify your account. Your affiliate application is now pending admin approval."
-        );
-      }
+      setMessage(
+        referralCode.trim()
+          ? `Registration successful! Your Affiliate ID is ${affiliateId}. Your referral has been recorded and your application is now pending admin approval.`
+          : `Registration successful! Your Affiliate ID is ${affiliateId}. Your application is now pending admin approval.`
+      );
 
       setForm((prev) => ({
         ...prev,
@@ -277,18 +192,13 @@ export default function SignupPage() {
         confirmPassword: "",
       }));
     } catch (error) {
-      console.error("Unexpected signup error:", error);
+      console.error("Unexpected registration error:", error);
 
-      if (error instanceof Error) {
-        setMessage(
-          [
-            `Unexpected Error: ${error.message}`,
-            `Name: ${error.name || "N/A"}`,
-          ].join("\n")
-        );
-      } else {
-        setMessage("Something went wrong. Please try again.");
-      }
+      setMessage(
+        error instanceof Error
+          ? `Registration error: ${error.message}`
+          : "Something went wrong while creating your account. Please try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -647,7 +557,9 @@ export default function SignupPage() {
               disabled={loading}
               className="mt-7 w-full rounded-xl bg-blue-600 px-6 py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {loading ? "Submitting Application..." : "Create Affiliate Account"}
+              {loading
+                ? "Submitting Application..."
+                : "Create Affiliate Account"}
             </button>
 
             <p className="mt-5 text-center text-sm text-slate-500">
@@ -772,4 +684,4 @@ function SectionHeading({
       <p className="mt-1 text-sm text-slate-500">{description}</p>
     </div>
   );
-      }
+}
