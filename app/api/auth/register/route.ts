@@ -20,7 +20,10 @@ function getAdminClient() {
 }
 
 function makeAffiliateId(userId: string) {
-  return `UP${userId.replace(/-/g, "").slice(0, 10).toUpperCase()}`;
+  return `UP${userId
+    .replace(/-/g, "")
+    .slice(0, 10)
+    .toUpperCase()}`;
 }
 
 export async function POST(request: NextRequest) {
@@ -53,7 +56,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "First name, last name and username are required.",
+          error:
+            "First name, last name and username are required.",
         },
         { status: 400 }
       );
@@ -80,12 +84,14 @@ export async function POST(request: NextRequest) {
     }
 
     /*
-     * Create the Auth user first.
+     * IMPORTANT:
+     * Do NOT query affiliate_profiles before creating
+     * the Auth user.
      *
-     * We intentionally do NOT query affiliate_profiles
-     * before creating the user because that lookup was
-     * causing the "Unable to validate Affiliate ID" error.
+     * The previous lookup was causing:
+     * "Unable to validate Affiliate ID."
      */
+
     const { data: authData, error: authError } =
       await supabaseAdmin.auth.admin.createUser({
         email,
@@ -94,6 +100,7 @@ export async function POST(request: NextRequest) {
 
         user_metadata: {
           account_type: "affiliate",
+
           first_name: firstName,
           last_name: lastName,
           username,
@@ -103,18 +110,29 @@ export async function POST(request: NextRequest) {
           city: String(body.city || "").trim(),
           address: String(body.address || "").trim(),
 
-          traffic_source: String(body.trafficSource || "").trim(),
-          traffic_url: String(body.trafficUrl || "").trim(),
+          traffic_source: String(
+            body.trafficSource || ""
+          ).trim(),
 
-          social_profile: String(body.socialProfile || "").trim(),
+          traffic_url: String(
+            body.trafficUrl || ""
+          ).trim(),
 
-          monthly_traffic: String(body.monthlyTraffic || "").trim(),
+          social_profile: String(
+            body.socialProfile || ""
+          ).trim(),
+
+          monthly_traffic: String(
+            body.monthlyTraffic || ""
+          ).trim(),
 
           promotion_method: String(
             body.promotionMethod || ""
           ).trim(),
 
-          experience: String(body.experience || "").trim(),
+          experience: String(
+            body.experience || ""
+          ).trim(),
 
           previous_networks: String(
             body.previousNetworks || ""
@@ -131,10 +149,14 @@ export async function POST(request: NextRequest) {
           application_status: "pending",
 
           referred_by:
-            String(body.referralCode || "").trim() || null,
+            String(body.referralCode || "").trim() ||
+            null,
         },
       });
 
+    /*
+     * Auth user creation failed.
+     */
     if (authError || !authData?.user) {
       console.error(
         "Server-side affiliate Auth creation error:",
@@ -142,9 +164,11 @@ export async function POST(request: NextRequest) {
       );
 
       const errorMessage =
-        authError?.message || "Unable to create account.";
+        authError?.message ||
+        "Unable to create account.";
 
-      const lowerMessage = errorMessage.toLowerCase();
+      const lowerMessage =
+        errorMessage.toLowerCase();
 
       if (
         lowerMessage.includes("already") ||
@@ -154,7 +178,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            error: "An account with this email already exists.",
+            error:
+              "An account with this email already exists.",
           },
           { status: 409 }
         );
@@ -172,14 +197,14 @@ export async function POST(request: NextRequest) {
     const user = authData.user;
 
     /*
-     * Use the username entered during registration
-     * as the Affiliate ID.
+     * The username entered during signup becomes
+     * the Affiliate ID.
      */
     const affiliateId =
       username || makeAffiliateId(user.id);
 
     /*
-     * Create the affiliate profile.
+     * Create affiliate profile.
      */
     const { data: profile, error: profileError } =
       await supabaseAdmin
@@ -187,7 +212,8 @@ export async function POST(request: NextRequest) {
         .insert({
           id: user.id,
           affiliate_id: affiliateId,
-          full_name: `${firstName} ${lastName}`.trim(),
+          full_name:
+            `${firstName} ${lastName}`.trim(),
           email,
           status: "pending",
           referral_code: affiliateId,
@@ -197,8 +223,10 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
 
     /*
-     * If profile creation fails, remove the Auth user
-     * so no incomplete account remains.
+     * Profile creation failed.
+     *
+     * Remove the Auth user so we don't leave
+     * an incomplete account in Supabase.
      */
     if (profileError || !profile) {
       console.error(
@@ -206,9 +234,6 @@ export async function POST(request: NextRequest) {
         profileError
       );
 
-      /*
-       * Handle duplicate Affiliate ID safely.
-       */
       const profileErrorMessage =
         profileError?.message ||
         "Affiliate profile could not be created.";
@@ -216,8 +241,13 @@ export async function POST(request: NextRequest) {
       const lowerProfileError =
         profileErrorMessage.toLowerCase();
 
-      await supabaseAdmin.auth.admin.deleteUser(user.id);
+      await supabaseAdmin.auth.admin.deleteUser(
+        user.id
+      );
 
+      /*
+       * Duplicate Affiliate ID.
+       */
       if (
         lowerProfileError.includes("duplicate") ||
         lowerProfileError.includes("unique")
@@ -276,4 +306,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-        }
+}
