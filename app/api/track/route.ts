@@ -1,68 +1,106 @@
-export const dynamic = "force-dynamic";
 
+import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { randomUUID } from "crypto";
 
-// ==========================================
-// UP NETWORK CPA — TRACKING
-// ==========================================
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
+// Existing fallback destinations are preserved.
 const SMARTLINKS = [
   "https://sexforfuns.com/pY1PVjKw?aid=pkkfxdhdk&kid=hxxfzdzzbgg",
   "https://datesdreamy.com/qw3y42Vq?aid=pkkfxdhdk&kid=hhkbkaaxpzg",
 ];
 
-function normalizePayout(value: unknown) {
-  const payout = Number(value);
+function clean(value: unknown): string {
+  return String(value ?? "").trim();
+}
 
-  if (!Number.isFinite(payout) || payout < 0) {
+function normalizePayout(value: unknown): number {
+  const amount = Number(value);
+
+  if (!Number.isFinite(amount) || amount < 0) {
     return 0;
   }
 
-  return Number(payout.toFixed(2));
+  return Number(amount.toFixed(2));
 }
 
-function detectDevice(userAgent: string) {
-  if (/tablet|ipad/i.test(userAgent)) {
-    return "Tablet";
-  }
-
-  if (/mobile|android|iphone/i.test(userAgent)) {
-    return "Mobile";
-  }
-
+function detectDevice(userAgent: string): string {
+  if (/tablet|ipad/i.test(userAgent)) return "Tablet";
+  if (/mobile|android|iphone/i.test(userAgent)) return "Mobile";
   return "Desktop";
 }
 
-function detectBrowser(userAgent: string) {
-  if (/edg/i.test(userAgent)) {
-    return "Edge";
-  }
-
-  if (/chrome/i.test(userAgent)) {
-    return "Chrome";
-  }
-
-  if (/firefox/i.test(userAgent)) {
-    return "Firefox";
-  }
-
-  if (/safari/i.test(userAgent)) {
-    return "Safari";
-  }
-
+function detectBrowser(userAgent: string): string {
+  if (/edg/i.test(userAgent)) return "Edge";
+  if (/chrome/i.test(userAgent)) return "Chrome";
+  if (/firefox/i.test(userAgent)) return "Firefox";
+  if (/safari/i.test(userAgent)) return "Safari";
   return "Other";
 }
 
-export async function GET(
-  request: NextRequest
-) {
-  try {
-    /* ------------------------------------------
-       1. SUPABASE CONFIGURATION
-    ------------------------------------------ */
+function parseDestination(value: unknown): URL | null {
+  const input = clean(value);
 
+  if (!input) return null;
+
+  try {
+    const url = new URL(input);
+
+    if (
+      url.protocol !== "https:" &&
+      url.protocol !== "http:"
+    ) {
+      return null;
+    }
+
+    if (url.username || url.password) {
+      return null;
+    }
+
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+function addTrackingParameters(
+  destination: URL,
+  clickId: string,
+  affiliateId: string,
+  offerId?: string
+): string {
+  destination.searchParams.set("sub1", clickId);
+  destination.searchParams.set("sub2", affiliateId);
+
+  if (offerId) {
+    destination.searchParams.set("offer_id", offerId);
+  }
+
+  return destination.toString();
+}
+
+function errorResponse(
+  message: string,
+  status: number
+) {
+  return NextResponse.json(
+    {
+      success: false,
+      error: message,
+    },
+    {
+      status,
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    }
+  );
+}
+
+export async function GET(request: NextRequest) {
+  try {
     const supabaseUrl =
       process.env.NEXT_PUBLIC_SUPABASE_URL;
 
@@ -70,553 +108,300 @@ export async function GET(
       process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !serviceRoleKey) {
-      return NextResponse.json(
-        {
-          error:
-            "Supabase server configuration is missing.",
-        },
-        { status: 500 }
+      console.error("Tracking: Supabase configuration missing.");
+
+      return errorResponse(
+        "Tracking service is not configured.",
+        500
       );
     }
 
-    const supabase =
-      createClient(
-        supabaseUrl,
-        serviceRoleKey,
-        {
-          auth: {
-            autoRefreshToken: false,
-            persistSession: false,
-          },
-        }
-      );
+    const supabase = createClient(
+      supabaseUrl,
+      serviceRoleKey,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    );
 
-    /* ------------------------------------------
-       2. READ PARAMETERS
-    ------------------------------------------ */
+    const { searchParams } = new URL(request.url);
 
-    const { searchParams } =
-      new URL(request.url);
-
-    const affiliateId =
+    const affiliateId = clean(
       searchParams.get("aid") ||
-      searchParams.get("affiliate_id");
+        searchParams.get("affiliate_id")
+    );
 
-    const offerId =
+    const offerId = clean(
       searchParams.get("offerId") ||
-      searchParams.get("offer_id");
+        searchParams.get("offer_id")
+    );
 
     const smartlinkSlug =
-      searchParams.get("sl") ||
+      clean(searchParams.get("sl")) ||
       "default-smartlink";
 
     if (!affiliateId) {
-      return NextResponse.json(
-        {
-          error:
-            "Affiliate ID is required.",
-        },
-        { status: 400 }
+      return errorResponse(
+        "Affiliate ID is required.",
+        400
       );
     }
 
-    /* ------------------------------------------
-       3. VALIDATE AFFILIATE
-       Current schema:
-       public.affiliate_profiles
-    ------------------------------------------ */
-
+    // The current database uses public.profiles.
     const {
       data: affiliate,
       error: affiliateError,
-    } =
-      await supabase
-        .from("affiliate_profiles")
-        .select(
-          "id, affiliate_id, status"
-        )
-        .eq(
-          "affiliate_id",
-          affiliateId
-        )
-        .maybeSingle();
+    } = await supabase
+      .from("profiles")
+      .select("id, affiliate_id, application_status")
+      .eq("affiliate_id", affiliateId)
+      .maybeSingle();
 
     if (affiliateError) {
       console.error(
-        "Affiliate validation error:",
+        "Tracking: affiliate lookup failed:",
         affiliateError
       );
 
-      return NextResponse.json(
-        {
-          error:
-            "Unable to validate affiliate.",
-        },
-        { status: 500 }
+      return errorResponse(
+        "Unable to validate affiliate.",
+        500
       );
     }
 
     if (!affiliate) {
-      return NextResponse.json(
-        {
-          error:
-            "Invalid affiliate ID.",
-        },
-        { status: 404 }
+      return errorResponse(
+        "Invalid affiliate ID.",
+        404
       );
     }
 
-    /* ------------------------------------------
-       4. CHECK AFFILIATE STATUS
-    ------------------------------------------ */
+    const affiliateStatus = clean(
+      affiliate.application_status
+    ).toLowerCase();
 
-    const affiliateStatus =
-      String(
-        affiliate.status || "active"
-      )
-        .trim()
-        .toLowerCase();
-
+    // Only approved affiliates may generate tracked clicks.
     if (
-      affiliateStatus === "suspended" ||
-      affiliateStatus === "rejected"
+      affiliateStatus !== "approved" &&
+      affiliateStatus !== "active"
     ) {
-      return NextResponse.json(
-        {
-          error:
-            "Affiliate account is not active.",
-        },
-        { status: 403 }
+      return errorResponse(
+        "Affiliate account is not approved or active.",
+        403
       );
     }
-
-    /* ------------------------------------------
-       5. GENERATE CLICK ID
-    ------------------------------------------ */
 
     const clickId = randomUUID();
 
-    /* ------------------------------------------
-       6. REQUEST INFORMATION
-    ------------------------------------------ */
-
     const userAgent =
-      request.headers.get(
-        "user-agent"
-      ) || "";
+      request.headers.get("user-agent") || "";
 
     const referer =
-      request.headers.get(
-        "referer"
-      ) || null;
+      request.headers.get("referer") || null;
 
     const country =
-      request.headers.get(
-        "x-vercel-ip-country"
-      ) ||
-      request.headers.get(
-        "cf-ipcountry"
-      ) ||
+      request.headers.get("x-vercel-ip-country") ||
+      request.headers.get("cf-ipcountry") ||
       null;
 
-    const device =
-      detectDevice(userAgent);
+    const device = detectDevice(userAgent);
+    const browser = detectBrowser(userAgent);
 
-    const browser =
-      detectBrowser(userAgent);
-
-    /* ------------------------------------------
-       7. OFFER TRACKING
-    ------------------------------------------ */
+    let destination: URL | null = null;
+    let payout = 0;
+    let trackedOfferId: string | null = null;
+    let smartlinkId: string | null = null;
 
     if (offerId) {
+      // ---------------------------------
+      // OFFER TRACKING
+      // ---------------------------------
       const {
         data: offer,
         error: offerError,
-      } =
-        await supabase
-          .from("offers")
-          .select(
-            `
-              id,
-              name,
-              payout,
-              tracking_url,
-              image_url,
-              status
-            `
-          )
-          .eq("id", offerId)
-          .eq("status", "active")
-          .maybeSingle();
+      } = await supabase
+        .from("offers")
+        .select(
+          "id, name, payout, tracking_url, status"
+        )
+        .eq("id", offerId)
+        .eq("status", "active")
+        .maybeSingle();
 
       if (offerError) {
         console.error(
-          "Offer validation error:",
+          "Tracking: offer lookup failed:",
           offerError
         );
 
-        return NextResponse.json(
-          {
-            error:
-              "Unable to validate offer.",
-          },
-          { status: 500 }
+        return errorResponse(
+          "Unable to validate offer.",
+          500
         );
       }
 
       if (!offer) {
-        return NextResponse.json(
-          {
-            error:
-              "Offer is unavailable or paused.",
-          },
-          { status: 404 }
+        return errorResponse(
+          "Offer is unavailable or paused.",
+          404
         );
       }
 
-      /* ----------------------------------------
-         OFFER PAYOUT
-      ---------------------------------------- */
+      destination = parseDestination(
+        offer.tracking_url
+      );
 
-      const offerPayout =
-        normalizePayout(
-          offer.payout
-        );
-
-      /* ----------------------------------------
-         SAVE OFFER CLICK
-      ---------------------------------------- */
-
-      const clickData = {
-        click_id: clickId,
-
-        affiliate_id:
-          affiliateId,
-
-        offer_id:
-          offer.id,
-
-        smartlink_id:
-          null,
-
-        country,
-
-        device,
-
-        browser,
-
-        referer,
-
-        status: "click",
-
-        payout:
-          offerPayout,
-      };
-
-      const {
-        error: clickError,
-      } =
-        await supabase
-          .from("clicks")
-          .insert(clickData);
-
-      if (clickError) {
-        console.error(
-          "Offer click tracking error:",
-          clickError
-        );
-
-        return NextResponse.json(
-          {
-            error:
-              "Unable to record click.",
-            details:
-              clickError.message ||
-              "Database insert failed.",
-          },
-          { status: 500 }
+      if (!destination) {
+        return errorResponse(
+          "Offer tracking URL is missing or invalid.",
+          500
         );
       }
 
-      /* ----------------------------------------
-         VALIDATE TRACKING URL
-      ---------------------------------------- */
-
-      if (
-        !offer.tracking_url
-      ) {
-        return NextResponse.json(
-          {
-            error:
-              "This offer does not have a tracking URL.",
-          },
-          { status: 500 }
-        );
-      }
-
-      try {
-        const redirectUrl =
-          new URL(
-            offer.tracking_url
-          );
-
-        /* --------------------------------------
-           SUB PARAMETERS
-        -------------------------------------- */
-
-        redirectUrl.searchParams.set(
-          "sub1",
-          clickId
-        );
-
-        redirectUrl.searchParams.set(
-          "sub2",
-          affiliateId
-        );
-
-        redirectUrl.searchParams.set(
-          "offer_id",
-          String(offer.id)
-        );
-
-        /* --------------------------------------
-           REDIRECT
-        -------------------------------------- */
-
-        return NextResponse.redirect(
-          redirectUrl.toString(),
-          302
-        );
-      } catch (redirectError) {
-        console.error(
-          "Offer redirect URL error:",
-          redirectError
-        );
-
-        return NextResponse.json(
-          {
-            error:
-              "Offer tracking URL is invalid.",
-          },
-          { status: 500 }
-        );
-      }
-    }
-
-    /* ------------------------------------------
-       8. SMARTLINK DATABASE LOOKUP
-    ------------------------------------------ */
-
-    let smartlinkUuid:
-      string | null = null;
-
-    try {
+      payout = normalizePayout(offer.payout);
+      trackedOfferId = String(offer.id);
+    } else {
+      // ---------------------------------
+      // SMART LINK TRACKING
+      // ---------------------------------
       const {
         data: smartlink,
         error: smartlinkError,
-      } =
-        await supabase
-          .from("smart_links")
-          .select(
-            "id, affiliate_id, slug, destination_url, status"
-          )
-          .eq(
-            "affiliate_id",
-            affiliateId
-          )
-          .eq(
-            "slug",
-            smartlinkSlug
-          )
-          .eq(
-            "status",
-            "active"
-          )
-          .maybeSingle();
+      } = await supabase
+        .from("smart_links")
+        .select(
+          "id, affiliate_id, slug, destination_url, status"
+        )
+        .eq("affiliate_id", affiliateId)
+        .eq("slug", smartlinkSlug)
+        .eq("status", "active")
+        .maybeSingle();
 
-      if (
-        !smartlinkError &&
-        smartlink
-      ) {
-        smartlinkUuid =
-          smartlink.id;
+      if (smartlinkError) {
+        console.warn(
+          "Tracking: smartlink lookup failed:",
+          smartlinkError
+        );
       }
-    } catch (error) {
-      console.warn(
-        "Smartlink lookup failed:",
-        error
-      );
+
+      if (smartlink) {
+        const databaseDestination =
+          parseDestination(
+            smartlink.destination_url
+          );
+
+        if (databaseDestination) {
+          destination = databaseDestination;
+          smartlinkId = String(smartlink.id);
+        } else {
+          console.warn(
+            "Tracking: invalid smartlink destination:",
+            smartlink.id
+          );
+        }
+      }
+
+      // Preserve the existing fallback rotation.
+      if (!destination) {
+        if (SMARTLINKS.length === 0) {
+          return errorResponse(
+            "No smartlink destination is configured.",
+            503
+          );
+        }
+
+        const firstByte = Number.parseInt(
+          clickId.replace(/-/g, "").slice(0, 2),
+          16
+        );
+
+        const fallbackIndex =
+          firstByte % SMARTLINKS.length;
+
+        destination = parseDestination(
+          SMARTLINKS[fallbackIndex]
+        );
+
+        // No database smartlink is associated
+        // with this fallback click.
+        smartlinkId = null;
+
+        if (!destination) {
+          return errorResponse(
+            "Smartlink destination is invalid.",
+            500
+          );
+        }
+      }
     }
 
-    /* ------------------------------------------
-       9. SAVE SMARTLINK CLICK
-    ------------------------------------------ */
-
-    const smartlinkClickData = {
-      click_id:
-        clickId,
-
-      affiliate_id:
-        affiliateId,
-
-      smartlink_id:
-        smartlinkUuid,
-
+    // ---------------------------------
+    // RECORD CLICK
+    // ---------------------------------
+    const clickData: Record<string, unknown> = {
+      click_id: clickId,
+      affiliate_id: affiliateId,
+      smartlink_id: smartlinkId,
       country,
-
       device,
-
       browser,
-
       referer,
-
-      status:
-        "click",
-
-      payout:
-        0,
+      status: "click",
+      payout: trackedOfferId ? payout : 0,
     };
 
-    const {
-      error:
-        smartlinkClickError,
-    } =
-      await supabase
-        .from("clicks")
-        .insert(
-          smartlinkClickData
-        );
+    if (trackedOfferId) {
+      clickData.offer_id = trackedOfferId;
+    }
 
-    if (
-      smartlinkClickError
-    ) {
+    const { error: clickError } = await supabase
+      .from("clicks")
+      .insert(clickData);
+
+    if (clickError) {
       console.error(
-        "Smartlink click tracking error:",
-        smartlinkClickError
+        "Tracking: click insert failed:",
+        clickError
       );
 
-      return NextResponse.json(
-        {
-          error:
-            "Unable to record click.",
-          details:
-            smartlinkClickError.message ||
-            "Database insert failed.",
-        },
-        { status: 500 }
+      return errorResponse(
+        "Unable to record click.",
+        500
       );
     }
 
-    /* ------------------------------------------
-       10. USE DATABASE SMARTLINK DESTINATION
-    ------------------------------------------ */
-
-    if (smartlinkUuid) {
-      try {
-        const {
-          data: smartlink,
-        } =
-          await supabase
-            .from("smart_links")
-            .select(
-              "destination_url,status"
-            )
-            .eq(
-              "id",
-              smartlinkUuid
-            )
-            .eq(
-              "status",
-              "active"
-            )
-            .maybeSingle();
-
-        if (
-          smartlink?.destination_url
-        ) {
-          try {
-            const redirectUrl =
-              new URL(
-                smartlink.destination_url
-              );
-
-            redirectUrl.searchParams.set(
-              "sub1",
-              clickId
-            );
-
-            redirectUrl.searchParams.set(
-              "sub2",
-              affiliateId
-            );
-
-            return NextResponse.redirect(
-              redirectUrl.toString(),
-              302
-            );
-          } catch (error) {
-            console.warn(
-              "Database smartlink destination URL is invalid:",
-              error
-            );
-          }
-        }
-      } catch (error) {
-        console.warn(
-          "Smartlink destination lookup failed:",
-          error
-        );
-      }
-    }
-
-    /* ------------------------------------------
-       11. FALLBACK SMARTLINK ROTATION
-    ------------------------------------------ */
-
-    const firstByte =
-      Number.parseInt(
-        clickId
-          .replace(/-/g, "")
-          .slice(0, 2),
-        16
-      );
-
-    const smartlink =
-      SMARTLINKS[
-        firstByte %
-          SMARTLINKS.length
-      ];
-
-    const redirectUrl =
-      new URL(smartlink);
-
-    redirectUrl.searchParams.set(
-      "sub1",
-      clickId
-    );
-
-    redirectUrl.searchParams.set(
-      "sub2",
-      affiliateId
+    // ---------------------------------
+    // REDIRECT
+    // ---------------------------------
+    const redirectUrl = addTrackingParameters(
+      destination,
+      clickId,
+      affiliateId,
+      trackedOfferId || undefined
     );
 
     return NextResponse.redirect(
-      redirectUrl.toString(),
-      302
+      redirectUrl,
+      {
+        status: 302,
+        headers: {
+          "Cache-Control": "no-store",
+          "Referrer-Policy": "strict-origin-when-cross-origin",
+        },
+      }
     );
   } catch (error) {
     console.error(
-      "Tracking route error:",
+      "Tracking route unexpected error:",
       error
     );
 
-    return NextResponse.json(
-      {
-        error:
-          "Internal server error.",
-      },
-      { status: 500 }
+    return errorResponse(
+      "Internal tracking service error.",
+      500
     );
   }
 }
