@@ -6,11 +6,20 @@ import { createClient } from "@supabase/supabase-js";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// Existing fallback destinations are preserved.
-const SMARTLINKS = [
+const LEGACY_SMARTLINKS = [
   "https://sexforfuns.com/pY1PVjKw?aid=pkkfxdhdk&kid=hxxfzdzzbgg",
   "https://datesdreamy.com/qw3y42Vq?aid=pkkfxdhdk&kid=hhkbkaaxpzg",
 ];
+
+type SmartLinkRow = {
+  id: string;
+  affiliate_id: string | null;
+  slug: string;
+  destination_url: string | null;
+  status: string | null;
+  is_global: boolean;
+  network_share_percent: number;
+};
 
 function clean(value: unknown): string {
   return String(value ?? "").trim();
@@ -81,10 +90,7 @@ function addTrackingParameters(
   return destination.toString();
 }
 
-function errorResponse(
-  message: string,
-  status: number
-) {
+function errorResponse(message: string, status: number) {
   return NextResponse.json(
     {
       success: false,
@@ -108,8 +114,6 @@ export async function GET(request: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !serviceRoleKey) {
-      console.error("Tracking: Supabase configuration missing.");
-
       return errorResponse(
         "Tracking service is not configured.",
         500
@@ -150,7 +154,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // The current database uses public.profiles.
     const {
       data: affiliate,
       error: affiliateError,
@@ -161,11 +164,7 @@ export async function GET(request: NextRequest) {
       .maybeSingle();
 
     if (affiliateError) {
-      console.error(
-        "Tracking: affiliate lookup failed:",
-        affiliateError
-      );
-
+      console.error("Affiliate lookup:", affiliateError);
       return errorResponse(
         "Unable to validate affiliate.",
         500
@@ -183,7 +182,6 @@ export async function GET(request: NextRequest) {
       affiliate.application_status
     ).toLowerCase();
 
-    // Only approved affiliates may generate tracked clicks.
     if (
       affiliateStatus !== "approved" &&
       affiliateStatus !== "active"
@@ -216,9 +214,7 @@ export async function GET(request: NextRequest) {
     let smartlinkId: string | null = null;
 
     if (offerId) {
-      // ---------------------------------
-      // OFFER TRACKING
-      // ---------------------------------
+      // Existing offer tracking is preserved.
       const {
         data: offer,
         error: offerError,
@@ -232,11 +228,7 @@ export async function GET(request: NextRequest) {
         .maybeSingle();
 
       if (offerError) {
-        console.error(
-          "Tracking: offer lookup failed:",
-          offerError
-        );
-
+        console.error("Offer lookup:", offerError);
         return errorResponse(
           "Unable to validate offer.",
           500
@@ -264,70 +256,152 @@ export async function GET(request: NextRequest) {
       payout = normalizePayout(offer.payout);
       trackedOfferId = String(offer.id);
     } else {
-      // ---------------------------------
-      // SMART LINK TRACKING
-      // ---------------------------------
+      // Look up a personal smart link first.
       const {
-        data: smartlink,
-        error: smartlinkError,
+        data: personalLink,
+        error: personalError,
       } = await supabase
         .from("smart_links")
         .select(
-          "id, affiliate_id, slug, destination_url, status"
+          "id, affiliate_id, slug, destination_url, status, is_global, network_share_percent"
         )
         .eq("affiliate_id", affiliateId)
         .eq("slug", smartlinkSlug)
-        .eq("status", "active")
         .maybeSingle();
 
-      if (smartlinkError) {
-        console.warn(
-          "Tracking: smartlink lookup failed:",
-          smartlinkError
+      if (personalError) {
+        console.error(
+          "Personal smartlink lookup:",
+          personalError
+        );
+
+        return errorResponse(
+          "Unable to load smartlink.",
+          500
         );
       }
 
-      if (smartlink) {
-        const databaseDestination =
-          parseDestination(
-            smartlink.destination_url
+      let selectedLink =
+        (personalLink as SmartLinkRow | null) ?? null;
+
+      if (!selectedLink) {
+        if (smartlinkSlug === "default-smartlink") {
+          // Legacy default link rotates between
+          // active global smart links.
+          const {
+            data: globalLinks,
+            error: globalError,
+          } = await supabase
+            .from("smart_links")
+            .select(
+              "id, affiliate_id, slug, destination_url, status, is_global, network_share_percent"
+            )
+            .eq("is_global", true)
+            .eq("status", "active")
+            .order("slug", { ascending: true });
+
+          if (globalError) {
+            console.error(
+              "Global smartlink lookup:",
+              globalError
+            );
+
+            return errorResponse(
+              "Unable to load global smartlinks.",
+              500
+            );
+          }
+
+          const validLinks = (
+            (globalLinks ?? []) as SmartLinkRow[]
+          ).filter(
+            (link) =>
+              parseDestination(link.destination_url) !== null
           );
 
-        if (databaseDestination) {
-          destination = databaseDestination;
-          smartlinkId = String(smartlink.id);
+          if (validLinks.length > 0) {
+            const randomIndex =
+              Number.parseInt(
+                clickId.replace(/-/g, "").slice(0, 8),
+                16
+              ) % validLinks.length;
+
+            selectedLink = validLinks[randomIndex];
+          } else {
+            // Legacy fallback remains available
+            // only if no global smartlink rows exist.
+            const {
+              count,
+              error: countError,
+            } = await supabase
+              .from("smart_links")
+              .select("id", {
+                count: "exact",
+                head: true,
+              })
+              .eq("is_global", true);
+
+            if (countError) {
+              return errorResponse(
+                "Unable to verify smartlinks.",
+                500
+              );
+            }
+
+            if (count === 0) {
+              const randomIndex =
+                Number.parseInt(
+                  clickId.replace(/-/g, "").slice(0, 8),
+                  16
+                ) % LEGACY_SMARTLINKS.length;
+
+              destination = parseDestination(
+                LEGACY_SMARTLINKS[randomIndex]
+              );
+            }
+          }
         } else {
-          console.warn(
-            "Tracking: invalid smartlink destination:",
-            smartlink.id
-          );
+          // Explicit global smartlink slug.
+          const {
+            data: globalLink,
+            error: globalError,
+          } = await supabase
+            .from("smart_links")
+            .select(
+              "id, affiliate_id, slug, destination_url, status, is_global, network_share_percent"
+            )
+            .eq("is_global", true)
+            .eq("slug", smartlinkSlug)
+            .maybeSingle();
+
+          if (globalError) {
+            console.error(
+              "Global smartlink lookup:",
+              globalError
+            );
+
+            return errorResponse(
+              "Unable to load smartlink.",
+              500
+            );
+          }
+
+          selectedLink =
+            (globalLink as SmartLinkRow | null) ?? null;
         }
       }
 
-      // Preserve the existing fallback rotation.
-      if (!destination) {
-        if (SMARTLINKS.length === 0) {
+      if (selectedLink) {
+        if (selectedLink.status !== "active") {
           return errorResponse(
-            "No smartlink destination is configured.",
-            503
+            "Smartlink is paused.",
+            404
           );
         }
-
-        const firstByte = Number.parseInt(
-          clickId.replace(/-/g, "").slice(0, 2),
-          16
-        );
-
-        const fallbackIndex =
-          firstByte % SMARTLINKS.length;
 
         destination = parseDestination(
-          SMARTLINKS[fallbackIndex]
+          selectedLink.destination_url
         );
-
-        // No database smartlink is associated
-        // with this fallback click.
-        smartlinkId = null;
 
         if (!destination) {
           return errorResponse(
@@ -335,12 +409,18 @@ export async function GET(request: NextRequest) {
             500
           );
         }
+
+        smartlinkId = selectedLink.id;
+      }
+
+      if (!destination) {
+        return errorResponse(
+          "Smartlink is unavailable.",
+          404
+        );
       }
     }
 
-    // ---------------------------------
-    // RECORD CLICK
-    // ---------------------------------
     const clickData: Record<string, unknown> = {
       click_id: clickId,
       affiliate_id: affiliateId,
@@ -363,7 +443,7 @@ export async function GET(request: NextRequest) {
 
     if (clickError) {
       console.error(
-        "Tracking: click insert failed:",
+        "Tracking click insert:",
         clickError
       );
 
@@ -373,9 +453,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // ---------------------------------
-    // REDIRECT
-    // ---------------------------------
     const redirectUrl = addTrackingParameters(
       destination,
       clickId,
@@ -389,7 +466,8 @@ export async function GET(request: NextRequest) {
         status: 302,
         headers: {
           "Cache-Control": "no-store",
-          "Referrer-Policy": "strict-origin-when-cross-origin",
+          "Referrer-Policy":
+            "strict-origin-when-cross-origin",
         },
       }
     );
