@@ -1,9 +1,24 @@
+
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 
-type AnyRecord = Record<string, any>;
+type ClickRow = {
+  id?: string | null;
+  click_id?: string | null;
+  affiliate_id?: string | null;
+  smartlink_id?: string | null;
+  offer_id?: string | null;
+  country?: string | null;
+  device?: string | null;
+  browser?: string | null;
+  referer?: string | null;
+  status?: string | null;
+  payout?: number | string | null;
+  converted_at?: string | null;
+  created_at?: string | null;
+};
 
 const CONVERSION_STATUSES = [
   "converted",
@@ -12,64 +27,38 @@ const CONVERSION_STATUSES = [
   "paid",
 ];
 
-function normalizeStatus(value: any) {
-  return String(value || "")
-    .trim()
-    .toLowerCase();
+function normalizeStatus(value: unknown): string {
+  return String(value ?? "").trim().toLowerCase();
 }
 
-function getPayout(value: any) {
-  const payout = Number(value);
-
-  if (!Number.isFinite(payout)) {
-    return 0;
-  }
-
-  return payout;
+function getPayout(value: unknown): number {
+  const amount = Number(value ?? 0);
+  return Number.isFinite(amount) ? amount : 0;
 }
 
-function isConverted(row: AnyRecord) {
-  const status = normalizeStatus(row.status);
-
+function isConverted(row: ClickRow): boolean {
   return (
-    CONVERSION_STATUSES.includes(status) ||
-    Boolean(row.converted_at)
+    CONVERSION_STATUSES.includes(
+      normalizeStatus(row.status)
+    ) || Boolean(row.converted_at)
   );
 }
 
-function isInDateRange(
-  value: any,
-  from: string,
-  to: string
-) {
-  if (!value) {
+function validDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return false;
   }
 
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return false;
-  }
-
-  const selectedDate = date
-    .toISOString()
-    .slice(0, 10);
+  const date = new Date(`${value}T00:00:00.000Z`);
 
   return (
-    selectedDate >= from &&
-    selectedDate <= to
+    !Number.isNaN(date.getTime()) &&
+    date.toISOString().slice(0, 10) === value
   );
 }
 
-export async function GET(
-  request: NextRequest
-) {
+export async function GET(request: NextRequest) {
   try {
-    /* =========================================
-       1. SUPABASE CONFIG
-    ========================================= */
-
     const supabaseUrl =
       process.env.NEXT_PUBLIC_SUPABASE_URL;
 
@@ -79,49 +68,38 @@ export async function GET(
     if (!supabaseUrl || !serviceRoleKey) {
       return NextResponse.json(
         {
-          error:
-            "Supabase server configuration is missing.",
+          success: false,
+          error: "Supabase server configuration is missing.",
         },
         { status: 500 }
       );
     }
 
-    /* =========================================
-       2. AUTHORIZATION
-    ========================================= */
-
     const authorization =
       request.headers.get("authorization");
 
-    if (
-      !authorization ||
-      !authorization.startsWith("Bearer ")
-    ) {
+    if (!authorization?.startsWith("Bearer ")) {
       return NextResponse.json(
         {
+          success: false,
           error: "Authentication required.",
         },
         { status: 401 }
       );
     }
 
-    const accessToken = authorization
-      .replace("Bearer ", "")
-      .trim();
+    const accessToken =
+      authorization.slice(7).trim();
 
     if (!accessToken) {
       return NextResponse.json(
         {
-          error:
-            "Authentication token is missing.",
+          success: false,
+          error: "Authentication token is missing.",
         },
         { status: 401 }
       );
     }
-
-    /* =========================================
-       3. SUPABASE ADMIN CLIENT
-    ========================================= */
 
     const supabaseAdmin = createClient(
       supabaseUrl,
@@ -134,67 +112,46 @@ export async function GET(
       }
     );
 
-    /* =========================================
-       4. VERIFY AUTH USER
-    ========================================= */
-
+    // Verify the logged-in user.
     const {
       data: authData,
       error: authError,
-    } =
-      await supabaseAdmin.auth.getUser(
-        accessToken
-      );
+    } = await supabaseAdmin.auth.getUser(accessToken);
 
     const user = authData?.user;
 
     if (authError || !user) {
       return NextResponse.json(
         {
-          error:
-            "Your login session is invalid or expired.",
+          success: false,
+          error: "Your login session is invalid or expired.",
         },
         { status: 401 }
       );
     }
 
-    /* =========================================
-       5. LOAD AFFILIATE PROFILE
-
-       Current database table:
-       public.affiliate_profiles
-
-       Primary key:
-       id = auth.users.id
-    ========================================= */
-
+    // The current database uses public.profiles.
     const {
       data: profile,
       error: profileError,
-    } =
-      await supabaseAdmin
-        .from("affiliate_profiles")
-        .select(
-          "id, affiliate_id, full_name, email, status, referral_code, referral_rate"
-        )
-        .eq("id", user.id)
-        .maybeSingle();
+    } = await supabaseAdmin
+      .from("profiles")
+      .select(
+        "id, affiliate_id, full_name, email, application_status"
+      )
+      .eq("id", user.id)
+      .maybeSingle();
 
     if (profileError) {
       console.error(
-        "Statistics profile error:",
+        "Statistics profile lookup error:",
         profileError
       );
 
       return NextResponse.json(
         {
-          error:
-            "Affiliate profile could not be loaded.",
-          details: profileError.message,
-          code:
-            profileError.code || null,
-          hint:
-            profileError.hint || null,
+          success: false,
+          error: "Affiliate profile could not be loaded.",
         },
         { status: 500 }
       );
@@ -203,61 +160,62 @@ export async function GET(
     if (!profile) {
       return NextResponse.json(
         {
-          error:
-            "Affiliate profile not found.",
+          success: false,
+          error: "Affiliate profile not found.",
         },
         { status: 404 }
       );
     }
 
-    const affiliateId = String(
-      profile.affiliate_id || ""
-    ).trim();
+    const affiliateId =
+      String(profile.affiliate_id ?? "").trim();
 
     if (!affiliateId) {
       return NextResponse.json(
         {
-          error:
-            "Affiliate ID could not be determined.",
+          success: false,
+          error: "Affiliate ID could not be determined.",
         },
         { status: 500 }
       );
     }
 
-    /* =========================================
-       6. DATE RANGE
-    ========================================= */
+    const applicationStatus = normalizeStatus(
+      profile.application_status
+    );
 
-    const searchParams =
-      request.nextUrl.searchParams;
+    if (
+      applicationStatus !== "approved" &&
+      applicationStatus !== "active"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Your affiliate account is not approved.",
+        },
+        { status: 403 }
+      );
+    }
 
-    const from =
-      searchParams.get("from");
-
-    const to =
-      searchParams.get("to");
+    // Read and validate the selected date range.
+    const from = request.nextUrl.searchParams.get("from");
+    const to = request.nextUrl.searchParams.get("to");
 
     if (!from || !to) {
       return NextResponse.json(
         {
-          error:
-            "Both from and to dates are required.",
+          success: false,
+          error: "Both from and to dates are required.",
         },
         { status: 400 }
       );
     }
 
-    const datePattern =
-      /^\d{4}-\d{2}-\d{2}$/;
-
-    if (
-      !datePattern.test(from) ||
-      !datePattern.test(to)
-    ) {
+    if (!validDate(from) || !validDate(to)) {
       return NextResponse.json(
         {
-          error:
-            "Invalid date format. Use YYYY-MM-DD.",
+          success: false,
+          error: "Invalid date format. Use YYYY-MM-DD.",
         },
         { status: 400 }
       );
@@ -266,137 +224,114 @@ export async function GET(
     if (from > to) {
       return NextResponse.json(
         {
-          error:
-            "From Date cannot be later than To Date.",
+          success: false,
+          error: "From Date cannot be later than To Date.",
         },
         { status: 400 }
       );
     }
 
-    /* =========================================
-       7. LOAD CLICKS
+    // Use an exclusive upper bound so the complete
+    // final day is included, regardless of the year.
+    const nextDay = new Date(
+      `${to}T00:00:00.000Z`
+    );
 
-       Current database table:
-       public.clicks
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
 
-       We intentionally use select("*")
-       so the statistics page remains
-       compatible with the current schema.
-    ========================================= */
+    const fromTimestamp = `${from}T00:00:00.000Z`;
+    const toExclusive = nextDay.toISOString();
 
-    const {
-      data: allClicks,
-      error: clicksError,
-    } =
-      await supabaseAdmin
+    // Load only this affiliate's clicks.
+    // Pagination prevents the default 1000-row limit
+    // from silently truncating statistics.
+    const allClicks: ClickRow[] = [];
+    const pageSize = 1000;
+    let offset = 0;
+
+    while (true) {
+      const {
+        data: clickPage,
+        error: clicksError,
+      } = await supabaseAdmin
         .from("clicks")
-        .select("*")
-        .eq("affiliate_id", affiliateId);
-
-    if (clicksError) {
-      console.error(
-        "Statistics clicks error:",
-        clicksError
-      );
-
-      return NextResponse.json(
-        {
-          error:
-            "Statistics database query failed.",
-          details:
-            clicksError.message,
-          code:
-            clicksError.code || null,
-          hint:
-            clicksError.hint || null,
-        },
-        { status: 500 }
-      );
-    }
-
-    /* =========================================
-       8. DATE FILTER
-    ========================================= */
-
-    const clicks =
-      (allClicks || [])
-        .filter(
-          (row: AnyRecord) =>
-            isInDateRange(
-              row.created_at,
-              from,
-              to
-            )
+        .select(
+          "id, click_id, affiliate_id, smartlink_id, offer_id, country, device, browser, referer, status, payout, converted_at, created_at"
         )
-        .sort(
-          (
-            a: AnyRecord,
-            b: AnyRecord
-          ) => {
-            const aTime =
-              new Date(
-                a.created_at || 0
-              ).getTime();
+        .eq("affiliate_id", affiliateId)
+        .gte("created_at", fromTimestamp)
+        .lt("created_at", toExclusive)
+        .order("created_at", { ascending: false })
+        .order("click_id", { ascending: false })
+        .range(offset, offset + pageSize - 1);
 
-            const bTime =
-              new Date(
-                b.created_at || 0
-              ).getTime();
-
-            return bTime - aTime;
-          }
+      if (clicksError) {
+        console.error(
+          "Statistics clicks query error:",
+          clicksError
         );
 
-    /* =========================================
-       9. MAIN STATISTICS
-    ========================================= */
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Statistics database query failed.",
+          },
+          { status: 500 }
+        );
+      }
 
-    const totalClicks =
-      clicks.length;
+      const rows = (clickPage ?? []) as ClickRow[];
+
+      allClicks.push(...rows);
+
+      if (rows.length < pageSize) {
+        break;
+      }
+
+      offset += pageSize;
+    }
+
+    const totalClicks = allClicks.length;
 
     let conversions = 0;
     let earnings = 0;
 
-    for (const row of clicks) {
-      if (isConverted(row)) {
-        conversions += 1;
-
-        earnings += getPayout(
-          row.payout
-        );
+    const countryMap = new Map<
+      string,
+      {
+        clicks: number;
+        conversions: number;
+        earnings: number;
       }
-    }
+    >();
 
-    const conversionRate =
-      totalClicks > 0
-        ? Number(
-            (
-              (conversions /
-                totalClicks) *
-              100
-            ).toFixed(2)
-          )
+    const deviceMap = new Map<
+      string,
+      {
+        clicks: number;
+        conversions: number;
+        earnings: number;
+      }
+    >();
+
+    for (const click of allClicks) {
+      const converted = isConverted(click);
+      const payout = converted
+        ? getPayout(click.payout)
         : 0;
 
-    /* =========================================
-       10. COUNTRY REPORT
-    ========================================= */
+      if (converted) {
+        conversions += 1;
+        earnings += payout;
+      }
 
-    const countryMap =
-      new Map<
-        string,
-        {
-          clicks: number;
-          conversions: number;
-          earnings: number;
-        }
-      >();
-
-    for (const row of clicks) {
       const country =
-        String(
-          row.country || "Unknown"
-        ).trim() || "Unknown";
+        String(click.country || "Unknown").trim() ||
+        "Unknown";
+
+      const device =
+        String(click.device || "Unknown").trim() ||
+        "Unknown";
 
       if (!countryMap.has(country)) {
         countryMap.set(country, {
@@ -406,54 +341,14 @@ export async function GET(
         });
       }
 
-      const item =
-        countryMap.get(country)!;
+      const countryItem = countryMap.get(country)!;
 
-      item.clicks += 1;
+      countryItem.clicks += 1;
 
-      if (isConverted(row)) {
-        item.conversions += 1;
-
-        item.earnings += getPayout(
-          row.payout
-        );
+      if (converted) {
+        countryItem.conversions += 1;
+        countryItem.earnings += payout;
       }
-    }
-
-    const countryReport =
-      Array.from(
-        countryMap.entries()
-      )
-        .map(
-          ([country, value]) => ({
-            country,
-            ...value,
-          })
-        )
-        .sort(
-          (a, b) =>
-            b.clicks - a.clicks
-        );
-
-    /* =========================================
-       11. DEVICE REPORT
-    ========================================= */
-
-    const deviceMap =
-      new Map<
-        string,
-        {
-          clicks: number;
-          conversions: number;
-          earnings: number;
-        }
-      >();
-
-    for (const row of clicks) {
-      const device =
-        String(
-          row.device || "Unknown"
-        ).trim() || "Unknown";
 
       if (!deviceMap.has(device)) {
         deviceMap.set(device, {
@@ -463,48 +358,48 @@ export async function GET(
         });
       }
 
-      const item =
-        deviceMap.get(device)!;
+      const deviceItem = deviceMap.get(device)!;
 
-      item.clicks += 1;
+      deviceItem.clicks += 1;
 
-      if (isConverted(row)) {
-        item.conversions += 1;
-
-        item.earnings += getPayout(
-          row.payout
-        );
+      if (converted) {
+        deviceItem.conversions += 1;
+        deviceItem.earnings += payout;
       }
     }
 
-    const deviceReport =
-      Array.from(
-        deviceMap.entries()
-      )
-        .map(
-          ([device, value]) => ({
-            device,
-            ...value,
-            percentage:
-              totalClicks > 0
-                ? Number(
-                    (
-                      (value.clicks /
-                        totalClicks) *
-                      100
-                    ).toFixed(2)
-                  )
-                : 0,
-          })
-        )
-        .sort(
-          (a, b) =>
-            b.clicks - a.clicks
-        );
+    const conversionRate =
+      totalClicks > 0
+        ? Number(
+            ((conversions / totalClicks) * 100).toFixed(2)
+          )
+        : 0;
 
-    /* =========================================
-       12. RESPONSE
-    ========================================= */
+    const countryReport = Array.from(
+      countryMap.entries()
+    )
+      .map(([country, value]) => ({
+        country,
+        ...value,
+        earnings: Number(value.earnings.toFixed(2)),
+      }))
+      .sort((a, b) => b.clicks - a.clicks);
+
+    const deviceReport = Array.from(
+      deviceMap.entries()
+    )
+      .map(([device, value]) => ({
+        device,
+        ...value,
+        earnings: Number(value.earnings.toFixed(2)),
+        percentage:
+          totalClicks > 0
+            ? Number(
+                ((value.clicks / totalClicks) * 100).toFixed(2)
+              )
+            : 0,
+      }))
+      .sort((a, b) => b.clicks - a.clicks);
 
     return NextResponse.json(
       {
@@ -512,26 +407,15 @@ export async function GET(
 
         profile: {
           id: user.id,
-
           affiliateId,
-
-          email:
-            profile.email ||
-            user.email ||
-            null,
-
+          affiliate_id: affiliateId,
+          email: profile.email || user.email || null,
           name:
             profile.full_name ||
-            user.user_metadata
-              ?.full_name ||
-            user.user_metadata?.name ||
-            profile.email?.split("@")[0] ||
+            user.user_metadata?.full_name ||
             user.email?.split("@")[0] ||
             "Affiliate",
-
-          status:
-            profile.status ||
-            "active",
+          status: applicationStatus,
         },
 
         range: {
@@ -541,56 +425,40 @@ export async function GET(
 
         stats: {
           totalClicks,
-
           conversions,
-
           conversionRate,
-
-          earnings:
-            Number(
-              earnings.toFixed(2)
-            ),
+          earnings: Number(earnings.toFixed(2)),
         },
 
         countryReport,
-
         deviceReport,
 
-        clicks,
+        // The page displays the latest 100 rows.
+        clicks: allClicks.slice(0, 100),
       },
       {
         status: 200,
-
         headers: {
           "Cache-Control":
             "no-store, no-cache, must-revalidate",
-
           Pragma: "no-cache",
         },
       }
     );
-  } catch (error: any) {
-    console.error(
-      "Affiliate statistics error:",
-      error
-    );
+  } catch (error) {
+    console.error("Affiliate statistics error:", error);
 
     return NextResponse.json(
       {
-        error:
-          "Affiliate statistics could not be loaded.",
-
-        details:
-          error?.message ||
-          String(error),
+        success: false,
+        error: "Affiliate statistics could not be loaded.",
       },
       { status: 500 }
     );
   }
 }
 
-export async function POST(
-  request: NextRequest
-) {
+// Preserve compatibility with the existing route.
+export async function POST(request: NextRequest) {
   return GET(request);
 }
