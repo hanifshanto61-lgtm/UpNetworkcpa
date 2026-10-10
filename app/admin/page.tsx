@@ -52,10 +52,10 @@ const menuItems: MenuItem[] = [
     available: true,
   },
   {
-    label: "Smart Links",
-    icon: Link2,
-    action: "smart-links",
-    available: false,
+  label: "Smart Links",
+  icon: Link2,
+  action: "/admin/smart-links",
+  available: true,
   },
   {
     label: "Statistics",
@@ -115,11 +115,12 @@ const controlCards: ControlCard[] = [
     action: "/admin/offers",
   },
   {
-    title: "Smart Links",
-    description:
-      "Manage smart links, tracking destinations and affiliate smart-link access.",
-    icon: Link2,
-    status: "Coming next",
+  title: "Smart Links",
+  description:
+    "Manage smart links, tracking destinations and affiliate smart-link access.",
+  icon: Link2,
+  status: "Active",
+  action: "/admin/smart-links",
   },
   {
     title: "Statistics",
