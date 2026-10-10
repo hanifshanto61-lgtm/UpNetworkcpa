@@ -1,5 +1,5 @@
 
-import { randomUUID } from "crypto";
+import { createHmac, randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -25,6 +25,11 @@ function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
+function limited(value: unknown, max = 200): string | null {
+  const text = clean(value);
+  return text ? text.slice(0, max) : null;
+}
+
 function normalizePayout(value: unknown): number {
   const amount = Number(value);
 
@@ -35,18 +40,141 @@ function normalizePayout(value: unknown): number {
   return Number(amount.toFixed(2));
 }
 
-function detectDevice(userAgent: string): string {
-  if (/tablet|ipad/i.test(userAgent)) return "Tablet";
-  if (/mobile|android|iphone/i.test(userAgent)) return "Mobile";
+function detectDevice(ua: string): string {
+  if (/tablet|ipad/i.test(ua)) return "Tablet";
+  if (/mobile|android|iphone/i.test(ua)) return "Mobile";
   return "Desktop";
 }
 
-function detectBrowser(userAgent: string): string {
-  if (/edg/i.test(userAgent)) return "Edge";
-  if (/chrome/i.test(userAgent)) return "Chrome";
-  if (/firefox/i.test(userAgent)) return "Firefox";
-  if (/safari/i.test(userAgent)) return "Safari";
+function detectBrowser(ua: string): string {
+  if (/edg/i.test(ua)) return "Edge";
+  if (/opr|opera/i.test(ua)) return "Opera";
+  if (/firefox|fxios/i.test(ua)) return "Firefox";
+  if (/chrome|crios/i.test(ua)) return "Chrome";
+  if (/safari/i.test(ua)) return "Safari";
   return "Other";
+}
+
+function detectOS(ua: string): string {
+  if (/iphone|ipad|ipod/i.test(ua)) return "iOS";
+  if (/android/i.test(ua)) return "Android";
+  if (/windows/i.test(ua)) return "Windows";
+  if (/mac os|macintosh/i.test(ua)) return "macOS";
+  if (/linux/i.test(ua)) return "Linux";
+  return "Other";
+}
+
+function detectSuspicious(ua: string): boolean {
+  return (
+    !ua.trim() ||
+    /bot|crawler|spider|headless|curl|wget|python-requests|scrapy|selenium|playwright|puppeteer/i.test(
+      ua
+    )
+  );
+}
+
+function getHeader(
+  request: NextRequest,
+  name: string,
+  max = 150
+): string | null {
+  return limited(request.headers.get(name), max);
+}
+
+function getCountry(request: NextRequest): string | null {
+  return (
+    getHeader(request, "x-vercel-ip-country", 10) ||
+    getHeader(request, "cf-ipcountry", 10)
+  );
+}
+
+function getRegion(request: NextRequest): string | null {
+  return getHeader(request, "x-vercel-ip-country-region");
+}
+
+function getCity(request: NextRequest): string | null {
+  const raw = getHeader(request, "x-vercel-ip-city");
+
+  if (!raw) return null;
+
+  try {
+    return limited(decodeURIComponent(raw));
+  } catch {
+    return raw;
+  }
+}
+
+function getTimezone(request: NextRequest): string | null {
+  return getHeader(request, "x-vercel-ip-timezone");
+}
+
+function getVisitorHash(
+  request: NextRequest,
+  ua: string,
+  secret: string
+): string | null {
+  // The IP is used only to calculate a rotating,
+  // non-reversible visitor identifier.
+  // The raw IP is never saved to the database.
+  const ip =
+    request.headers.get("x-vercel-forwarded-for") ||
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    "";
+
+  if (!ip) return null;
+
+  const day = new Date().toISOString().slice(0, 10);
+
+  return createHmac("sha256", secret)
+    .update(`${day}|${ip}|${ua}`)
+    .digest("hex");
+}
+
+function getTrafficSource(
+  request: NextRequest,
+  params: URLSearchParams
+): string | null {
+  const utm =
+    limited(params.get("utm_source"), 100) ||
+    limited(params.get("source"), 100);
+
+  if (utm) return utm;
+
+  const referrer = request.headers.get("referer");
+
+  if (!referrer) return "Direct / Unknown";
+
+  try {
+    const url = new URL(referrer);
+    return limited(url.hostname, 100);
+  } catch {
+    return "Unknown";
+  }
+}
+
+function getSafeReferrer(
+  request: NextRequest
+): string | null {
+  const value = request.headers.get("referer");
+
+  if (!value) return null;
+
+  try {
+    // Store only the origin and path, not query strings
+    // that might contain personal information.
+    const url = new URL(value);
+
+    if (!["http:", "https:"].includes(url.protocol)) {
+      return null;
+    }
+
+    return limited(
+      `${url.origin}${url.pathname}`,
+      500
+    );
+  } catch {
+    return null;
+  }
 }
 
 function parseDestination(value: unknown): URL | null {
@@ -92,10 +220,7 @@ function addTrackingParameters(
 
 function errorResponse(message: string, status: number) {
   return NextResponse.json(
-    {
-      success: false,
-      error: message,
-    },
+    { success: false, error: message },
     {
       status,
       headers: {
@@ -135,12 +260,12 @@ export async function GET(request: NextRequest) {
 
     const affiliateId = clean(
       searchParams.get("aid") ||
-        searchParams.get("affiliate_id")
+      searchParams.get("affiliate_id")
     );
 
     const offerId = clean(
       searchParams.get("offerId") ||
-        searchParams.get("offer_id")
+      searchParams.get("offer_id")
     );
 
     const smartlinkSlug =
@@ -165,6 +290,7 @@ export async function GET(request: NextRequest) {
 
     if (affiliateError) {
       console.error("Affiliate lookup:", affiliateError);
+
       return errorResponse(
         "Unable to validate affiliate.",
         500
@@ -172,10 +298,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (!affiliate) {
-      return errorResponse(
-        "Invalid affiliate ID.",
-        404
-      );
+      return errorResponse("Invalid affiliate ID.", 404);
     }
 
     const affiliateStatus = clean(
@@ -197,16 +320,46 @@ export async function GET(request: NextRequest) {
     const userAgent =
       request.headers.get("user-agent") || "";
 
-    const referer =
-      request.headers.get("referer") || null;
+    const referer = getSafeReferrer(request);
 
-    const country =
-      request.headers.get("x-vercel-ip-country") ||
-      request.headers.get("cf-ipcountry") ||
-      null;
+    const country = getCountry(request);
+    const region = getRegion(request);
+    const city = getCity(request);
+
+    const postalCode = getHeader(
+      request,
+      "x-vercel-ip-postal-code",
+      30
+    );
+
+    const timezone = getTimezone(request);
+
+    const asn = getHeader(
+      request,
+      "x-vercel-ip-as-number",
+      50
+    );
 
     const device = detectDevice(userAgent);
     const browser = detectBrowser(userAgent);
+    const operatingSystem = detectOS(userAgent);
+
+    const trafficSource = getTrafficSource(
+      request,
+      searchParams
+    );
+
+    const campaign =
+      limited(searchParams.get("utm_campaign"), 150) ||
+      limited(searchParams.get("campaign"), 150);
+
+    const visitorHash = getVisitorHash(
+      request,
+      userAgent,
+      serviceRoleKey
+    );
+
+    const isSuspicious = detectSuspicious(userAgent);
 
     let destination: URL | null = null;
     let payout = 0;
@@ -214,7 +367,7 @@ export async function GET(request: NextRequest) {
     let smartlinkId: string | null = null;
 
     if (offerId) {
-      // Existing offer tracking is preserved.
+      // Preserve the existing fixed-payout offer flow.
       const {
         data: offer,
         error: offerError,
@@ -229,6 +382,7 @@ export async function GET(request: NextRequest) {
 
       if (offerError) {
         console.error("Offer lookup:", offerError);
+
         return errorResponse(
           "Unable to validate offer.",
           500
@@ -256,7 +410,7 @@ export async function GET(request: NextRequest) {
       payout = normalizePayout(offer.payout);
       trackedOfferId = String(offer.id);
     } else {
-      // Look up a personal smart link first.
+      // Check for an affiliate's personal Smartlink.
       const {
         data: personalLink,
         error: personalError,
@@ -271,12 +425,12 @@ export async function GET(request: NextRequest) {
 
       if (personalError) {
         console.error(
-          "Personal smartlink lookup:",
+          "Personal Smartlink lookup:",
           personalError
         );
 
         return errorResponse(
-          "Unable to load smartlink.",
+          "Unable to load Smartlink.",
           500
         );
       }
@@ -286,8 +440,7 @@ export async function GET(request: NextRequest) {
 
       if (!selectedLink) {
         if (smartlinkSlug === "default-smartlink") {
-          // Legacy default link rotates between
-          // active global smart links.
+          // Preserve the existing global Smartlink rotation.
           const {
             data: globalLinks,
             error: globalError,
@@ -302,12 +455,12 @@ export async function GET(request: NextRequest) {
 
           if (globalError) {
             console.error(
-              "Global smartlink lookup:",
+              "Global Smartlink lookup:",
               globalError
             );
 
             return errorResponse(
-              "Unable to load global smartlinks.",
+              "Unable to load global Smartlinks.",
               500
             );
           }
@@ -328,8 +481,8 @@ export async function GET(request: NextRequest) {
 
             selectedLink = validLinks[randomIndex];
           } else {
-            // Legacy fallback remains available
-            // only if no global smartlink rows exist.
+            // Legacy fallback only when no global
+            // Smartlink records exist.
             const {
               count,
               error: countError,
@@ -343,7 +496,7 @@ export async function GET(request: NextRequest) {
 
             if (countError) {
               return errorResponse(
-                "Unable to verify smartlinks.",
+                "Unable to verify Smartlinks.",
                 500
               );
             }
@@ -361,7 +514,7 @@ export async function GET(request: NextRequest) {
             }
           }
         } else {
-          // Explicit global smartlink slug.
+          // Explicit global Smartlink.
           const {
             data: globalLink,
             error: globalError,
@@ -376,12 +529,12 @@ export async function GET(request: NextRequest) {
 
           if (globalError) {
             console.error(
-              "Global smartlink lookup:",
+              "Global Smartlink lookup:",
               globalError
             );
 
             return errorResponse(
-              "Unable to load smartlink.",
+              "Unable to load Smartlink.",
               500
             );
           }
@@ -421,14 +574,35 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Save traffic intelligence with the original click.
     const clickData: Record<string, unknown> = {
       click_id: clickId,
       affiliate_id: affiliateId,
       smartlink_id: smartlinkId,
+
       country,
+      region,
+      city,
+      postal_code: postalCode,
+      timezone,
+
       device,
       browser,
+      operating_system: operatingSystem,
+
       referer,
+      traffic_source: trafficSource,
+      campaign,
+
+      visitor_hash: visitorHash,
+      is_suspicious: isSuspicious,
+
+      // ASN may be available on Vercel.
+      // ISP is left unknown unless a reliable
+      // provider supplies it.
+      asn,
+      isp: null,
+
       status: "click",
       payout: trackedOfferId ? payout : 0,
     };
@@ -453,6 +627,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Keep sub1 and sub2 unchanged for Datify Postback.
     const redirectUrl = addTrackingParameters(
       destination,
       clickId,
@@ -460,17 +635,14 @@ export async function GET(request: NextRequest) {
       trackedOfferId || undefined
     );
 
-    return NextResponse.redirect(
-      redirectUrl,
-      {
-        status: 302,
-        headers: {
-          "Cache-Control": "no-store",
-          "Referrer-Policy":
-            "strict-origin-when-cross-origin",
-        },
-      }
-    );
+    return NextResponse.redirect(redirectUrl, {
+      status: 302,
+      headers: {
+        "Cache-Control": "no-store",
+        "Referrer-Policy":
+          "strict-origin-when-cross-origin",
+      },
+    });
   } catch (error) {
     console.error(
       "Tracking route unexpected error:",
