@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -31,7 +32,6 @@ export default function AffiliateOffersPage() {
 
   const [offers, setOffers] = useState<Offer[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
-
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -49,40 +49,48 @@ export default function AffiliateOffersPage() {
 
       const {
         data: { session },
+        error: sessionError,
       } = await supabase.auth.getSession();
 
-      if (!session?.access_token) {
+      if (sessionError || !session?.access_token) {
         router.push("/login");
         return;
       }
+
+      const headers = {
+        Authorization: `Bearer ${session.access_token}`,
+      };
 
       const dashboardResponse = await fetch(
         "/api/affiliate/dashboard",
         {
           method: "GET",
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
+          headers,
+          cache: "no-store",
         }
       );
 
-      const dashboardResult =
-        await dashboardResponse.json();
+      const dashboardResult = await dashboardResponse.json();
 
-      if (
-        dashboardResponse.ok &&
-        dashboardResult?.profile
-      ) {
-        setProfile(dashboardResult.profile);
+      if (dashboardResponse.ok && dashboardResult?.profile) {
+        const data = dashboardResult.profile;
+
+        setProfile({
+          affiliate_id:
+            data.affiliate_id || data.affiliateId || "",
+          full_name:
+            data.full_name || data.name || null,
+          email: data.email || null,
+          status: data.status || null,
+        });
       }
 
       const response = await fetch(
         "/api/affiliate/offers",
         {
           method: "GET",
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
+          headers,
+          cache: "no-store",
         }
       );
 
@@ -91,16 +99,41 @@ export default function AffiliateOffersPage() {
       if (!response.ok || !result.success) {
         throw new Error(
           result.message ||
+            result.error ||
             "Unable to load available offers."
         );
       }
 
+      if (result.profile || result.affiliateId) {
+        const data = result.profile || {};
+
+        setProfile((current) => ({
+          affiliate_id:
+            data.affiliate_id ||
+            result.affiliateId ||
+            current?.affiliate_id ||
+            "",
+          full_name:
+            data.full_name ||
+            current?.full_name ||
+            null,
+          email:
+            data.email ||
+            current?.email ||
+            null,
+          status:
+            data.status ||
+            current?.status ||
+            null,
+        }));
+      }
+
       const activeOffers = (
-        result.offers || []
+        Array.isArray(result.offers) ? result.offers : []
       ).filter(
         (offer: Offer) =>
           !offer.status ||
-          offer.status === "active"
+          offer.status.toLowerCase() === "active"
       );
 
       setOffers(activeOffers);
@@ -116,58 +149,38 @@ export default function AffiliateOffersPage() {
   }
 
   useEffect(() => {
-    loadOffers();
+    void loadOffers();
   }, []);
 
   const categories = useMemo(() => {
     const values = offers
       .map((offer) => offer.category)
       .filter(
-        (value): value is string =>
-          Boolean(value)
+        (value): value is string => Boolean(value)
       );
 
-    return [
-      "All",
-      ...Array.from(new Set(values)),
-    ];
+    return ["All", ...Array.from(new Set(values))];
   }, [offers]);
 
   const filteredOffers = useMemo(() => {
-    const query = search
-      .trim()
-      .toLowerCase();
+    const query = search.trim().toLowerCase();
 
     return offers.filter((offer) => {
       const matchesSearch =
         !query ||
-        offer.name
-          .toLowerCase()
-          .includes(query) ||
-        (offer.advertiser || "")
-          .toLowerCase()
-          .includes(query) ||
-        (offer.category || "")
-          .toLowerCase()
-          .includes(query) ||
-        (offer.country || "")
-          .toLowerCase()
-          .includes(query);
+        (offer.name || "").toLowerCase().includes(query) ||
+        (offer.advertiser || "").toLowerCase().includes(query) ||
+        (offer.category || "").toLowerCase().includes(query) ||
+        (offer.country || "").toLowerCase().includes(query);
 
       const matchesCategory =
-        category === "All" ||
-        offer.category === category;
+        category === "All" || offer.category === category;
 
-      return (
-        matchesSearch &&
-        matchesCategory
-      );
+      return matchesSearch && matchesCategory;
     });
   }, [offers, search, category]);
 
-  function getTrackingLink(
-    offer: Offer
-  ) {
+  function getTrackingLink(offer: Offer) {
     if (!profile?.affiliate_id) {
       return "";
     }
@@ -180,20 +193,18 @@ export default function AffiliateOffersPage() {
 
     const params = new URLSearchParams({
       aid: profile.affiliate_id,
-      offer: offer.id,
+      offerId: offer.id,
     });
 
     return `${baseUrl}?${params.toString()}`;
   }
 
-  async function copyOfferLink(
-    offer: Offer
-  ) {
+  async function copyOfferLink(offer: Offer) {
     const link = getTrackingLink(offer);
 
     if (!link) {
       setError(
-        "Affiliate ID is unavailable. Please login again."
+        "Affiliate ID is unavailable. Please log in again."
       );
       return;
     }
@@ -204,12 +215,12 @@ export default function AffiliateOffersPage() {
       setCopiedId(offer.id);
 
       window.setTimeout(() => {
-        setCopiedId(null);
+        setCopiedId((current) =>
+          current === offer.id ? null : current
+        );
       }, 2000);
     } catch {
-      setError(
-        "Unable to copy the offer link."
-      );
+      setError("Unable to copy the offer link.");
     }
   }
 
@@ -218,7 +229,7 @@ export default function AffiliateOffersPage() {
 
     if (!link) {
       setError(
-        "Affiliate ID is unavailable. Please login again."
+        "Affiliate ID is unavailable. Please log in again."
       );
       return;
     }
@@ -238,9 +249,7 @@ export default function AffiliateOffersPage() {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() =>
-                router.push("/affiliate")
-              }
+              onClick={() => router.push("/affiliate")}
               className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-white/10"
             >
               ← Dashboard
@@ -264,7 +273,7 @@ export default function AffiliateOffersPage() {
 
             <p className="text-sm font-bold text-cyan-300">
               {profile?.affiliate_id ||
-                "Loading..."}
+                (loading ? "Loading..." : "Unavailable")}
             </p>
           </div>
         </div>
@@ -323,6 +332,7 @@ export default function AffiliateOffersPage() {
             <button
               type="button"
               onClick={() => setError("")}
+              aria-label="Dismiss error"
               className="text-red-300 hover:text-white"
             >
               ×
@@ -337,9 +347,7 @@ export default function AffiliateOffersPage() {
               <input
                 type="text"
                 value={search}
-                onChange={(e) =>
-                  setSearch(e.target.value)
-                }
+                onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search offers, advertiser, country..."
                 className="w-full rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-600 focus:border-cyan-400/50"
               />
@@ -350,9 +358,7 @@ export default function AffiliateOffersPage() {
                 <button
                   key={item}
                   type="button"
-                  onClick={() =>
-                    setCategory(item)
-                  }
+                  onClick={() => setCategory(item)}
                   className={`whitespace-nowrap rounded-xl px-4 py-3 text-sm font-bold transition ${
                     category === item
                       ? "bg-cyan-500 text-slate-950"
@@ -404,8 +410,7 @@ export default function AffiliateOffersPage() {
           filteredOffers.length > 0 && (
             <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
               {filteredOffers.map((offer) => {
-                const trackingLink =
-                  getTrackingLink(offer);
+                const trackingLink = getTrackingLink(offer);
 
                 return (
                   <article
@@ -459,11 +464,8 @@ export default function AffiliateOffersPage() {
                           </p>
 
                           <p className="font-black text-emerald-300">
-                            {offer.currency ||
-                              "USD"}{" "}
-                            {Number(
-                              offer.payout || 0
-                            ).toFixed(2)}
+                            {offer.currency || "USD"}{" "}
+                            {Number(offer.payout || 0).toFixed(2)}
                           </p>
                         </div>
                       </div>
@@ -482,8 +484,7 @@ export default function AffiliateOffersPage() {
                           </p>
 
                           <p className="mt-1 truncate text-xs font-bold text-slate-300">
-                            {offer.country ||
-                              "Worldwide"}
+                            {offer.country || "Worldwide"}
                           </p>
                         </div>
 
@@ -493,8 +494,7 @@ export default function AffiliateOffersPage() {
                           </p>
 
                           <p className="mt-1 truncate text-xs font-bold text-slate-300">
-                            {offer.device ||
-                              "All"}
+                            {offer.device || "All"}
                           </p>
                         </div>
                       </div>
@@ -508,23 +508,17 @@ export default function AffiliateOffersPage() {
                         <div className="flex items-center gap-2">
                           <input
                             readOnly
-                            value={
-                              trackingLink
-                            }
+                            aria-label={`Tracking link for ${offer.name}`}
+                            value={trackingLink}
                             className="min-w-0 flex-1 rounded-lg border border-white/5 bg-slate-950 px-3 py-2 text-[10px] text-slate-400 outline-none"
                           />
 
                           <button
                             type="button"
-                            onClick={() =>
-                              copyOfferLink(
-                                offer
-                              )
-                            }
+                            onClick={() => copyOfferLink(offer)}
                             className="shrink-0 rounded-lg bg-cyan-500 px-3 py-2 text-xs font-black text-slate-950 transition hover:bg-cyan-400"
                           >
-                            {copiedId ===
-                            offer.id
+                            {copiedId === offer.id
                               ? "Copied!"
                               : "Copy"}
                           </button>
@@ -535,26 +529,17 @@ export default function AffiliateOffersPage() {
                       <div className="mt-5 grid grid-cols-2 gap-3">
                         <button
                           type="button"
-                          onClick={() =>
-                            copyOfferLink(
-                              offer
-                            )
-                          }
+                          onClick={() => copyOfferLink(offer)}
                           className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/10"
                         >
-                          {copiedId ===
-                          offer.id
+                          {copiedId === offer.id
                             ? "✓ Link Copied"
                             : "Copy Link"}
                         </button>
 
                         <button
                           type="button"
-                          onClick={() =>
-                            openOffer(
-                              offer
-                            )
-                          }
+                          onClick={() => openOffer(offer)}
                           className="rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-3 text-sm font-black text-slate-950 transition hover:opacity-90"
                         >
                           Open Offer →
@@ -570,19 +555,18 @@ export default function AffiliateOffersPage() {
         {/* Bottom Info */}
         <section className="mt-8 rounded-2xl border border-cyan-400/10 bg-cyan-400/5 p-5">
           <h3 className="font-bold text-cyan-300">
-            How your tracking works
+            How Your Tracking Works
           </h3>
 
           <p className="mt-2 text-sm leading-6 text-slate-400">
-            প্রতিটি Offer-এর জন্য আপনার Affiliate
-            ID ব্যবহার করে আলাদা tracking link তৈরি
-            হচ্ছে। এই link দিয়ে visitor এলে আগে
-            UpNetwork CPA tracking system-এর মাধ্যমে
-            click record হবে, তারপর advertiser-এর
-            offer URL-এ redirect হবে।
+            Each offer has a unique tracking link associated
+            with your Affiliate ID. When a visitor opens your
+            tracking link, UpNetwork CPA records the click
+            before redirecting the visitor to the advertiser's
+            offer page.
           </p>
         </section>
       </div>
     </main>
   );
-  }
+}
