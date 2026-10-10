@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const revalidate = 0;
 
 type ClickRow = {
   click_id?: string | null;
@@ -19,6 +21,7 @@ type ClickRow = {
 };
 
 const RECENT_CLICKS_LIMIT = 20;
+const PAGE_SIZE = 1000;
 
 const CONVERSION_STATUSES = [
   "converted",
@@ -64,6 +67,26 @@ function makeAffiliateId(userId: string): string {
   );
 }
 
+function errorResponse(
+  message: string,
+  status: number,
+  code?: string
+) {
+  return NextResponse.json(
+    {
+      success: false,
+      error: message,
+      ...(code ? { code } : {}),
+    },
+    {
+      status,
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    }
+  );
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabaseUrl =
@@ -73,12 +96,9 @@ export async function GET(request: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !serviceRoleKey) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Supabase server configuration is missing.",
-        },
-        { status: 500 }
+      return errorResponse(
+        "Supabase server configuration is missing.",
+        500
       );
     }
 
@@ -86,12 +106,9 @@ export async function GET(request: NextRequest) {
       request.headers.get("authorization");
 
     if (!authorization?.startsWith("Bearer ")) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Authentication required.",
-        },
-        { status: 401 }
+      return errorResponse(
+        "Authentication required.",
+        401
       );
     }
 
@@ -99,12 +116,9 @@ export async function GET(request: NextRequest) {
       authorization.slice(7).trim();
 
     if (!accessToken) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Authentication token is missing.",
-        },
-        { status: 401 }
+      return errorResponse(
+        "Authentication token is missing.",
+        401
       );
     }
 
@@ -128,12 +142,9 @@ export async function GET(request: NextRequest) {
     const user = authData?.user;
 
     if (authError || !user) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Your login session is invalid or expired.",
-        },
-        { status: 401 }
+      return errorResponse(
+        "Your login session is invalid or expired.",
+        401
       );
     }
 
@@ -146,17 +157,14 @@ export async function GET(request: NextRequest) {
       accountType !== "affiliate" &&
       accountType !== "admin"
     ) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "This account is not an affiliate account.",
-          code: "NOT_AFFILIATE",
-        },
-        { status: 403 }
+      return errorResponse(
+        "This account is not an affiliate account.",
+        403,
+        "NOT_AFFILIATE"
       );
     }
 
-    // Use the actual public.profiles table.
+    // Read the existing affiliate profile.
     let {
       data: profile,
       error: profileError,
@@ -172,12 +180,9 @@ export async function GET(request: NextRequest) {
         profileError
       );
 
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Affiliate profile could not be loaded.",
-        },
-        { status: 500 }
+      return errorResponse(
+        "Affiliate profile could not be loaded.",
+        500
       );
     }
 
@@ -185,8 +190,7 @@ export async function GET(request: NextRequest) {
       user.user_metadata?.application_status
     );
 
-    // Preserve the existing approved-user profile
-    // recovery behavior.
+    // Preserve approved-profile recovery behavior.
     if (!profile) {
       if (metadataStatus !== "approved") {
         return NextResponse.json(
@@ -229,13 +233,10 @@ export async function GET(request: NextRequest) {
           createError
         );
 
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Unable to read or create the affiliate profile.",
-            code: "AFFILIATE_PROFILE_NOT_FOUND",
-          },
-          { status: 500 }
+        return errorResponse(
+          "Unable to read or create the affiliate profile.",
+          500,
+          "AFFILIATE_PROFILE_NOT_FOUND"
         );
       }
 
@@ -255,8 +256,11 @@ export async function GET(request: NextRequest) {
     }
 
     if (applicationStatus !== "approved") {
-      const rejected = applicationStatus === "rejected";
-      const suspended = applicationStatus === "suspended";
+      const rejected =
+        applicationStatus === "rejected";
+
+      const suspended =
+        applicationStatus === "suspended";
 
       return NextResponse.json(
         {
@@ -297,24 +301,19 @@ export async function GET(request: NextRequest) {
         .select("*")
         .maybeSingle();
 
-      if (updateError) {
+      if (updateError || !updatedProfile) {
         console.error(
           "Dashboard affiliate ID update error:",
           updateError
         );
 
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Affiliate ID could not be updated.",
-          },
-          { status: 500 }
+        return errorResponse(
+          "Affiliate ID could not be updated.",
+          500
         );
       }
 
-      if (updatedProfile) {
-        profile = updatedProfile;
-      }
+      profile = updatedProfile;
     }
 
     const profileName =
@@ -325,13 +324,41 @@ export async function GET(request: NextRequest) {
       user.email?.split("@")[0] ||
       "Affiliate";
 
-    // Read click records using the same affiliate ID
-    // and database table as Statistics & Report.
-    //
-    // Pagination avoids silently losing records when
-    // an affiliate has more than 1000 clicks.
+    // Count all clicks directly in the database.
+    // This is independent of the recent-clicks limit.
+    const {
+      count: databaseClickCount,
+      error: countError,
+    } = await supabaseAdmin
+      .from("clicks")
+      .select("*", {
+        count: "exact",
+        head: true,
+      })
+      .eq("affiliate_id", affiliateId);
+
+    if (countError) {
+      console.error(
+        "Dashboard click count error:",
+        countError
+      );
+
+      return errorResponse(
+        "Unable to count affiliate clicks.",
+        500
+      );
+    }
+
+    if (databaseClickCount === null) {
+      return errorResponse(
+        "Affiliate click count is unavailable.",
+        500
+      );
+    }
+
+    // Read click records in pages to calculate
+    // conversions and earnings across all records.
     const allClicks: ClickRow[] = [];
-    const pageSize = 1000;
     let offset = 0;
 
     while (true) {
@@ -344,9 +371,16 @@ export async function GET(request: NextRequest) {
           "click_id, affiliate_id, smartlink_id, country, device, browser, referer, status, payout, converted_at, created_at"
         )
         .eq("affiliate_id", affiliateId)
-        .order("created_at", { ascending: false })
-        .order("click_id", { ascending: false })
-        .range(offset, offset + pageSize - 1);
+        .order("created_at", {
+          ascending: false,
+        })
+        .order("click_id", {
+          ascending: false,
+        })
+        .range(
+          offset,
+          offset + PAGE_SIZE - 1
+        );
 
       if (clicksError) {
         console.error(
@@ -354,12 +388,9 @@ export async function GET(request: NextRequest) {
           clicksError
         );
 
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Unable to load affiliate clicks.",
-          },
-          { status: 500 }
+        return errorResponse(
+          "Unable to load affiliate clicks.",
+          500
         );
       }
 
@@ -367,14 +398,16 @@ export async function GET(request: NextRequest) {
 
       allClicks.push(...rows);
 
-      if (rows.length < pageSize) {
+      if (rows.length < PAGE_SIZE) {
         break;
       }
 
-      offset += pageSize;
+      offset += PAGE_SIZE;
     }
 
-    const totalClicks = allClicks.length;
+    // The database COUNT is the authoritative
+    // total-click metric.
+    const totalClicks = databaseClickCount;
 
     let conversions = 0;
     let earnings = 0;
@@ -382,19 +415,37 @@ export async function GET(request: NextRequest) {
     for (const click of allClicks) {
       if (isConverted(click)) {
         conversions += 1;
-        earnings += getNumericPayout(click.payout);
+        earnings += getNumericPayout(
+          click.payout
+        );
       }
     }
 
     const conversionRate =
       totalClicks > 0
         ? Number(
-            ((conversions / totalClicks) * 100).toFixed(2)
+            (
+              (conversions / totalClicks) *
+              100
+            ).toFixed(2)
           )
         : 0;
 
-    // Keep the existing response structure so the
-    // current affiliate dashboard UI still works.
+    // Log discrepancies for diagnosis.
+    // No secret keys or access tokens are logged.
+    if (allClicks.length !== totalClicks) {
+      console.warn(
+        "Dashboard click count mismatch:",
+        {
+          affiliateId,
+          databaseCount: totalClicks,
+          fetchedRows: allClicks.length,
+        }
+      );
+    }
+
+    // Keep the response compatible with the
+    // existing affiliate dashboard UI.
     return NextResponse.json(
       {
         success: true,
@@ -402,27 +453,44 @@ export async function GET(request: NextRequest) {
         profile: {
           id: user.id,
           affiliateId,
-          email: user.email || profile.email || null,
+          email:
+            user.email ||
+            profile.email ||
+            null,
           name: profileName,
-          status: profile.application_status || "approved",
+          status:
+            profile.application_status ||
+            "approved",
           referralCode: affiliateId,
           referralRate: 5,
         },
 
-        clicks: allClicks.slice(0, RECENT_CLICKS_LIMIT),
+        clicks: allClicks.slice(
+          0,
+          RECENT_CLICKS_LIMIT
+        ),
 
         stats: {
           totalClicks,
           conversions,
           conversionRate,
-          earnings: Number(earnings.toFixed(2)),
+          earnings: Number(
+            earnings.toFixed(2)
+          ),
         },
 
         meta: {
           profileFound: true,
           profileLookup: "profiles.id",
-          recentClicksLimit: RECENT_CLICKS_LIMIT,
+          recentClicksLimit:
+            RECENT_CLICKS_LIMIT,
           applicationStatus,
+          clickCountSource:
+            "database-exact-count",
+          databaseClickCount:
+            totalClicks,
+          fetchedClickRows:
+            allClicks.length,
         },
       },
       {
@@ -431,18 +499,19 @@ export async function GET(request: NextRequest) {
           "Cache-Control":
             "no-store, no-cache, must-revalidate",
           Pragma: "no-cache",
+          Expires: "0",
         },
       }
     );
   } catch (error) {
-    console.error("Affiliate dashboard error:", error);
+    console.error(
+      "Affiliate dashboard error:",
+      error
+    );
 
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Affiliate dashboard could not be loaded.",
-      },
-      { status: 500 }
+    return errorResponse(
+      "Affiliate dashboard could not be loaded.",
+      500
     );
   }
 }
