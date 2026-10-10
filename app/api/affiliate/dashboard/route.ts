@@ -1,9 +1,22 @@
+
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 
-type AnyRecord = Record<string, any>;
+type ClickRow = {
+  click_id?: string | null;
+  affiliate_id?: string | null;
+  smartlink_id?: string | null;
+  country?: string | null;
+  device?: string | null;
+  browser?: string | null;
+  referer?: string | null;
+  status?: string | null;
+  payout?: number | string | null;
+  converted_at?: string | null;
+  created_at?: string | null;
+};
 
 const RECENT_CLICKS_LIMIT = 20;
 
@@ -14,119 +27,99 @@ const CONVERSION_STATUSES = [
   "paid",
 ];
 
-function makeAffiliateId(userId: string) {
-  return `UP${userId.replace(/-/g, "").slice(0, 10).toUpperCase()}`;
+function normalizeStatus(value: unknown): string {
+  return String(value ?? "").trim().toLowerCase();
 }
 
-function normalizeStatus(value: unknown) {
-  return String(value || "").trim().toLowerCase();
-}
-
-function getNumericPayout(value: unknown) {
-  if (value === null || value === undefined || value === "") return 0;
-  const number = Number(value);
-  return Number.isFinite(number) ? number : 0;
-}
-
-function normalizeAffiliateStatus(value: unknown) {
+function normalizeAffiliateStatus(value: unknown): string {
   const status = normalizeStatus(value);
 
-  if (status === "active" || status === "approved") return "approved";
+  if (status === "active" || status === "approved") {
+    return "approved";
+  }
+
   if (status === "rejected") return "rejected";
   if (status === "suspended") return "suspended";
 
   return "pending";
 }
 
-/**
- * This project uses public.profiles, not public.affiliate_profiles.
- * Existing profiles columns include:
- * id, affiliate_id, email, full_name, application_status, updated_at.
- */
-async function findAffiliateProfile(supabaseAdmin: any, user: any) {
-  const { data, error } = await supabaseAdmin
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (error) {
-    console.error("Affiliate profile lookup error:", error);
-    return null;
-  }
-
-  return data as AnyRecord | null;
+function getNumericPayout(value: unknown): number {
+  const number = Number(value ?? 0);
+  return Number.isFinite(number) ? number : 0;
 }
 
-async function createAffiliateProfile(
-  supabaseAdmin: any,
-  user: any,
-  affiliateId: string
-) {
-  const fullName =
-    user.user_metadata?.full_name ||
-    user.user_metadata?.name ||
-    user.email?.split("@")[0] ||
-    "Affiliate";
+function isConverted(row: ClickRow): boolean {
+  return (
+    CONVERSION_STATUSES.includes(
+      normalizeStatus(row.status)
+    ) || Boolean(row.converted_at)
+  );
+}
 
-  const { data, error } = await supabaseAdmin
-    .from("profiles")
-    .insert({
-      id: user.id,
-      affiliate_id: affiliateId,
-      full_name: fullName,
-      email: user.email || null,
-      application_status: "approved",
-      updated_at: new Date().toISOString(),
-    })
-    .select("*")
-    .maybeSingle();
-
-  if (error) {
-    console.error("Affiliate profile creation error:", error);
-    return null;
-  }
-
-  return data as AnyRecord | null;
+function makeAffiliateId(userId: string): string {
+  return (
+    "UP" +
+    userId.replace(/-/g, "").slice(0, 10).toUpperCase()
+  );
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseUrl =
+      process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+    const serviceRoleKey =
+      process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !serviceRoleKey) {
       return NextResponse.json(
-        { error: "Supabase server configuration is missing." },
+        {
+          success: false,
+          error: "Supabase server configuration is missing.",
+        },
         { status: 500 }
       );
     }
 
-    const authorization = request.headers.get("authorization");
+    const authorization =
+      request.headers.get("authorization");
 
     if (!authorization?.startsWith("Bearer ")) {
       return NextResponse.json(
-        { error: "Authentication required." },
+        {
+          success: false,
+          error: "Authentication required.",
+        },
         { status: 401 }
       );
     }
 
-    const accessToken = authorization.slice(7).trim();
+    const accessToken =
+      authorization.slice(7).trim();
 
     if (!accessToken) {
       return NextResponse.json(
-        { error: "Authentication token is missing." },
+        {
+          success: false,
+          error: "Authentication token is missing.",
+        },
         { status: 401 }
       );
     }
 
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
+    const supabaseAdmin = createClient(
+      supabaseUrl,
+      serviceRoleKey,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    );
 
+    // Verify the currently logged-in user.
     const {
       data: authData,
       error: authError,
@@ -136,16 +129,26 @@ export async function GET(request: NextRequest) {
 
     if (authError || !user) {
       return NextResponse.json(
-        { error: "Your login session is invalid or expired." },
+        {
+          success: false,
+          error: "Your login session is invalid or expired.",
+        },
         { status: 401 }
       );
     }
 
-    const accountType = normalizeStatus(user.user_metadata?.account_type);
+    const accountType = normalizeStatus(
+      user.user_metadata?.account_type
+    );
 
-    if (accountType && accountType !== "affiliate" && accountType !== "admin") {
+    if (
+      accountType &&
+      accountType !== "affiliate" &&
+      accountType !== "admin"
+    ) {
       return NextResponse.json(
         {
+          success: false,
           error: "This account is not an affiliate account.",
           code: "NOT_AFFILIATE",
         },
@@ -153,25 +156,44 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    let profile = await findAffiliateProfile(supabaseAdmin, user);
+    // Use the actual public.profiles table.
+    let {
+      data: profile,
+      error: profileError,
+    } = await supabaseAdmin
+      .from("profiles")
+      .select("*")
+      .eq("id", user.id)
+      .maybeSingle();
 
-    let applicationStatus = normalizeAffiliateStatus(
-      profile?.application_status
-    );
+    if (profileError) {
+      console.error(
+        "Dashboard profile query error:",
+        profileError
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Affiliate profile could not be loaded.",
+        },
+        { status: 500 }
+      );
+    }
 
     const metadataStatus = normalizeStatus(
       user.user_metadata?.application_status
     );
 
-    if (["approved", "rejected", "suspended"].includes(metadataStatus)) {
-      applicationStatus = metadataStatus;
-    }
-
+    // Preserve the existing approved-user profile
+    // recovery behavior.
     if (!profile) {
-      if (applicationStatus !== "approved") {
+      if (metadataStatus !== "approved") {
         return NextResponse.json(
           {
-            error: "Your affiliate application is waiting for admin approval.",
+            success: false,
+            error:
+              "Your affiliate application is waiting for admin approval.",
             code: "AFFILIATE_PENDING",
             status: "pending",
           },
@@ -179,28 +201,56 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      profile = await createAffiliateProfile(
-        supabaseAdmin,
-        user,
-        makeAffiliateId(user.id)
-      );
+      const fullName =
+        user.user_metadata?.full_name ||
+        user.user_metadata?.name ||
+        user.email?.split("@")[0] ||
+        "Affiliate";
+
+      const {
+        data: createdProfile,
+        error: createError,
+      } = await supabaseAdmin
+        .from("profiles")
+        .insert({
+          id: user.id,
+          affiliate_id: makeAffiliateId(user.id),
+          full_name: fullName,
+          email: user.email || null,
+          application_status: "approved",
+          updated_at: new Date().toISOString(),
+        })
+        .select("*")
+        .maybeSingle();
+
+      if (createError || !createdProfile) {
+        console.error(
+          "Dashboard profile creation error:",
+          createError
+        );
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Unable to read or create the affiliate profile.",
+            code: "AFFILIATE_PROFILE_NOT_FOUND",
+          },
+          { status: 500 }
+        );
+      }
+
+      profile = createdProfile;
     }
 
-    if (!profile) {
-      return NextResponse.json(
-        {
-          error: "Unable to read or create the affiliate profile.",
-          code: "AFFILIATE_PROFILE_NOT_FOUND",
-        },
-        { status: 500 }
-      );
-    }
-
-    applicationStatus = normalizeAffiliateStatus(
+    let applicationStatus = normalizeAffiliateStatus(
       profile.application_status
     );
 
-    if (["approved", "rejected", "suspended"].includes(metadataStatus)) {
+    if (
+      ["approved", "rejected", "suspended"].includes(
+        metadataStatus
+      )
+    ) {
       applicationStatus = metadataStatus;
     }
 
@@ -210,6 +260,7 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json(
         {
+          success: false,
           error: rejected
             ? "Your affiliate application has been rejected."
             : suspended
@@ -222,41 +273,48 @@ export async function GET(request: NextRequest) {
               : "AFFILIATE_PENDING",
           status: applicationStatus,
         },
-        {
-          status: 403,
-          headers: { "Cache-Control": "no-store, no-cache, must-revalidate" },
-        }
+        { status: 403 }
       );
     }
 
-    let affiliateId = String(profile.affiliate_id || "").trim();
+    let affiliateId = String(
+      profile.affiliate_id ?? ""
+    ).trim();
 
     if (!affiliateId) {
       affiliateId = makeAffiliateId(user.id);
 
-      const { data: updatedProfile, error: updateError } =
-        await supabaseAdmin
-          .from("profiles")
-          .update({
-            affiliate_id: affiliateId,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", user.id)
-          .select("*")
-          .maybeSingle();
+      const {
+        data: updatedProfile,
+        error: updateError,
+      } = await supabaseAdmin
+        .from("profiles")
+        .update({
+          affiliate_id: affiliateId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id)
+        .select("*")
+        .maybeSingle();
 
       if (updateError) {
-        console.error("Affiliate ID update error:", updateError);
-      } else if (updatedProfile) {
+        console.error(
+          "Dashboard affiliate ID update error:",
+          updateError
+        );
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Affiliate ID could not be updated.",
+          },
+          { status: 500 }
+        );
+      }
+
+      if (updatedProfile) {
         profile = updatedProfile;
       }
-    }
-
-    if (!affiliateId) {
-      return NextResponse.json(
-        { error: "Affiliate ID could not be created." },
-        { status: 500 }
-      );
     }
 
     const profileName =
@@ -267,70 +325,80 @@ export async function GET(request: NextRequest) {
       user.email?.split("@")[0] ||
       "Affiliate";
 
-    let clicks: AnyRecord[] = [];
+    // Read click records using the same affiliate ID
+    // and database table as Statistics & Report.
+    //
+    // Pagination avoids silently losing records when
+    // an affiliate has more than 1000 clicks.
+    const allClicks: ClickRow[] = [];
+    const pageSize = 1000;
+    let offset = 0;
 
-    const clicksResult = await supabaseAdmin
-      .from("clicks")
-      .select(
-        "click_id, affiliate_id, smartlink_id, country, device, browser, referer, status, payout, converted_at, created_at"
-      )
-      .eq("affiliate_id", affiliateId)
-      .order("created_at", { ascending: false })
-      .limit(RECENT_CLICKS_LIMIT);
+    while (true) {
+      const {
+        data: clickPage,
+        error: clicksError,
+      } = await supabaseAdmin
+        .from("clicks")
+        .select(
+          "click_id, affiliate_id, smartlink_id, country, device, browser, referer, status, payout, converted_at, created_at"
+        )
+        .eq("affiliate_id", affiliateId)
+        .order("created_at", { ascending: false })
+        .order("click_id", { ascending: false })
+        .range(offset, offset + pageSize - 1);
 
-    if (clicksResult.error) {
-      console.error("Recent clicks query error:", clicksResult.error);
-    } else {
-      clicks = clicksResult.data || [];
+      if (clicksError) {
+        console.error(
+          "Dashboard clicks query error:",
+          clicksError
+        );
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Unable to load affiliate clicks.",
+          },
+          { status: 500 }
+        );
+      }
+
+      const rows = (clickPage ?? []) as ClickRow[];
+
+      allClicks.push(...rows);
+
+      if (rows.length < pageSize) {
+        break;
+      }
+
+      offset += pageSize;
     }
 
-    let totalClicks = 0;
-
-    const countResult = await supabaseAdmin
-      .from("clicks")
-      .select("click_id", { count: "exact", head: true })
-      .eq("affiliate_id", affiliateId);
-
-    if (countResult.error) {
-      console.error("Total click count error:", countResult.error);
-    } else {
-      totalClicks = countResult.count || 0;
-    }
+    const totalClicks = allClicks.length;
 
     let conversions = 0;
     let earnings = 0;
 
-    const conversionResult = await supabaseAdmin
-      .from("clicks")
-      .select("status, payout, converted_at")
-      .eq("affiliate_id", affiliateId)
-      .or(
-        "status.eq.converted,status.eq.conversion,status.eq.approved,status.eq.paid,converted_at.not.is.null"
-      );
-
-    if (conversionResult.error) {
-      console.error("Conversion query error:", conversionResult.error);
-    } else {
-      for (const row of conversionResult.data || []) {
-        const status = normalizeStatus(row.status);
-        const isConversion =
-          CONVERSION_STATUSES.includes(status) || Boolean(row.converted_at);
-
-        if (isConversion) {
-          conversions += 1;
-          earnings += getNumericPayout(row.payout);
-        }
+    for (const click of allClicks) {
+      if (isConverted(click)) {
+        conversions += 1;
+        earnings += getNumericPayout(click.payout);
       }
     }
 
     const conversionRate =
       totalClicks > 0
-        ? Number(((conversions / totalClicks) * 100).toFixed(2))
+        ? Number(
+            ((conversions / totalClicks) * 100).toFixed(2)
+          )
         : 0;
 
+    // Keep the existing response structure so the
+    // current affiliate dashboard UI still works.
     return NextResponse.json(
       {
         success: true,
+
         profile: {
           id: user.id,
           affiliateId,
@@ -340,13 +408,16 @@ export async function GET(request: NextRequest) {
           referralCode: affiliateId,
           referralRate: 5,
         },
-        clicks,
+
+        clicks: allClicks.slice(0, RECENT_CLICKS_LIMIT),
+
         stats: {
           totalClicks,
           conversions,
           conversionRate,
           earnings: Number(earnings.toFixed(2)),
         },
+
         meta: {
           profileFound: true,
           profileLookup: "profiles.id",
@@ -357,7 +428,8 @@ export async function GET(request: NextRequest) {
       {
         status: 200,
         headers: {
-          "Cache-Control": "no-store, no-cache, must-revalidate",
+          "Cache-Control":
+            "no-store, no-cache, must-revalidate",
           Pragma: "no-cache",
         },
       }
@@ -366,8 +438,11 @@ export async function GET(request: NextRequest) {
     console.error("Affiliate dashboard error:", error);
 
     return NextResponse.json(
-      { error: "Affiliate dashboard could not be loaded." },
+      {
+        success: false,
+        error: "Affiliate dashboard could not be loaded.",
+      },
       { status: 500 }
     );
   }
-  }
+}
