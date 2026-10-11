@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useState,
+  type FormEvent,
 } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -57,7 +58,20 @@ type PaymentsResponse = {
   payments?: Payment[];
   withdrawalEnabled?: boolean;
   minimumWithdrawal?: number;
+  paymentMethods?: string[];
 };
+
+const PAYMENT_METHODS = [
+  "Payoneer",
+  "Skrill",
+  "Binance Pay",
+  "USDT (TRC20)",
+  "USDT (ERC20)",
+  "Bitcoin (BTC)",
+  "Bank Wire Transfer",
+];
+
+const MINIMUM_WITHDRAWAL = 50;
 
 const emptyStats: PaymentStats = {
   totalEarnings: 0,
@@ -100,6 +114,26 @@ function statusStyle(status: string): string {
   }
 }
 
+function addressPlaceholder(method: string): string {
+  switch (method) {
+    case "Payoneer":
+    case "Skrill":
+      return "Enter your payment account email";
+    case "Binance Pay":
+      return "Enter your Binance Pay ID";
+    case "USDT (TRC20)":
+      return "Enter your TRC20 wallet address";
+    case "USDT (ERC20)":
+      return "Enter your ERC20 wallet address";
+    case "Bitcoin (BTC)":
+      return "Enter your Bitcoin wallet address";
+    case "Bank Wire Transfer":
+      return "Enter your bank account details";
+    default:
+      return "Enter your payment details";
+  }
+}
+
 export default function AffiliatePaymentsPage() {
   const router = useRouter();
   const { theme, toggleTheme } = useAffiliateTheme();
@@ -123,7 +157,10 @@ export default function AffiliatePaymentsPage() {
     useState(false);
 
   const [minimumWithdrawal, setMinimumWithdrawal] =
-    useState(10);
+    useState(MINIMUM_WITHDRAWAL);
+
+  const [paymentMethods, setPaymentMethods] =
+    useState<string[]>(PAYMENT_METHODS);
 
   const [withdrawAmount, setWithdrawAmount] =
     useState("");
@@ -154,12 +191,6 @@ export default function AffiliatePaymentsPage() {
     try {
       setLoading(true);
       setError("");
-
-      if (!supabase) {
-        throw new Error(
-          "Supabase is not configured."
-        );
-      }
 
       const {
         data: sessionData,
@@ -195,13 +226,8 @@ export default function AffiliatePaymentsPage() {
         );
       }
 
-      setAffiliateId(
-        result.affiliateId || ""
-      );
-
-      setStats(
-        result.stats || emptyStats
-      );
+      setAffiliateId(result.affiliateId || "");
+      setStats(result.stats || emptyStats);
 
       setPayments(
         Array.isArray(result.payments)
@@ -214,8 +240,22 @@ export default function AffiliatePaymentsPage() {
       );
 
       setMinimumWithdrawal(
-        Number(result.minimumWithdrawal || 10)
+        Math.max(
+          MINIMUM_WITHDRAWAL,
+          Number(result.minimumWithdrawal) ||
+            MINIMUM_WITHDRAWAL
+        )
       );
+
+      const allowedMethods =
+        Array.isArray(result.paymentMethods)
+          ? result.paymentMethods.filter(
+              (method) =>
+                PAYMENT_METHODS.includes(method)
+            )
+          : PAYMENT_METHODS;
+
+      setPaymentMethods(allowedMethods);
     } catch (err) {
       setError(
         err instanceof Error
@@ -232,11 +272,11 @@ export default function AffiliatePaymentsPage() {
   }, [loadPayments]);
 
   async function submitWithdrawal(
-    event: React.FormEvent<HTMLFormElement>
+    event: FormEvent<HTMLFormElement>
   ) {
     event.preventDefault();
 
-    if (submitting) return;
+    if (submitting || !withdrawalEnabled) return;
 
     setError("");
     setSuccess("");
@@ -245,6 +285,7 @@ export default function AffiliatePaymentsPage() {
       Number(withdrawAmount);
 
     if (
+      !withdrawAmount.trim() ||
       !Number.isFinite(requestedAmount) ||
       requestedAmount < minimumWithdrawal ||
       requestedAmount > 1000000 ||
@@ -267,12 +308,9 @@ export default function AffiliatePaymentsPage() {
       return;
     }
 
-    if (
-      paymentMethod.trim().length < 2 ||
-      paymentMethod.trim().length > 100
-    ) {
+    if (!paymentMethods.includes(paymentMethod)) {
       setError(
-        "Enter a valid payment method."
+        "Select a valid payment method."
       );
       return;
     }
@@ -282,19 +320,13 @@ export default function AffiliatePaymentsPage() {
       paymentAddress.trim().length > 500
     ) {
       setError(
-        "Enter a valid payment address."
+        "Enter valid payment details."
       );
       return;
     }
 
     try {
       setSubmitting(true);
-
-      if (!supabase) {
-        throw new Error(
-          "Supabase is not configured."
-        );
-      }
 
       const {
         data: sessionData,
@@ -314,15 +346,12 @@ export default function AffiliatePaymentsPage() {
         {
           method: "POST",
           headers: {
-            "Content-Type":
-              "application/json",
-            Authorization:
-              `Bearer ${token}`,
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
             amount: requestedAmount,
-            paymentMethod:
-              paymentMethod.trim(),
+            paymentMethod,
             paymentAddress:
               paymentAddress.trim(),
           }),
@@ -338,15 +367,15 @@ export default function AffiliatePaymentsPage() {
         );
       }
 
-      setSuccess(
-        "Withdrawal request submitted successfully. Your request is pending admin review."
-      );
-
       setWithdrawAmount("");
       setPaymentMethod("");
       setPaymentAddress("");
 
       await loadPayments();
+
+      setSuccess(
+        "Withdrawal request submitted successfully. Your request is pending admin review."
+      );
     } catch (err) {
       setError(
         err instanceof Error
@@ -426,8 +455,8 @@ export default function AffiliatePaymentsPage() {
           </div>
 
           <p className={`mt-4 text-sm ${muted}`}>
-            Manage withdrawal requests,
-            view available balance and
+            Manage international withdrawals,
+            check your USD balance and
             track payment history.
           </p>
         </section>
@@ -551,6 +580,15 @@ export default function AffiliatePaymentsPage() {
                   </h3>
                 </div>
 
+                <div className="mb-5 rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-cyan-400">
+                    Minimum Withdrawal
+                  </p>
+                  <p className="mt-1 text-2xl font-black">
+                    {money(minimumWithdrawal)} USD
+                  </p>
+                </div>
+
                 <form
                   onSubmit={submitWithdrawal}
                   className="space-y-4"
@@ -574,7 +612,7 @@ export default function AffiliatePaymentsPage() {
                           event.target.value
                         )
                       }
-                      placeholder="Enter amount"
+                      placeholder="Enter amount in USD"
                       required
                       className={`w-full rounded-xl border px-4 py-3 outline-none focus:border-cyan-500 ${inputBg}`}
                     />
@@ -592,35 +630,27 @@ export default function AffiliatePaymentsPage() {
 
                     <select
                       value={paymentMethod}
-                      onChange={(event) =>
+                      onChange={(event) => {
                         setPaymentMethod(
                           event.target.value
-                        )
-                      }
+                        );
+                        setPaymentAddress("");
+                      }}
                       required
                       className={`w-full rounded-xl border px-4 py-3 outline-none focus:border-cyan-500 ${inputBg}`}
                     >
                       <option value="">
                         Select payment method
                       </option>
-                      <option value="Bank Transfer">
-                        Bank Transfer
-                      </option>
-                      <option value="Payoneer">
-                        Payoneer
-                      </option>
-                      <option value="Skrill">
-                        Skrill
-                      </option>
-                      <option value="USDT">
-                        USDT
-                      </option>
-                      <option value="bKash">
-                        bKash
-                      </option>
-                      <option value="Nagad">
-                        Nagad
-                      </option>
+
+                      {paymentMethods.map((method) => (
+                        <option
+                          key={method}
+                          value={method}
+                        >
+                          {method}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
@@ -636,12 +666,26 @@ export default function AffiliatePaymentsPage() {
                           event.target.value
                         )
                       }
-                      placeholder="Enter account number, wallet address or payment details"
+                      placeholder={addressPlaceholder(
+                        paymentMethod
+                      )}
                       rows={3}
                       maxLength={500}
                       required
                       className={`w-full rounded-xl border px-4 py-3 outline-none focus:border-cyan-500 ${inputBg}`}
                     />
+
+                    {(paymentMethod === "USDT (TRC20)" ||
+                      paymentMethod === "USDT (ERC20)" ||
+                      paymentMethod === "Bitcoin (BTC)") && (
+                      <p className="mt-2 text-xs text-amber-400">
+                        Check the selected network
+                        and wallet address carefully.
+                        Transfers to an incorrect
+                        network or address may be
+                        irreversible.
+                      </p>
+                    )}
                   </div>
 
                   <button
@@ -676,6 +720,17 @@ export default function AffiliatePaymentsPage() {
                       unavailable.
                     </p>
                   )}
+
+                  {withdrawalEnabled &&
+                    stats.availableBalance <
+                      minimumWithdrawal && (
+                      <p className={`text-sm ${muted}`}>
+                        You need at least{" "}
+                        {money(minimumWithdrawal)}
+                        {" "}in available balance
+                        to request a withdrawal.
+                      </p>
+                    )}
                 </form>
               </div>
 
@@ -727,11 +782,13 @@ export default function AffiliatePaymentsPage() {
                   </div>
 
                   <p className={`text-sm ${muted}`}>
-                    Withdrawal requests are
-                    reviewed by the admin.
-                    Submitting a request does
-                    not mean payment has
-                    been sent.
+                    All withdrawals are
+                    denominated in USD.
+                    Crypto payouts require
+                    manual verification by
+                    the admin. Submitting
+                    a request does not mean
+                    payment has been sent.
                   </p>
                 </div>
               </div>
@@ -802,7 +859,11 @@ export default function AffiliatePaymentsPage() {
                     {payments.map((payment) => (
                       <tr
                         key={payment.id}
-                        className="border-t border-white/10"
+                        className={
+                          dark
+                            ? "border-t border-white/10"
+                            : "border-t border-slate-200"
+                        }
                       >
                         <td className="px-5 py-4">
                           {formatDate(
