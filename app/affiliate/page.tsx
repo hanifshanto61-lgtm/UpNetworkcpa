@@ -35,6 +35,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import NotificationBell from "./notification-bell";
 import { useAffiliateTheme } from "./theme-context";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 
 type ClickRow = {
   click_id?: string;
@@ -183,10 +184,15 @@ export default function AffiliatePage() {
     loadDashboard();
   }, []);
 
-  async function loadDashboard() {
+  // Refresh data every 10 seconds without reloading the page.
+  useAutoRefresh(() => loadDashboard(false), 10000);
+
+  async function loadDashboard(showLoading = true) {
     try {
-      setLoading(true);
-      setError("");
+      if (showLoading) {
+        setLoading(true);
+        setError("");
+      }
 
       if (!supabase) {
         setError("Supabase is not configured.");
@@ -316,12 +322,16 @@ export default function AffiliatePage() {
         err
       );
 
-      setError(
-        err?.message ||
-          "Unable to load affiliate dashboard."
-      );
+      if (showLoading) {
+        setError(
+          err?.message ||
+            "Unable to load affiliate dashboard."
+        );
+      }
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
   }
 
