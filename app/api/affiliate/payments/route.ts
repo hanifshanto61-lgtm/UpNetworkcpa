@@ -210,7 +210,6 @@ async function readAllClicks(
   affiliateId: string
 ): Promise<ClickRow[]> {
   const rows: ClickRow[] = [];
-
   let offset = 0;
 
   while (true) {
@@ -241,12 +240,9 @@ async function readAllClicks(
     }
 
     const page = (data || []) as ClickRow[];
-
     rows.push(...page);
 
-    if (page.length < PAGE_SIZE) {
-      break;
-    }
+    if (page.length < PAGE_SIZE) break;
 
     offset += PAGE_SIZE;
   }
@@ -261,7 +257,6 @@ async function readAllPayments(
   affiliateId: string
 ): Promise<PaymentRow[]> {
   const rows: PaymentRow[] = [];
-
   let offset = 0;
 
   while (true) {
@@ -292,12 +287,9 @@ async function readAllPayments(
     }
 
     const page = (data || []) as PaymentRow[];
-
     rows.push(...page);
 
-    if (page.length < PAGE_SIZE) {
-      break;
-    }
+    if (page.length < PAGE_SIZE) break;
 
     offset += PAGE_SIZE;
   }
@@ -343,7 +335,6 @@ export async function GET(
     for (const click of clicks) {
       if (isConverted(click)) {
         conversions++;
-
         totalEarnings += amount(
           click.payout
         );
@@ -366,15 +357,12 @@ export async function GET(
         case "pending":
           pendingAmount += value;
           break;
-
         case "approved":
           approvedAmount += value;
           break;
-
         case "paid":
           paidAmount += value;
           break;
-
         case "rejected":
           rejectedAmount += value;
           break;
@@ -396,9 +384,7 @@ export async function GET(
     return NextResponse.json(
       {
         success: true,
-
         affiliateId,
-
         currency: "USD",
 
         stats: {
@@ -447,10 +433,8 @@ export async function GET(
           })
         ),
 
-        withdrawalEnabled: false,
-
-        message:
-          "Payment history is available. Withdrawal requests will be enabled after secure balance reservation is configured.",
+        withdrawalEnabled: true,
+        minimumWithdrawal: 10,
       },
       {
         status: 200,
@@ -474,10 +458,235 @@ export async function GET(
 }
 
 export async function POST(
-  _request: NextRequest
+  request: NextRequest
 ) {
-  return responseError(
-    "Withdrawal requests are temporarily disabled until secure balance reservation is configured.",
-    503
-  );
+  try {
+    const adminClient = createAdminClient();
+
+    const auth = await authenticate(
+      request,
+      adminClient
+    );
+
+    if (!auth.affiliateId) {
+      return responseError(
+        auth.error || "Unauthorized.",
+        auth.status
+      );
+    }
+
+    const token = getBearerToken(request);
+
+    if (!token) {
+      return responseError(
+        "Authentication required.",
+        401
+      );
+    }
+
+    let body: Record<string, unknown>;
+
+    try {
+      const parsed: unknown =
+        await request.json();
+
+      if (
+        !parsed ||
+        typeof parsed !== "object" ||
+        Array.isArray(parsed)
+      ) {
+        return responseError(
+          "Invalid request body.",
+          400
+        );
+      }
+
+      body = parsed as Record<
+        string,
+        unknown
+      >;
+    } catch {
+      return responseError(
+        "Invalid JSON request.",
+        400
+      );
+    }
+
+    const requestedAmount =
+      body.amount;
+
+    const paymentMethod =
+      body.paymentMethod;
+
+    const paymentAddress =
+      body.paymentAddress;
+
+    if (
+      typeof requestedAmount !== "number" ||
+      !Number.isFinite(requestedAmount) ||
+      requestedAmount < 10 ||
+      requestedAmount > 1000000 ||
+      Math.round(requestedAmount * 100) /
+        100 !== requestedAmount
+    ) {
+      return responseError(
+        "Amount must be between $10 and $1,000,000 with at most 2 decimal places.",
+        400
+      );
+    }
+
+    if (
+      typeof paymentMethod !== "string" ||
+      paymentMethod.trim().length < 2 ||
+      paymentMethod.trim().length > 100
+    ) {
+      return responseError(
+        "Enter a valid payment method.",
+        400
+      );
+    }
+
+    if (
+      typeof paymentAddress !== "string" ||
+      paymentAddress.trim().length < 3 ||
+      paymentAddress.trim().length > 500
+    ) {
+      return responseError(
+        "Enter a valid payment address.",
+        400
+      );
+    }
+
+    const supabaseUrl =
+      process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+    const anonKey =
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !anonKey) {
+      return responseError(
+        "Supabase client configuration is missing.",
+        500
+      );
+    }
+
+    // Use the affiliate's verified JWT for RPC.
+    // Never use service-role identity for
+    // request_affiliate_withdrawal().
+    const affiliateClient = createClient(
+      supabaseUrl,
+      anonKey,
+      {
+        global: {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    );
+
+    const {
+      data: requestId,
+      error: rpcError,
+    } = await affiliateClient.rpc(
+      "request_affiliate_withdrawal",
+      {
+        p_amount: requestedAmount,
+        p_payment_method:
+          paymentMethod.trim(),
+        p_payment_address:
+          paymentAddress.trim(),
+      }
+    );
+
+    if (rpcError) {
+      const message = String(
+        rpcError.message || ""
+      );
+
+      if (
+        message.includes(
+          "Insufficient available balance"
+        )
+      ) {
+        return responseError(
+          "Insufficient available balance.",
+          400
+        );
+      }
+
+      if (
+        message.includes(
+          "Approved affiliate account required"
+        )
+      ) {
+        return responseError(
+          "Affiliate account is not approved.",
+          403
+        );
+      }
+
+      if (
+        message.includes(
+          "Authentication required"
+        )
+      ) {
+        return responseError(
+          "Authentication required.",
+          401
+        );
+      }
+
+      console.error(
+        "Withdrawal RPC error:",
+        rpcError.code,
+        rpcError.message
+      );
+
+      return responseError(
+        "Unable to submit withdrawal request.",
+        500
+      );
+    }
+
+    if (
+      typeof requestId !== "string" ||
+      !requestId
+    ) {
+      return responseError(
+        "Withdrawal request was not confirmed.",
+        500
+      );
+    }
+
+    return NextResponse.json(
+      {
+        success: true,
+        message:
+          "Withdrawal request submitted successfully.",
+        requestId,
+        status: "pending",
+      },
+      {
+        status: 201,
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      }
+    );
+  } catch (error) {
+    console.error(
+      "Affiliate withdrawal POST error:",
+      error
+    );
+
+    return responseError(
+      "Unable to submit withdrawal request.",
+      500
+    );
+  }
 }
