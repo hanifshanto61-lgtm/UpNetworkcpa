@@ -2194,6 +2194,7 @@ function SupportChatBot({
    STAT CARD
    ========================================================= */
 
+
 function StatCard({
   title,
   value,
@@ -2206,56 +2207,41 @@ function StatCard({
   value: string;
   subtitle: string;
   icon: ReactNode;
-  accent:
-    | "cyan"
-    | "emerald"
-    | "purple"
-    | "amber";
+  accent: "cyan" | "emerald" | "purple" | "amber";
   dark: boolean;
 }) {
   const styles = {
     cyan: {
-      darkCard:
-        "border-cyan-400/15 bg-gradient-to-br from-cyan-500/[0.12] via-cyan-500/[0.035] to-transparent shadow-[0_0_35px_rgba(34,211,238,0.06)]",
-      lightCard:
-        "border-cyan-200 bg-gradient-to-br from-cyan-50 via-white to-white shadow-sm",
-      icon: "bg-cyan-500/10 text-cyan-400",
-      value: "text-cyan-400",
-      line: "bg-cyan-400",
-      glow: "bg-cyan-400/10",
+      background:
+        "from-blue-700 via-blue-600 to-cyan-500",
+      shadow: "shadow-blue-500/25",
+      icon: "bg-white/20",
+      glow: "bg-cyan-200/30",
+      line: "bg-cyan-200",
     },
-
     emerald: {
-      darkCard:
-        "border-emerald-400/15 bg-gradient-to-br from-emerald-500/[0.12] via-emerald-500/[0.035] to-transparent shadow-[0_0_35px_rgba(16,185,129,0.06)]",
-      lightCard:
-        "border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-white shadow-sm",
-      icon: "bg-emerald-500/10 text-emerald-400",
-      value: "text-emerald-400",
-      line: "bg-emerald-400",
-      glow: "bg-emerald-400/10",
+      background:
+        "from-emerald-700 via-emerald-600 to-teal-400",
+      shadow: "shadow-emerald-500/25",
+      icon: "bg-white/20",
+      glow: "bg-green-200/30",
+      line: "bg-green-200",
     },
-
     purple: {
-      darkCard:
-        "border-purple-400/15 bg-gradient-to-br from-purple-500/[0.12] via-purple-500/[0.035] to-transparent shadow-[0_0_35px_rgba(168,85,247,0.06)]",
-      lightCard:
-        "border-purple-200 bg-gradient-to-br from-purple-50 via-white to-white shadow-sm",
-      icon: "bg-purple-500/10 text-purple-400",
-      value: "text-purple-400",
-      line: "bg-purple-400",
-      glow: "bg-purple-400/10",
+      background:
+        "from-violet-800 via-purple-600 to-fuchsia-500",
+      shadow: "shadow-purple-500/25",
+      icon: "bg-white/20",
+      glow: "bg-fuchsia-200/30",
+      line: "bg-fuchsia-200",
     },
-
     amber: {
-      darkCard:
-        "border-amber-400/15 bg-gradient-to-br from-amber-500/[0.12] via-amber-500/[0.035] to-transparent shadow-[0_0_35px_rgba(245,158,11,0.06)]",
-      lightCard:
-        "border-amber-200 bg-gradient-to-br from-amber-50 via-white to-white shadow-sm",
-      icon: "bg-amber-500/10 text-amber-400",
-      value: "text-amber-400",
-      line: "bg-amber-400",
-      glow: "bg-amber-400/10",
+      background:
+        "from-orange-700 via-orange-600 to-amber-400",
+      shadow: "shadow-orange-500/25",
+      icon: "bg-white/20",
+      glow: "bg-yellow-200/30",
+      line: "bg-yellow-200",
     },
   };
 
@@ -2263,57 +2249,37 @@ function StatCard({
 
   return (
     <div
-      className={`group relative overflow-hidden rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 ${
-        dark
-          ? style.darkCard
-          : style.lightCard
-      }`}
+      className={`group relative overflow-hidden rounded-2xl border border-white/20 bg-gradient-to-br ${style.background} p-5 text-white shadow-xl ${style.shadow} transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02] hover:shadow-2xl`}
     >
       <div
-        className={`absolute -right-10 -top-10 h-28 w-28 rounded-full blur-3xl ${style.glow}`}
+        className={`pointer-events-none absolute -right-12 -top-12 h-36 w-36 rounded-full blur-3xl ${style.glow}`}
       />
 
-      <div
-        className={`absolute left-0 top-0 h-1 w-full opacity-70 ${style.line}`}
-      />
+      <div className="pointer-events-none absolute -bottom-14 -left-10 h-28 w-28 rounded-full bg-white/10 blur-2xl" />
 
       <div className="relative z-10">
-        <div className="flex items-center justify-between gap-3">
-          <span
-            className={`text-[10px] font-bold uppercase tracking-[0.14em] ${
-              dark
-                ? "text-slate-500"
-                : "text-slate-400"
-            }`}
-          >
+        <div className="flex items-start justify-between gap-3">
+          <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/90">
             {title}
           </span>
 
           <div
-            className={`flex h-11 w-11 items-center justify-center rounded-xl ${style.icon}`}
+            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${style.icon} text-white shadow-inner`}
           >
             {icon}
           </div>
         </div>
 
-        <p
-          className={`mt-5 text-3xl font-black tracking-tight ${style.value}`}
-        >
+        <p className="mt-5 break-words text-3xl font-black tracking-tight text-white drop-shadow-sm sm:text-4xl">
           {value}
         </p>
 
-        <div className="mt-3 flex items-center gap-2">
-          <div
-            className={`h-1.5 w-1.5 rounded-full ${style.line}`}
+        <div className="mt-5 flex items-center gap-2 border-t border-white/20 pt-3">
+          <span
+            className={`h-2 w-2 shrink-0 rounded-full ${style.line}`}
           />
 
-          <p
-            className={`text-xs ${
-              dark
-                ? "text-slate-500"
-                : "text-slate-400"
-            }`}
-          >
+          <p className="text-xs font-medium text-white/90">
             {subtitle}
           </p>
         </div>
