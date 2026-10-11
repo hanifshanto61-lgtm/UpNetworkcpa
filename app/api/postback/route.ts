@@ -1,10 +1,9 @@
-
-import { createClient } from "@supabase/supabase-js";
-import { timingSafeEqual } from "crypto";
+import { createHmac, timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const revalidate = 0;
 
 function reply(message: string, status: number) {
   return NextResponse.json(
@@ -15,17 +14,21 @@ function reply(message: string, status: number) {
     {
       status,
       headers: {
-        "Cache-Control": "no-store",
+        "Cache-Control":
+          "private, no-store, no-cache, max-age=0",
       },
     }
   );
 }
 
 function validSecret(received: string, expected: string) {
-  const a = Buffer.from(received);
-  const b = Buffer.from(expected);
+  const a = createHmac("sha256", "postback-auth")
+    .update(received)
+    .digest();
 
-  if (a.length !== b.length) return false;
+  const b = createHmac("sha256", "postback-auth")
+    .update(expected)
+    .digest();
 
   return timingSafeEqual(a, b);
 }
@@ -42,13 +45,11 @@ export async function GET(request: NextRequest) {
       process.env.POSTBACK_SECRET;
 
     if (!supabaseUrl || !serviceKey || !postbackSecret) {
-      console.error("Postback configuration missing");
       return reply("Postback service unavailable", 503);
     }
 
     const params = request.nextUrl.searchParams;
 
-    // Supported CPA network parameter names.
     const clickId = (
       params.get("click_id") ||
       params.get("sub1") ||
@@ -63,10 +64,10 @@ export async function GET(request: NextRequest) {
       params.get("payout") || ""
     ).trim();
 
-    if (!receivedToken || !validSecret(
-      receivedToken,
-      postbackSecret
-    )) {
+    if (
+      !receivedToken ||
+      !validSecret(receivedToken, postbackSecret)
+    ) {
       return reply("Unauthorized postback", 401);
     }
 
@@ -96,36 +97,37 @@ export async function GET(request: NextRequest) {
       return reply("Invalid payout amount", 400);
     }
 
-    const supabase = createClient(
-      supabaseUrl,
-      serviceKey,
+    // Direct POST request to the Supabase RPC endpoint.
+    // Avoid any cached GET response for conversion writes.
+    const rpcResponse = await fetch(
+      `${supabaseUrl}/rest/v1/rpc/approve_postback_conversion`,
       {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          apikey: serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
         },
+        body: JSON.stringify({
+          p_click_id: clickId,
+          p_payout: payout,
+        }),
       }
     );
 
-    // The database function performs an atomic update.
-    // A previously converted click cannot be approved again.
-    const { data, error } = await supabase.rpc(
-      "approve_postback_conversion",
-      {
-        p_click_id: clickId,
-        p_payout: payout,
-      }
-    );
-
-    if (error) {
+    if (!rpcResponse.ok) {
       console.error(
-        "Postback conversion database error:",
-        error
+        "Postback RPC HTTP status:",
+        rpcResponse.status
       );
       return reply("Conversion processing failed", 500);
     }
 
-    if (data !== true) {
+    const result: unknown = await rpcResponse.json();
+
+    if (result !== true) {
       return reply(
         "Click not found, already converted, or not eligible",
         409
