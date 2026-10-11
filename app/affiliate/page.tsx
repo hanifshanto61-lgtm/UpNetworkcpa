@@ -960,28 +960,48 @@ export default function AffiliatePage() {
               </section>
 
               {/* Lifetime totals are preserved independently of daily reset */}
+              
+              {/* Total Affiliate Earnings */}
               <section className="mt-8">
-                <div className="mb-4">
-                  <h2 className="text-lg font-black">All-Time Performance</h2>
-                  <p className={`mt-1 text-xs ${muted}`}>
-                    Lifetime traffic, conversions and earnings
-                  </p>
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                  <StatCard title="Total Clicks" value={totalClicks.toLocaleString()}
-                    subtitle="All tracked traffic" icon={<MousePointerClick size={21} />}
-                    accent="cyan" dark={dark} />
-                  <StatCard title="Total Conversions" value={conversions.toLocaleString()}
-                    subtitle="All approved conversions" icon={<TrendingUp size={21} />}
-                    accent="emerald" dark={dark} />
-                  <StatCard title="Conversion Rate" value={`${conversionRate}%`}
-                    subtitle="Lifetime conversion rate" icon={<Activity size={21} />}
-                    accent="purple" dark={dark} />
-                  <StatCard title="Total Earnings" value={`$${earnings.toFixed(2)}`}
-                    subtitle="Lifetime recorded payout" icon={<DollarSign size={21} />}
-                    accent="amber" dark={dark} />
-                </div>
-              </section>
+            <div className="mb-4">
+    <h2 className="text-lg font-black">
+      Total Earnings
+    </h2>
+    <p className={`mt-1 text-xs ${muted}`}>
+      Your total recorded affiliate earnings
+    </p>
+  </div>
+
+  <div className="relative overflow-hidden rounded-3xl border border-emerald-400/30 bg-gradient-to-r from-emerald-800 via-green-700 to-teal-500 p-6 text-white shadow-2xl shadow-emerald-500/20 sm:p-8">
+    <div className="pointer-events-none absolute -right-12 -top-12 h-44 w-44 rounded-full bg-white/10 blur-3xl" />
+
+    <div className="relative z-10 flex items-center justify-between gap-4">
+      <div>
+        <p className="text-sm font-bold uppercase tracking-widest text-emerald-100">
+          Total Affiliate Earnings
+        </p>
+
+        <h3 className="mt-4 text-4xl font-black tracking-tight text-white sm:text-5xl">
+          ${earnings.toFixed(2)}
+        </h3>
+
+        <p className="mt-3 text-sm text-emerald-100">
+          Your lifetime recorded earnings
+        </p>
+      </div>
+
+      <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white/20 shadow-lg">
+        <DollarSign size={34} className="text-white" />
+         </div>
+       </div>
+
+     <div className="relative z-10 mt-6 border-t border-white/20 pt-4">
+       <p className="text-xs font-medium text-emerald-100">
+        Earnings are updated from your affiliate statistics.
+            </p>
+               </div>
+           </div>
+           </section>
 
               {/* Smart Link */}
               {featureEnabled(
