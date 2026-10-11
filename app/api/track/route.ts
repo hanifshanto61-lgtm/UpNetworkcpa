@@ -232,12 +232,12 @@ function addTrackingParameters(
     clickId
   );
 
-  // Preserve the existing affiliate parameter.
-  // A network using sub2 for Click ID must be
-  // configured differently before activation.
   destination.searchParams.set("sub2", affiliateId);
 
-  if (offerId) {
+  // Preserve the advertiser's original offer_id.
+  // Only add our internal offer ID if the
+  // destination does not already have one.
+  if (offerId && !destination.searchParams.has("offer_id")) {
     destination.searchParams.set("offer_id", offerId);
   }
 
