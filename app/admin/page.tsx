@@ -85,8 +85,8 @@ const menuItems: MenuItem[] = [
   {
     label: "Referrals",
     icon: UserCheck,
-    action: "referrals",
-    available: false,
+    action: "/admin/referrals",
+    available: true,
   },
   {
     label: "Payments",
@@ -152,11 +152,12 @@ const controlCards: ControlCard[] = [
   action: "/admin/earnings",
   },
   {
-    title: "Referral System",
-    description:
-      "Control referral rates, referral earnings and commission status.",
-    icon: TrendingUp,
-    status: "Coming next",
+   title: "Referral System",
+   description:
+    "View affiliate referrals, referral earnings and commission status.",
+   icon: TrendingUp,
+   status: "Active",
+   action: "/admin/referrals",
   },
   {
     title: "Payments",
