@@ -866,12 +866,9 @@ export default function AffiliatePage() {
           ) : (
             <>
               {/* Welcome Hero */}
-              <section
-                className={`relative overflow-hidden rounded-3xl border p-6 shadow-xl sm:p-8 ${
-                  dark
-                    ? "border-cyan-400/15 bg-gradient-to-br from-cyan-500/[0.12] via-purple-500/[0.06] to-white/[0.02]"
-                    : "border-cyan-100 bg-gradient-to-br from-cyan-50 via-white to-purple-50"
-                }`}
+              
+            <section
+              className="relative overflow-hidden rounded-3xl border border-white/20 bg-gradient-to-r from-blue-800 via-violet-700 to-fuchsia-600 p-6 text-white shadow-2xl shadow-purple-500/20 sm:p-8"
               >
                 <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-cyan-400/10 blur-3xl" />
 
@@ -2292,6 +2289,7 @@ function StatCard({
    QUICK ACTION
    ========================================================= */
 
+
 function QuickAction({
   title,
   subtitle,
@@ -2303,49 +2301,26 @@ function QuickAction({
   title: string;
   subtitle: string;
   icon: ReactNode;
-  accent:
-    | "blue"
-    | "cyan"
-    | "purple"
-    | "green";
+  accent: "blue" | "cyan" | "purple" | "green";
   onClick: () => void;
   dark: boolean;
 }) {
   const styles = {
     blue: {
-      dark:
-        "border-blue-400/15 bg-blue-500/[0.05] hover:border-blue-400/30 hover:bg-blue-500/[0.09]",
-      light:
-        "border-blue-100 bg-blue-50/60 hover:border-blue-200 hover:bg-blue-50",
-      icon: "bg-blue-500/10 text-blue-400",
-      arrow: "group-hover:text-blue-400",
+      gradient: "from-blue-700 via-blue-600 to-indigo-500",
+      shadow: "hover:shadow-blue-500/30",
     },
-
     cyan: {
-      dark:
-        "border-cyan-400/15 bg-cyan-500/[0.05] hover:border-cyan-400/30 hover:bg-cyan-500/[0.09]",
-      light:
-        "border-cyan-100 bg-cyan-50/60 hover:border-cyan-200 hover:bg-cyan-50",
-      icon: "bg-cyan-500/10 text-cyan-400",
-      arrow: "group-hover:text-cyan-400",
+      gradient: "from-cyan-700 via-cyan-600 to-sky-400",
+      shadow: "hover:shadow-cyan-500/30",
     },
-
     purple: {
-      dark:
-        "border-purple-400/15 bg-purple-500/[0.05] hover:border-purple-400/30 hover:bg-purple-500/[0.09]",
-      light:
-        "border-purple-100 bg-purple-50/60 hover:border-purple-200 hover:bg-purple-50",
-      icon: "bg-purple-500/10 text-purple-400",
-      arrow: "group-hover:text-purple-400",
+      gradient: "from-violet-800 via-purple-600 to-fuchsia-500",
+      shadow: "hover:shadow-purple-500/30",
     },
-
     green: {
-      dark:
-        "border-emerald-400/15 bg-emerald-500/[0.05] hover:border-emerald-400/30 hover:bg-emerald-500/[0.09]",
-      light:
-        "border-emerald-100 bg-emerald-50/60 hover:border-emerald-200 hover:bg-emerald-50",
-      icon: "bg-emerald-500/10 text-emerald-400",
-      arrow: "group-hover:text-emerald-400",
+      gradient: "from-emerald-700 via-green-600 to-teal-400",
+      shadow: "hover:shadow-emerald-500/30",
     },
   };
 
@@ -2355,44 +2330,28 @@ function QuickAction({
     <button
       type="button"
       onClick={onClick}
-      className={`group relative overflow-hidden rounded-2xl border p-5 text-left transition-all duration-300 hover:-translate-y-0.5 ${
-        dark
-          ? style.dark
-          : style.light
-      }`}
+      className={`group relative w-full overflow-hidden rounded-2xl border border-white/20 bg-gradient-to-br ${style.gradient} p-5 text-left text-white shadow-lg transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02] hover:shadow-2xl ${style.shadow}`}
     >
-      <div className="flex items-center gap-4">
-        <div
-          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${style.icon}`}
-        >
+      <div className="pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full bg-white/15 blur-2xl" />
+
+      <div className="relative z-10 flex items-center gap-4">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/20 text-white shadow-inner">
           {icon}
         </div>
 
         <div className="min-w-0 flex-1">
-          <p
-            className={`font-bold ${
-              dark
-                ? "text-slate-200"
-                : "text-slate-700"
-            }`}
-          >
+          <p className="font-bold text-white">
             {title}
           </p>
 
-          <p
-            className={`mt-1 text-xs ${
-              dark
-                ? "text-slate-500"
-                : "text-slate-400"
-            }`}
-          >
+          <p className="mt-1 text-xs text-white/85">
             {subtitle}
           </p>
         </div>
 
         <ChevronRight
-          size={17}
-          className={`text-slate-500 transition ${style.arrow}`}
+          size={20}
+          className="shrink-0 text-white/90 transition-transform duration-300 group-hover:translate-x-1"
         />
       </div>
     </button>
