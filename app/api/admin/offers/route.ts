@@ -1,132 +1,179 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 const ADMIN_EMAIL = "islamhanif122@gmail.com";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+function adminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const supabaseAdmin =
-  supabaseUrl && serviceRoleKey
-    ? createClient(supabaseUrl, serviceRoleKey)
-    : null;
-
-async function getAdminUser(request: NextRequest) {
-  if (!supabaseAdmin) {
-    return null;
+  if (!url || !key) {
+    throw new Error("Supabase server configuration missing");
   }
 
-  const authHeader = request.headers.get("authorization");
-
-  if (!authHeader?.startsWith("Bearer ")) {
-    return null;
-  }
-
-  const accessToken = authHeader.replace("Bearer ", "").trim();
-
-  if (!accessToken) {
-    return null;
-  }
-
-  const {
-    data: { user },
-    error,
-  } = await supabaseAdmin.auth.getUser(accessToken);
-
-  if (error || !user) {
-    return null;
-  }
-
-  if (user.email?.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
-    return null;
-  }
-
-  return user;
+  return createClient(url, key, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
 }
 
-function normalizeStatus(value: unknown) {
-  return String(value ?? "active").toLowerCase() === "paused"
-    ? "paused"
-    : "active";
+type Client = ReturnType<typeof adminClient>;
+
+async function authenticate(
+  req: NextRequest
+): Promise<Client | null> {
+  const header = req.headers.get("authorization") || "";
+
+  if (!header.startsWith("Bearer ")) return null;
+
+  const token = header.slice(7).trim();
+
+  if (!token) return null;
+
+  const client = adminClient();
+
+  const { data, error } = await client.auth.getUser(token);
+
+  if (
+    error ||
+    data.user?.email?.toLowerCase() !== ADMIN_EMAIL
+  ) {
+    return null;
+  }
+
+  return client;
 }
 
-function isValidUrl(value: string) {
+function response(message: string, status: number) {
+  return NextResponse.json(
+    { success: false, message },
+    {
+      status,
+      headers: { "Cache-Control": "no-store" },
+    }
+  );
+}
+
+function validUrl(value: string) {
   try {
-    new URL(value);
-    return true;
+    const url = new URL(value);
+
+    return (
+      ["http:", "https:"].includes(url.protocol) &&
+      !url.username &&
+      !url.password
+    );
   } catch {
     return false;
   }
 }
 
-/**
- * GET
- * Load all offers for admin
- */
+function uuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    value
+  );
+}
+
+function payoutValue(value: unknown): number | null {
+  if (
+    value === "" ||
+    value === null ||
+    value === undefined
+  ) {
+    return null;
+  }
+
+  const n = Number(value);
+
+  if (
+    !Number.isFinite(n) ||
+    n < 0 ||
+    n > 1000000 ||
+    !Number.isInteger(Math.round(n * 100)) ||
+    Math.abs(n * 100 - Math.round(n * 100)) > 0.000001
+  ) {
+    return null;
+  }
+
+  return n;
+}
+
+async function validateNetwork(
+  client: Client,
+  id: string | null
+) {
+  if (id === null) return true;
+
+  if (!uuid(id)) return false;
+
+  const { data, error } = await client
+    .from("cpa_networks")
+    .select("id")
+    .eq("id", id)
+    .maybeSingle();
+
+  return !error && !!data;
+}
+
+function parseNetworkId(value: unknown): string | null {
+  const s = String(value ?? "").trim();
+  return s || null;
+}
+
+function parseStatus(
+  value: unknown
+): "active" | "paused" | null {
+  const s = String(value ?? "").trim().toLowerCase();
+
+  return s === "active" || s === "paused" ? s : null;
+}
+
+// GET: Load all offers
 export async function GET(request: NextRequest) {
   try {
-    const user = await getAdminUser(request);
+    const client = await authenticate(request);
 
-    if (!user) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Unauthorized",
-        },
-        { status: 401 }
-      );
+    if (!client) {
+      return response("Unauthorized", 401);
     }
 
-    const { data, error } = await supabaseAdmin!
+    const { data, error } = await client
       .from("offers")
       .select("*")
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("Admin Offers GET error:", error);
-
-      return NextResponse.json(
-        {
-          success: false,
-          message: error.message,
-        },
-        { status: 500 }
-      );
+      console.error("Offers GET:", error.message);
+      return response("Failed to load offers", 500);
     }
-
-    return NextResponse.json({
-      success: true,
-      offers: data ?? [],
-    });
-  } catch (error) {
-    console.error("Admin Offers GET exception:", error);
 
     return NextResponse.json(
       {
-        success: false,
-        message: "Failed to load offers.",
+        success: true,
+        offers: data ?? [],
       },
-      { status: 500 }
+      {
+        headers: { "Cache-Control": "no-store" },
+      }
     );
+  } catch (error) {
+    console.error("Offers GET exception:", error);
+    return response("Internal server error", 500);
   }
 }
 
-/**
- * POST
- * Create a new offer
- */
+// POST: Create an offer
 export async function POST(request: NextRequest) {
   try {
-    const user = await getAdminUser(request);
+    const client = await authenticate(request);
 
-    if (!user) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Unauthorized",
-        },
-        { status: 401 }
-      );
+    if (!client) {
+      return response("Unauthorized", 401);
     }
 
     const body = await request.json();
@@ -134,279 +181,280 @@ export async function POST(request: NextRequest) {
     const name = String(body.name ?? "").trim();
     const advertiser = String(body.advertiser ?? "").trim();
 
-    /*
-     * Frontend uses offer_url.
-     * Database uses tracking_url.
-     */
-    const offerUrl = String(
+    const trackingUrl = String(
       body.offer_url ?? body.tracking_url ?? ""
     ).trim();
 
-    const description = String(body.description ?? "").trim();
-    const category = String(body.category ?? "").trim();
-    const country = String(body.country ?? "Worldwide").trim();
-    const device = String(body.device ?? "All").trim() || "All";
+    const payout = payoutValue(body.payout);
+    const status = parseStatus(body.status ?? "active");
+
+    const networkId = parseNetworkId(body.network_id);
+
+    const advertiserPayout = payoutValue(
+      body.advertiser_payout
+    );
+
+    const externalOfferId = String(
+      body.external_offer_id ?? ""
+    ).trim();
+
     const imageUrl = String(body.image_url ?? "").trim();
 
-    const payout = Number(body.payout ?? 0);
-
-    const currency =
-      String(body.currency ?? "USD").trim().toUpperCase() || "USD";
-
-    const status = normalizeStatus(body.status);
-
-    if (!name || !advertiser || !offerUrl) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Offer name, advertiser and offer URL are required.",
-        },
-        { status: 400 }
+    if (!name || !advertiser || !trackingUrl) {
+      return response(
+        "Offer name, advertiser and URL are required",
+        400
       );
     }
 
-    if (!isValidUrl(offerUrl)) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Invalid offer URL.",
-        },
-        { status: 400 }
+    if (
+      !validUrl(trackingUrl) ||
+      (imageUrl && !validUrl(imageUrl))
+    ) {
+      return response("Invalid URL", 400);
+    }
+
+    if (payout === null || !status) {
+      return response(
+        "Invalid affiliate payout or status",
+        400
       );
     }
 
-    if (!Number.isFinite(payout) || payout < 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Invalid payout.",
-        },
-        { status: 400 }
+    if (
+      body.advertiser_payout !== undefined &&
+      body.advertiser_payout !== "" &&
+      advertiserPayout === null
+    ) {
+      return response("Invalid advertiser payout", 400);
+    }
+
+    if (
+      advertiserPayout !== null &&
+      payout > advertiserPayout
+    ) {
+      return response(
+        "Affiliate payout cannot exceed advertiser payout",
+        400
       );
     }
 
-    const { data, error } = await supabaseAdmin!
+    if (!(await validateNetwork(client, networkId))) {
+      return response("CPA network not found", 400);
+    }
+
+    const { data, error } = await client
       .from("offers")
       .insert({
         name,
         advertiser,
-        tracking_url: offerUrl,
+        tracking_url: trackingUrl,
         payout,
-        currency,
-        country,
-        category: category || null,
-        device,
-        description: description || null,
+        currency:
+          String(body.currency ?? "USD")
+            .trim()
+            .toUpperCase() || "USD",
+        country:
+          String(body.country ?? "Worldwide").trim() ||
+          "Worldwide",
+        category:
+          String(body.category ?? "").trim() || null,
+        device:
+          String(body.device ?? "All").trim() || "All",
+        description:
+          String(body.description ?? "").trim() || null,
         image_url: imageUrl || null,
         status,
+        network_id: networkId,
+        external_offer_id: externalOfferId || null,
+        advertiser_payout: advertiserPayout,
       })
       .select()
       .single();
 
     if (error) {
-      console.error("Admin Offers POST error:", error);
-
-      return NextResponse.json(
-        {
-          success: false,
-          message: error.message,
-        },
-        { status: 500 }
-      );
+      console.error("Offers POST:", error.message);
+      return response("Failed to create offer", 500);
     }
 
-    return NextResponse.json({
-      success: true,
-      offer: data,
-    });
-  } catch (error) {
-    console.error("Admin Offers POST exception:", error);
-
     return NextResponse.json(
-      {
-        success: false,
-        message: "Failed to create offer.",
-      },
-      { status: 500 }
+      { success: true, offer: data },
+      { status: 201 }
     );
+  } catch (error) {
+    console.error("Offers POST exception:", error);
+    return response("Internal server error", 500);
   }
 }
 
-/**
- * PATCH
- * Update an existing offer
- */
+// PATCH: Update an offer
 export async function PATCH(request: NextRequest) {
   try {
-    const user = await getAdminUser(request);
+    const client = await authenticate(request);
 
-    if (!user) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Unauthorized",
-        },
-        { status: 401 }
-      );
+    if (!client) {
+      return response("Unauthorized", 401);
     }
 
     const body = await request.json();
-
     const id = String(body.id ?? "").trim();
 
-    if (!id) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Offer ID is required.",
-        },
-        { status: 400 }
-      );
+    if (!uuid(id)) {
+      return response("Invalid offer ID", 400);
     }
 
     const updates: Record<string, unknown> = {};
 
-    if (body.name !== undefined) {
-      const name = String(body.name).trim();
+    for (const key of [
+      "name",
+      "advertiser",
+      "country",
+      "device",
+      "category",
+      "description",
+      "image_url",
+      "external_offer_id",
+    ] as const) {
+      if (body[key] === undefined) continue;
 
-      if (!name) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Offer name is required.",
-          },
-          { status: 400 }
-        );
+      const value = String(body[key] ?? "").trim();
+
+      if (
+        (key === "name" || key === "advertiser") &&
+        !value
+      ) {
+        return response(`${key} is required`, 400);
       }
 
-      updates.name = name;
-    }
-
-    if (body.advertiser !== undefined) {
-      const advertiser = String(body.advertiser).trim();
-
-      if (!advertiser) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Advertiser is required.",
-          },
-          { status: 400 }
-        );
+      if (
+        key === "image_url" &&
+        value &&
+        !validUrl(value)
+      ) {
+        return response("Invalid image URL", 400);
       }
 
-      updates.advertiser = advertiser;
+      updates[key] =
+        value ||
+        (["name", "advertiser", "country", "device"].includes(
+          key
+        )
+          ? key === "country"
+            ? "Worldwide"
+            : key === "device"
+            ? "All"
+            : ""
+          : null);
     }
 
-    /*
-     * Frontend may send offer_url.
-     * Database column is tracking_url.
-     */
     if (
       body.offer_url !== undefined ||
       body.tracking_url !== undefined
     ) {
-      const offerUrl = String(
+      const url = String(
         body.offer_url ?? body.tracking_url ?? ""
       ).trim();
 
-      if (!offerUrl) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Offer URL is required.",
-          },
-          { status: 400 }
-        );
+      if (!validUrl(url)) {
+        return response("Invalid offer URL", 400);
       }
 
-      if (!isValidUrl(offerUrl)) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Invalid offer URL.",
-          },
-          { status: 400 }
-        );
-      }
-
-      updates.tracking_url = offerUrl;
+      updates.tracking_url = url;
     }
 
     if (body.payout !== undefined) {
-      const payout = Number(body.payout);
+      const value = payoutValue(body.payout);
 
-      if (!Number.isFinite(payout) || payout < 0) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Invalid payout.",
-          },
-          { status: 400 }
-        );
+      if (value === null) {
+        return response("Invalid affiliate payout", 400);
       }
 
-      updates.payout = payout;
+      updates.payout = value;
+    }
+
+    if (body.advertiser_payout !== undefined) {
+      const value = payoutValue(body.advertiser_payout);
+
+      if (
+        body.advertiser_payout !== "" &&
+        body.advertiser_payout !== null &&
+        value === null
+      ) {
+        return response("Invalid advertiser payout", 400);
+      }
+
+      updates.advertiser_payout = value;
+    }
+
+    if (body.network_id !== undefined) {
+      const networkId = parseNetworkId(body.network_id);
+
+      if (!(await validateNetwork(client, networkId))) {
+        return response("CPA network not found", 400);
+      }
+
+      updates.network_id = networkId;
+    }
+
+    if (body.status !== undefined) {
+      const status = parseStatus(body.status);
+
+      if (!status) {
+        return response("Invalid status", 400);
+      }
+
+      updates.status = status;
     }
 
     if (body.currency !== undefined) {
       updates.currency =
-        String(body.currency).trim().toUpperCase() || "USD";
+        String(body.currency ?? "USD")
+          .trim()
+          .toUpperCase() || "USD";
     }
 
-    if (body.country !== undefined) {
-      updates.country = String(body.country).trim();
+    if (!Object.keys(updates).length) {
+      return response("No changes provided", 400);
     }
 
-    if (body.category !== undefined) {
-      updates.category =
-        String(body.category).trim() || null;
-    }
+    if (
+      updates.payout !== undefined ||
+      updates.advertiser_payout !== undefined
+    ) {
+      const { data: current, error: currentError } =
+        await client
+          .from("offers")
+          .select("payout,advertiser_payout")
+          .eq("id", id)
+          .maybeSingle();
 
-    if (body.device !== undefined) {
-      updates.device =
-        String(body.device).trim() || "All";
-    }
-
-    if (body.description !== undefined) {
-      updates.description =
-        String(body.description).trim() || null;
-    }
-
-    if (body.image_url !== undefined) {
-      const imageUrl = String(body.image_url).trim();
-
-      if (imageUrl && !isValidUrl(imageUrl)) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Invalid image URL.",
-          },
-          { status: 400 }
-        );
+      if (currentError || !current) {
+        return response("Offer not found", 404);
       }
 
-      updates.image_url = imageUrl || null;
-    }
-
-    if (body.status !== undefined) {
-      updates.status = normalizeStatus(body.status);
-    }
-
-    if (Object.keys(updates).length === 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "No changes were provided.",
-        },
-        { status: 400 }
+      const affiliate = Number(
+        updates.payout ?? current.payout
       );
+
+      const advertiser =
+        updates.advertiser_payout !== undefined
+          ? updates.advertiser_payout
+          : current.advertiser_payout;
+
+      if (
+        advertiser !== null &&
+        affiliate > Number(advertiser)
+      ) {
+        return response(
+          "Affiliate payout cannot exceed advertiser payout",
+          400
+        );
+      }
     }
 
     updates.updated_at = new Date().toISOString();
 
-    const { data, error } = await supabaseAdmin!
+    const { data, error } = await client
       .from("offers")
       .update(updates)
       .eq("id", id)
@@ -414,15 +462,8 @@ export async function PATCH(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error("Admin Offers PATCH error:", error);
-
-      return NextResponse.json(
-        {
-          success: false,
-          message: error.message,
-        },
-        { status: 500 }
-      );
+      console.error("Offers PATCH:", error.message);
+      return response("Failed to update offer", 500);
     }
 
     return NextResponse.json({
@@ -430,80 +471,47 @@ export async function PATCH(request: NextRequest) {
       offer: data,
     });
   } catch (error) {
-    console.error("Admin Offers PATCH exception:", error);
-
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Failed to update offer.",
-      },
-      { status: 500 }
-    );
+    console.error("Offers PATCH exception:", error);
+    return response("Internal server error", 500);
   }
 }
 
-/**
- * DELETE
- * Delete an offer
- */
+// DELETE: Delete an offer
 export async function DELETE(request: NextRequest) {
   try {
-    const user = await getAdminUser(request);
+    const client = await authenticate(request);
 
-    if (!user) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Unauthorized",
-        },
-        { status: 401 }
-      );
+    if (!client) {
+      return response("Unauthorized", 401);
     }
 
-    const { searchParams } = new URL(request.url);
+    const id =
+      request.nextUrl.searchParams.get("id")?.trim() || "";
 
-    const id = searchParams.get("id")?.trim();
-
-    if (!id) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Offer ID is required.",
-        },
-        { status: 400 }
-      );
+    if (!uuid(id)) {
+      return response("Invalid offer ID", 400);
     }
 
-    const { error } = await supabaseAdmin!
+    const { error } = await client
       .from("offers")
       .delete()
       .eq("id", id);
 
     if (error) {
-      console.error("Admin Offers DELETE error:", error);
+      console.error("Offers DELETE:", error.message);
 
-      return NextResponse.json(
-        {
-          success: false,
-          message: error.message,
-        },
-        { status: 500 }
+      return response(
+        "Failed to delete offer. It may have related clicks",
+        409
       );
     }
 
     return NextResponse.json({
       success: true,
-      message: "Offer deleted successfully.",
+      message: "Offer deleted successfully",
     });
   } catch (error) {
-    console.error("Admin Offers DELETE exception:", error);
-
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Failed to delete offer.",
-      },
-      { status: 500 }
-    );
+    console.error("Offers DELETE exception:", error);
+    return response("Internal server error", 500);
   }
-        }
+}
