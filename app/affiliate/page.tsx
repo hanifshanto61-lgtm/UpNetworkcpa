@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -171,6 +172,15 @@ export default function AffiliatePage() {
     conversionRate: 0,
   });
 
+  const [todayStats, setTodayStats] = useState<DashboardStats>({
+    totalClicks: 0,
+    conversions: 0,
+    earnings: 0,
+    conversionRate: 0,
+  });
+  const [dailyDate, setDailyDate] = useState("");
+  const [reportingTimezone, setReportingTimezone] = useState("UTC");
+
   const [panelSettings, setPanelSettings] =
     useState<PanelSettings>(DEFAULT_PANEL_SETTINGS);
 
@@ -211,12 +221,17 @@ export default function AffiliatePage() {
 
       const accessToken = sessionData.session.access_token;
 
+      // Browser timezone is only used if the affiliate has not saved one.
+      const browserTimezone =
+        Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
       const dashboardResponse = await fetch(
         "/api/affiliate/dashboard",
         {
           method: "GET",
           headers: {
             Authorization: `Bearer ${accessToken}`,
+            "x-affiliate-timezone": browserTimezone,
           },
           cache: "no-store",
         }
@@ -260,6 +275,15 @@ export default function AffiliatePage() {
             dashboardData?.stats?.conversionRate
           ) || 0,
       });
+
+      setTodayStats({
+        totalClicks: Number(dashboardData?.todayStats?.totalClicks) || 0,
+        conversions: Number(dashboardData?.todayStats?.conversions) || 0,
+        earnings: Number(dashboardData?.todayStats?.earnings) || 0,
+        conversionRate: Number(dashboardData?.todayStats?.conversionRate) || 0,
+      });
+      setDailyDate(String(dashboardData?.daily?.date || ""));
+      setReportingTimezone(String(dashboardData?.daily?.timezone || "UTC"));
 
       try {
         const settingsResponse = await fetch(
@@ -907,59 +931,59 @@ export default function AffiliatePage() {
                 </div>
               </section>
 
-              {/* Stats */}
-              <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <StatCard
-                  title="Total Clicks"
-                  value={totalClicks.toLocaleString()}
-                  subtitle="All tracked traffic"
-                  icon={
-                    <MousePointerClick
-                      size={21}
-                    />
-                  }
-                  accent="cyan"
-                  dark={dark}
-                />
+              {/* Daily performance: affiliate's saved reporting timezone */}
+              <section className="mt-6">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-black">Today's Performance</h2>
+                    <p className={`mt-1 text-xs ${muted}`}>
+                      {dailyDate || "Today"} • {reportingTimezone}
+                    </p>
+                  </div>
+                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                    dark ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-50 text-emerald-700"
+                  }`}>
+                    Auto Refresh • 10s
+                  </span>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <StatCard title="Today Clicks" value={todayStats.totalClicks.toLocaleString()}
+                    subtitle="Clicks recorded today" icon={<MousePointerClick size={21} />}
+                    accent="cyan" dark={dark} />
+                  <StatCard title="Today Conversions" value={todayStats.conversions.toLocaleString()}
+                    subtitle="Conversions recorded today" icon={<TrendingUp size={21} />}
+                    accent="emerald" dark={dark} />
+                  <StatCard title="Today Conversion Rate" value={`${todayStats.conversionRate.toFixed(2)}%`}
+                    subtitle="Today's conversion rate" icon={<Activity size={21} />}
+                    accent="purple" dark={dark} />
+                  <StatCard title="Today Earnings" value={`$${todayStats.earnings.toFixed(2)}`}
+                    subtitle="Earnings recorded today" icon={<DollarSign size={21} />}
+                    accent="amber" dark={dark} />
+                </div>
+              </section>
 
-                <StatCard
-                  title="Conversions"
-                  value={conversions.toLocaleString()}
-                  subtitle="Approved conversions"
-                  icon={
-                    <TrendingUp
-                      size={21}
-                    />
-                  }
-                  accent="emerald"
-                  dark={dark}
-                />
-
-                <StatCard
-                  title="Conversion Rate"
-                  value={`${conversionRate}%`}
-                  subtitle="Traffic to conversion"
-                  icon={
-                    <Activity size={21} />
-                  }
-                  accent="purple"
-                  dark={dark}
-                />
-
-                <StatCard
-                  title="Earnings"
-                  value={`$${earnings.toFixed(
-                    2
-                  )}`}
-                  subtitle="Total recorded payout"
-                  icon={
-                    <DollarSign
-                      size={21}
-                    />
-                  }
-                  accent="amber"
-                  dark={dark}
-                />
+              {/* Lifetime totals are preserved independently of daily reset */}
+              <section className="mt-8">
+                <div className="mb-4">
+                  <h2 className="text-lg font-black">All-Time Performance</h2>
+                  <p className={`mt-1 text-xs ${muted}`}>
+                    Lifetime traffic, conversions and earnings
+                  </p>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <StatCard title="Total Clicks" value={totalClicks.toLocaleString()}
+                    subtitle="All tracked traffic" icon={<MousePointerClick size={21} />}
+                    accent="cyan" dark={dark} />
+                  <StatCard title="Total Conversions" value={conversions.toLocaleString()}
+                    subtitle="All approved conversions" icon={<TrendingUp size={21} />}
+                    accent="emerald" dark={dark} />
+                  <StatCard title="Conversion Rate" value={`${conversionRate}%`}
+                    subtitle="Lifetime conversion rate" icon={<Activity size={21} />}
+                    accent="purple" dark={dark} />
+                  <StatCard title="Total Earnings" value={`$${earnings.toFixed(2)}`}
+                    subtitle="Lifetime recorded payout" icon={<DollarSign size={21} />}
+                    accent="amber" dark={dark} />
+                </div>
               </section>
 
               {/* Smart Link */}
@@ -974,7 +998,6 @@ export default function AffiliatePage() {
                   }`}
                 >
                   <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-cyan-400/10 blur-3xl" />
-
                   <div className="relative z-10">
                     <div className="mb-4 flex items-center gap-3">
                       <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-500">
@@ -1982,7 +2005,6 @@ function SupportChatBot({
         >
           <span className="relative flex h-8 w-8 items-center justify-center rounded-full bg-white/15">
             <Bot size={19} />
-
             <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-cyan-500" />
           </span>
 
@@ -2025,9 +2047,7 @@ function SupportChatBot({
 
               <button
                 type="button"
-                onClick={() =>
-                  setOpen(false)
-                }
+                onClick={() => setOpen(false)}
                 aria-label="Close support chat"
                 className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 transition hover:bg-white/20"
               >
@@ -2038,39 +2058,34 @@ function SupportChatBot({
 
           {/* Messages */}
           <div className="flex-1 space-y-3 overflow-y-auto p-4">
-            {messages.map(
-              (message) => (
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={`flex ${
+                  message.sender === "user"
+                    ? "justify-end"
+                    : "justify-start"
+                }`}
+              >
+                {message.sender === "bot" && (
+                  <div className="mr-2 mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-cyan-500/10 text-cyan-500">
+                    <Bot size={14} />
+                  </div>
+                )}
+
                 <div
-                  key={message.id}
-                  className={`flex ${
-                    message.sender ===
-                    "user"
-                      ? "justify-end"
-                      : "justify-start"
+                  className={`max-w-[82%] rounded-2xl px-3.5 py-2.5 text-xs leading-5 ${
+                    message.sender === "user"
+                      ? "rounded-br-md bg-gradient-to-r from-cyan-500 to-blue-600 text-white"
+                      : dark
+                        ? "rounded-bl-md bg-white/[0.06] text-slate-300"
+                        : "rounded-bl-md bg-slate-100 text-slate-700"
                   }`}
                 >
-                  {message.sender ===
-                    "bot" && (
-                    <div className="mr-2 mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-cyan-500/10 text-cyan-500">
-                      <Bot size={14} />
-                    </div>
-                  )}
-
-                  <div
-                    className={`max-w-[82%] rounded-2xl px-3.5 py-2.5 text-xs leading-5 ${
-                      message.sender ===
-                      "user"
-                        ? "rounded-br-md bg-gradient-to-r from-cyan-500 to-blue-600 text-white"
-                        : dark
-                          ? "rounded-bl-md bg-white/[0.06] text-slate-300"
-                          : "rounded-bl-md bg-slate-100 text-slate-700"
-                    }`}
-                  >
-                    {message.text}
-                  </div>
+                  {message.text}
                 </div>
-              )
-            )}
+              </div>
+            ))}
           </div>
 
           {/* Quick buttons */}
@@ -2099,28 +2114,22 @@ function SupportChatBot({
             </div>
 
             <div className="flex gap-1.5 overflow-x-auto pb-1">
-              {quickButtons.map(
-                (button) => (
-                  <button
-                    type="button"
-                    key={
-                      button.action
-                    }
-                    onClick={() =>
-                      handleQuickAction(
-                        button.action
-                      )
-                    }
-                    className={`shrink-0 rounded-full border px-3 py-1.5 text-[10px] font-semibold transition ${
-                      dark
-                        ? "border-white/10 bg-white/[0.03] text-slate-300 hover:border-cyan-400/30 hover:bg-cyan-400/10 hover:text-cyan-300"
-                        : "border-slate-200 bg-slate-50 text-slate-600 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-600"
-                    }`}
-                  >
-                    {button.label}
-                  </button>
-                )
-              )}
+              {quickButtons.map((button) => (
+                <button
+                  type="button"
+                  key={button.action}
+                  onClick={() =>
+                    handleQuickAction(button.action)
+                  }
+                  className={`shrink-0 rounded-full border px-3 py-1.5 text-[10px] font-semibold transition ${
+                    dark
+                      ? "border-white/10 bg-white/[0.03] text-slate-300 hover:border-cyan-400/30 hover:bg-cyan-400/10 hover:text-cyan-300"
+                      : "border-slate-200 bg-slate-50 text-slate-600 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-600"
+                  }`}
+                >
+                  {button.label}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -2143,13 +2152,9 @@ function SupportChatBot({
                 type="text"
                 value={input}
                 onChange={(event) =>
-                  setInput(
-                    event.target.value
-                  )
+                  setInput(event.target.value)
                 }
-                onKeyDown={
-                  handleKeyDown
-                }
+                onKeyDown={handleKeyDown}
                 placeholder="Ask support..."
                 className={`min-w-0 flex-1 bg-transparent px-2.5 py-2 text-xs outline-none ${
                   dark
@@ -2214,8 +2219,7 @@ function StatCard({
         "border-cyan-400/15 bg-gradient-to-br from-cyan-500/[0.12] via-cyan-500/[0.035] to-transparent shadow-[0_0_35px_rgba(34,211,238,0.06)]",
       lightCard:
         "border-cyan-200 bg-gradient-to-br from-cyan-50 via-white to-white shadow-sm",
-      icon:
-        "bg-cyan-500/10 text-cyan-400",
+      icon: "bg-cyan-500/10 text-cyan-400",
       value: "text-cyan-400",
       line: "bg-cyan-400",
       glow: "bg-cyan-400/10",
@@ -2226,8 +2230,7 @@ function StatCard({
         "border-emerald-400/15 bg-gradient-to-br from-emerald-500/[0.12] via-emerald-500/[0.035] to-transparent shadow-[0_0_35px_rgba(16,185,129,0.06)]",
       lightCard:
         "border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-white shadow-sm",
-      icon:
-        "bg-emerald-500/10 text-emerald-400",
+      icon: "bg-emerald-500/10 text-emerald-400",
       value: "text-emerald-400",
       line: "bg-emerald-400",
       glow: "bg-emerald-400/10",
@@ -2238,8 +2241,7 @@ function StatCard({
         "border-purple-400/15 bg-gradient-to-br from-purple-500/[0.12] via-purple-500/[0.035] to-transparent shadow-[0_0_35px_rgba(168,85,247,0.06)]",
       lightCard:
         "border-purple-200 bg-gradient-to-br from-purple-50 via-white to-white shadow-sm",
-      icon:
-        "bg-purple-500/10 text-purple-400",
+      icon: "bg-purple-500/10 text-purple-400",
       value: "text-purple-400",
       line: "bg-purple-400",
       glow: "bg-purple-400/10",
@@ -2250,8 +2252,7 @@ function StatCard({
         "border-amber-400/15 bg-gradient-to-br from-amber-500/[0.12] via-amber-500/[0.035] to-transparent shadow-[0_0_35px_rgba(245,158,11,0.06)]",
       lightCard:
         "border-amber-200 bg-gradient-to-br from-amber-50 via-white to-white shadow-sm",
-      icon:
-        "bg-amber-500/10 text-amber-400",
+      icon: "bg-amber-500/10 text-amber-400",
       value: "text-amber-400",
       line: "bg-amber-400",
       glow: "bg-amber-400/10",
@@ -2350,10 +2351,8 @@ function QuickAction({
         "border-blue-400/15 bg-blue-500/[0.05] hover:border-blue-400/30 hover:bg-blue-500/[0.09]",
       light:
         "border-blue-100 bg-blue-50/60 hover:border-blue-200 hover:bg-blue-50",
-      icon:
-        "bg-blue-500/10 text-blue-400",
-      arrow:
-        "group-hover:text-blue-400",
+      icon: "bg-blue-500/10 text-blue-400",
+      arrow: "group-hover:text-blue-400",
     },
 
     cyan: {
@@ -2361,10 +2360,8 @@ function QuickAction({
         "border-cyan-400/15 bg-cyan-500/[0.05] hover:border-cyan-400/30 hover:bg-cyan-500/[0.09]",
       light:
         "border-cyan-100 bg-cyan-50/60 hover:border-cyan-200 hover:bg-cyan-50",
-      icon:
-        "bg-cyan-500/10 text-cyan-400",
-      arrow:
-        "group-hover:text-cyan-400",
+      icon: "bg-cyan-500/10 text-cyan-400",
+      arrow: "group-hover:text-cyan-400",
     },
 
     purple: {
@@ -2372,10 +2369,8 @@ function QuickAction({
         "border-purple-400/15 bg-purple-500/[0.05] hover:border-purple-400/30 hover:bg-purple-500/[0.09]",
       light:
         "border-purple-100 bg-purple-50/60 hover:border-purple-200 hover:bg-purple-50",
-      icon:
-        "bg-purple-500/10 text-purple-400",
-      arrow:
-        "group-hover:text-purple-400",
+      icon: "bg-purple-500/10 text-purple-400",
+      arrow: "group-hover:text-purple-400",
     },
 
     green: {
@@ -2383,10 +2378,8 @@ function QuickAction({
         "border-emerald-400/15 bg-emerald-500/[0.05] hover:border-emerald-400/30 hover:bg-emerald-500/[0.09]",
       light:
         "border-emerald-100 bg-emerald-50/60 hover:border-emerald-200 hover:bg-emerald-50",
-      icon:
-        "bg-emerald-500/10 text-emerald-400",
-      arrow:
-        "group-hover:text-emerald-400",
+      icon: "bg-emerald-500/10 text-emerald-400",
+      arrow: "group-hover:text-emerald-400",
     },
   };
 
@@ -2451,22 +2444,15 @@ function formatDate(value?: string) {
 
   const date = new Date(value);
 
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
+  if (Number.isNaN(date.getTime())) {
     return "-";
   }
 
-  return date.toLocaleString(
-    "en-US",
-    {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    }
-  );
-  }
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
