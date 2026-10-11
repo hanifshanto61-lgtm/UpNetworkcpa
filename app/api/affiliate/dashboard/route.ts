@@ -20,8 +20,16 @@ type ClickRow = {
   created_at?: string | null;
 };
 
+type SummaryStats = {
+  totalClicks: number;
+  conversions: number;
+  conversionRate: number;
+  earnings: number;
+};
+
 const RECENT_CLICKS_LIMIT = 20;
 const PAGE_SIZE = 1000;
+const TIME_ZONE = "Asia/Dhaka";
 
 const CONVERSION_STATUSES = [
   "converted",
@@ -65,6 +73,63 @@ function makeAffiliateId(userId: string): string {
     "UP" +
     userId.replace(/-/g, "").slice(0, 10).toUpperCase()
   );
+}
+
+function getDhakaDate(value: string | Date): string {
+  const date =
+    value instanceof Date ? value : new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const year = parts.find(
+    (part) => part.type === "year"
+  )?.value;
+
+  const month = parts.find(
+    (part) => part.type === "month"
+  )?.value;
+
+  const day = parts.find(
+    (part) => part.type === "day"
+  )?.value;
+
+  return `${year}-${month}-${day}`;
+}
+
+function emptySummary(): SummaryStats {
+  return {
+    totalClicks: 0,
+    conversions: 0,
+    conversionRate: 0,
+    earnings: 0,
+  };
+}
+
+function finalizeSummary(
+  summary: SummaryStats
+): SummaryStats {
+  return {
+    ...summary,
+    earnings: Number(summary.earnings.toFixed(2)),
+    conversionRate:
+      summary.totalClicks > 0
+        ? Number(
+            (
+              (summary.conversions / summary.totalClicks) *
+              100
+            ).toFixed(2)
+          )
+        : 0,
+  };
 }
 
 function errorResponse(
@@ -133,7 +198,6 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    // Verify the currently logged-in user.
     const {
       data: authData,
       error: authError,
@@ -164,7 +228,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Read the existing affiliate profile.
     let {
       data: profile,
       error: profileError,
@@ -190,7 +253,7 @@ export async function GET(request: NextRequest) {
       user.user_metadata?.application_status
     );
 
-    // Preserve approved-profile recovery behavior.
+    // Preserve existing approved-profile recovery.
     if (!profile) {
       if (metadataStatus !== "approved") {
         return NextResponse.json(
@@ -324,8 +387,7 @@ export async function GET(request: NextRequest) {
       user.email?.split("@")[0] ||
       "Affiliate";
 
-    // Count all clicks directly in the database.
-    // This is independent of the recent-clicks limit.
+    // Exact all-time click count.
     const {
       count: databaseClickCount,
       error: countError,
@@ -356,8 +418,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Read click records in pages to calculate
-    // conversions and earnings across all records.
     const allClicks: ClickRow[] = [];
     let offset = 0;
 
@@ -405,47 +465,55 @@ export async function GET(request: NextRequest) {
       offset += PAGE_SIZE;
     }
 
-    // The database COUNT is the authoritative
-    // total-click metric.
-    const totalClicks = databaseClickCount;
+    const currentDate = getDhakaDate(new Date());
 
-    let conversions = 0;
-    let earnings = 0;
+    const todayStats = emptySummary();
+    const allTimeStats = emptySummary();
+
+    allTimeStats.totalClicks = databaseClickCount;
 
     for (const click of allClicks) {
+      const clickDate = click.created_at
+        ? getDhakaDate(click.created_at)
+        : "";
+
+      if (clickDate === currentDate) {
+        todayStats.totalClicks += 1;
+      }
+
       if (isConverted(click)) {
-        conversions += 1;
-        earnings += getNumericPayout(
-          click.payout
-        );
+        const payout = getNumericPayout(click.payout);
+
+        allTimeStats.conversions += 1;
+        allTimeStats.earnings += payout;
+
+        // Prefer actual conversion time.
+        // Fall back to click time for legacy rows.
+        const conversionDate = click.converted_at
+          ? getDhakaDate(click.converted_at)
+          : clickDate;
+
+        if (conversionDate === currentDate) {
+          todayStats.conversions += 1;
+          todayStats.earnings += payout;
+        }
       }
     }
 
-    const conversionRate =
-      totalClicks > 0
-        ? Number(
-            (
-              (conversions / totalClicks) *
-              100
-            ).toFixed(2)
-          )
-        : 0;
+    const todaySummary = finalizeSummary(todayStats);
+    const allTimeSummary = finalizeSummary(allTimeStats);
 
-    // Log discrepancies for diagnosis.
-    // No secret keys or access tokens are logged.
-    if (allClicks.length !== totalClicks) {
+    if (allClicks.length !== databaseClickCount) {
       console.warn(
         "Dashboard click count mismatch:",
         {
           affiliateId,
-          databaseCount: totalClicks,
+          databaseCount: databaseClickCount,
           fetchedRows: allClicks.length,
         }
       );
     }
 
-    // Keep the response compatible with the
-    // existing affiliate dashboard UI.
     return NextResponse.json(
       {
         success: true,
@@ -470,27 +538,29 @@ export async function GET(request: NextRequest) {
           RECENT_CLICKS_LIMIT
         ),
 
-        stats: {
-          totalClicks,
-          conversions,
-          conversionRate,
-          earnings: Number(
-            earnings.toFixed(2)
-          ),
+        // Keep old dashboard fields working.
+        stats: allTimeSummary,
+
+        // New separate daily and lifetime reports.
+        todayStats: todaySummary,
+        allTimeStats: allTimeSummary,
+
+        daily: {
+          date: currentDate,
+          timezone: TIME_ZONE,
+          stats: todaySummary,
         },
 
         meta: {
           profileFound: true,
           profileLookup: "profiles.id",
-          recentClicksLimit:
-            RECENT_CLICKS_LIMIT,
+          recentClicksLimit: RECENT_CLICKS_LIMIT,
           applicationStatus,
-          clickCountSource:
-            "database-exact-count",
-          databaseClickCount:
-            totalClicks,
-          fetchedClickRows:
-            allClicks.length,
+          clickCountSource: "database-exact-count",
+          databaseClickCount,
+          fetchedClickRows: allClicks.length,
+          reportingDate: currentDate,
+          reportingTimezone: TIME_ZONE,
         },
       },
       {
