@@ -91,8 +91,8 @@ const menuItems: MenuItem[] = [
   {
     label: "Payments",
     icon: CreditCard,
-    action: "payments",
-    available: false,
+    action: "/admin/payments",
+    available: true,
   },
   {
     label: "Settings",
@@ -159,9 +159,10 @@ const controlCards: ControlCard[] = [
   {
     title: "Payments",
     description:
-      "Manage payment methods, pending payments, paid payments and payment status.",
+      "Review affiliate withdrawal requests, approve or reject payments, and manage paid payment records.",
     icon: CreditCard,
-    status: "Coming next",
+    status: "Active",
+    action: "/admin/payments",
   },
 ];
 
