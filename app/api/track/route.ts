@@ -1,4 +1,3 @@
-
 import { createHmac, randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -113,9 +112,8 @@ function getVisitorHash(
   ua: string,
   secret: string
 ): string | null {
-  // The IP is used only to calculate a rotating,
-  // non-reversible visitor identifier.
-  // The raw IP is never saved to the database.
+  // Raw IP addresses are not stored.
+  // The hash changes daily.
   const ip =
     request.headers.get("x-vercel-forwarded-for") ||
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
@@ -160,8 +158,6 @@ function getSafeReferrer(
   if (!value) return null;
 
   try {
-    // Store only the origin and path, not query strings
-    // that might contain personal information.
     const url = new URL(value);
 
     if (!["http:", "https:"].includes(url.protocol)) {
@@ -202,13 +198,43 @@ function parseDestination(value: unknown): URL | null {
   }
 }
 
+function validClickIdParameter(value: unknown): string | null {
+  const parameter = clean(value);
+
+  if (
+    !/^[a-zA-Z][a-zA-Z0-9_]{0,49}$/.test(parameter)
+  ) {
+    return null;
+  }
+
+  // Avoid overwriting the affiliate identifier
+  // or the internal offer identifier.
+  if (
+    ["sub2", "offer_id"].includes(
+      parameter.toLowerCase()
+    )
+  ) {
+    return null;
+  }
+
+  return parameter;
+}
+
 function addTrackingParameters(
   destination: URL,
   clickId: string,
   affiliateId: string,
-  offerId?: string
+  offerId?: string,
+  clickIdParameter = "sub1"
 ): string {
-  destination.searchParams.set("sub1", clickId);
+  destination.searchParams.set(
+    clickIdParameter,
+    clickId
+  );
+
+  // Preserve the existing affiliate parameter.
+  // A network using sub2 for Click ID must be
+  // configured differently before activation.
   destination.searchParams.set("sub2", affiliateId);
 
   if (offerId) {
@@ -298,7 +324,10 @@ export async function GET(request: NextRequest) {
     }
 
     if (!affiliate) {
-      return errorResponse("Invalid affiliate ID.", 404);
+      return errorResponse(
+        "Invalid affiliate ID.",
+        404
+      );
     }
 
     const affiliateStatus = clean(
@@ -366,15 +395,17 @@ export async function GET(request: NextRequest) {
     let trackedOfferId: string | null = null;
     let smartlinkId: string | null = null;
 
+    // Default for existing offers and Smart Links.
+    let clickIdParameter = "sub1";
+
     if (offerId) {
-      // Preserve the existing fixed-payout offer flow.
       const {
         data: offer,
         error: offerError,
       } = await supabase
         .from("offers")
         .select(
-          "id, name, payout, tracking_url, status"
+          "id, name, payout, tracking_url, status, network_id"
         )
         .eq("id", offerId)
         .eq("status", "active")
@@ -407,10 +438,61 @@ export async function GET(request: NextRequest) {
         );
       }
 
+      // New multi-network tracking.
+      if (offer.network_id) {
+        const {
+          data: network,
+          error: networkError,
+        } = await supabase
+          .from("cpa_networks")
+          .select("status, click_id_parameter")
+          .eq("id", offer.network_id)
+          .maybeSingle();
+
+        if (networkError) {
+          console.error(
+            "CPA Network lookup:",
+            networkError
+          );
+
+          return errorResponse(
+            "Unable to validate CPA network.",
+            500
+          );
+        }
+
+        if (!network) {
+          return errorResponse(
+            "CPA network is unavailable.",
+            404
+          );
+        }
+
+        if (network.status !== "active") {
+          return errorResponse(
+            "CPA network is paused.",
+            403
+          );
+        }
+
+        const parameter = validClickIdParameter(
+          network.click_id_parameter
+        );
+
+        if (!parameter) {
+          return errorResponse(
+            "Invalid CPA network tracking parameter.",
+            500
+          );
+        }
+
+        clickIdParameter = parameter;
+      }
+
       payout = normalizePayout(offer.payout);
       trackedOfferId = String(offer.id);
     } else {
-      // Check for an affiliate's personal Smartlink.
+      // Personal Smart Link
       const {
         data: personalLink,
         error: personalError,
@@ -440,7 +522,6 @@ export async function GET(request: NextRequest) {
 
       if (!selectedLink) {
         if (smartlinkSlug === "default-smartlink") {
-          // Preserve the existing global Smartlink rotation.
           const {
             data: globalLinks,
             error: globalError,
@@ -481,8 +562,6 @@ export async function GET(request: NextRequest) {
 
             selectedLink = validLinks[randomIndex];
           } else {
-            // Legacy fallback only when no global
-            // Smartlink records exist.
             const {
               count,
               error: countError,
@@ -514,7 +593,6 @@ export async function GET(request: NextRequest) {
             }
           }
         } else {
-          // Explicit global Smartlink.
           const {
             data: globalLink,
             error: globalError,
@@ -574,7 +652,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Save traffic intelligence with the original click.
+    // Save the click before redirecting.
     const clickData: Record<string, unknown> = {
       click_id: clickId,
       affiliate_id: affiliateId,
@@ -597,9 +675,6 @@ export async function GET(request: NextRequest) {
       visitor_hash: visitorHash,
       is_suspicious: isSuspicious,
 
-      // ASN may be available on Vercel.
-      // ISP is left unknown unless a reliable
-      // provider supplies it.
       asn,
       isp: null,
 
@@ -627,12 +702,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Keep sub1 and sub2 unchanged for Datify Postback.
     const redirectUrl = addTrackingParameters(
       destination,
       clickId,
       affiliateId,
-      trackedOfferId || undefined
+      trackedOfferId || undefined,
+      clickIdParameter
     );
 
     return NextResponse.redirect(redirectUrl, {
