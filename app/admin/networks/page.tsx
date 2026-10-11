@@ -6,12 +6,17 @@ import {
   ArrowLeft,
   Building2,
   CheckCircle2,
+  Copy,
   Edit3,
+  Eye,
+  EyeOff,
   Globe,
+  KeyRound,
   Loader2,
   PauseCircle,
   Plus,
   RefreshCw,
+  RotateCcw,
   Save,
   ShieldCheck,
   X,
@@ -35,12 +40,26 @@ type NetworkForm = {
   status: "active" | "paused";
 };
 
+type SecretData = {
+  network_id: string;
+  network_name: string;
+  postback_secret: string;
+};
+
 const emptyForm: NetworkForm = {
   name: "",
   website_url: "",
   click_id_parameter: "sub1",
   status: "active",
 };
+
+const inputClass =
+  "w-full rounded-xl border border-slate-300 bg-white " +
+  "px-4 py-3 text-slate-900 outline-none " +
+  "focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
+
+const cardClass =
+  "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm";
 
 export default function NetworksPage() {
   const router = useRouter();
@@ -53,6 +72,15 @@ export default function NetworksPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<NetworkForm>(emptyForm);
+
+  const [secretData, setSecretData] = useState<SecretData | null>(
+    null
+  );
+  const [secretLoading, setSecretLoading] = useState(false);
+  const [showSecret, setShowSecret] = useState(false);
+  const [rotating, setRotating] = useState(false);
+  const [clickMacro, setClickMacro] = useState("{click_id}");
+  const [payoutMacro, setPayoutMacro] = useState("{payout}");
 
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -102,13 +130,58 @@ export default function NetworksPage() {
     return result;
   }
 
+  async function secretRequest(
+    networkId: string,
+    rotate = false
+  ): Promise<SecretData> {
+    const token = await getToken();
+
+    const endpoint =
+      "/api/admin/networks/secret" +
+      (rotate
+        ? ""
+        : `?network_id=${encodeURIComponent(networkId)}`);
+
+    const response = await fetch(endpoint, {
+      method: rotate ? "POST" : "GET",
+      cache: "no-store",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(rotate
+          ? { "Content-Type": "application/json" }
+          : {}),
+      },
+      ...(rotate
+        ? {
+            body: JSON.stringify({
+              network_id: networkId,
+              confirm: true,
+            }),
+          }
+        : {}),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok || !result.success) {
+      throw new Error(
+        result.message || "Unable to retrieve network secret."
+      );
+    }
+
+    return {
+      network_id: result.network_id,
+      network_name: result.network_name,
+      postback_secret: result.postback_secret,
+    };
+  }
+
   async function loadNetworks() {
     try {
       setLoading(true);
       setError("");
 
       const result = await apiRequest("GET");
-
       setNetworks(result.networks ?? []);
     } catch (err) {
       setError(
@@ -135,7 +208,6 @@ export default function NetworksPage() {
 
   function startEdit(network: Network) {
     setEditingId(network.id);
-
     setForm({
       name: network.name,
       website_url: network.website_url ?? "",
@@ -184,7 +256,6 @@ export default function NetworksPage() {
       );
 
       cancelForm();
-
       await loadNetworks();
 
       setMessage(
@@ -218,10 +289,7 @@ export default function NetworksPage() {
       });
 
       await loadNetworks();
-
-      setMessage(
-        `${network.name} is now ${nextStatus}.`
-      );
+      setMessage(`${network.name} is now ${nextStatus}.`);
     } catch (err) {
       setError(
         err instanceof Error
@@ -233,21 +301,103 @@ export default function NetworksPage() {
     }
   }
 
+  async function openPostback(network: Network) {
+    try {
+      setSecretLoading(true);
+      setError("");
+      setMessage("");
+      setSecretData(null);
+      setShowSecret(false);
+      setClickMacro("{click_id}");
+      setPayoutMacro("{payout}");
+
+      const data = await secretRequest(network.id);
+      setSecretData(data);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to open postback settings."
+      );
+    } finally {
+      setSecretLoading(false);
+    }
+  }
+
+  function closePostback() {
+    setSecretData(null);
+    setShowSecret(false);
+    setClickMacro("{click_id}");
+    setPayoutMacro("{payout}");
+  }
+
+  async function rotateSecret() {
+    if (!secretData) return;
+
+    const confirmed = window.confirm(
+      "Rotate this network's secret?\n\n" +
+        "The existing postback URL will stop working immediately. " +
+        "You must update the URL in the CPA network after rotation."
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setRotating(true);
+      setError("");
+      setMessage("");
+
+      const data = await secretRequest(
+        secretData.network_id,
+        true
+      );
+
+      setSecretData(data);
+      setShowSecret(false);
+      setMessage(
+        "Secret rotated. Update the postback URL in your CPA network."
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to rotate secret."
+      );
+    } finally {
+      setRotating(false);
+    }
+  }
+
+  function buildPostbackUrl() {
+    if (!secretData) return "";
+
+    const base = "https://upnetworkcpa.com/api/postback/network";
+
+    const params = [
+      `network_id=${encodeURIComponent(secretData.network_id)}`,
+      `token=${encodeURIComponent(secretData.postback_secret)}`,
+      `click_id=${clickMacro.trim() || "{click_id}"}`,
+      `payout=${payoutMacro.trim() || "{payout}"}`,
+    ];
+
+    return `${base}?${params.join("&")}`;
+  }
+
+  async function copyText(value: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setMessage(`${label} copied successfully.`);
+      setError("");
+    } catch {
+      setError("Copy failed. Please copy the value manually.");
+    }
+  }
+
   const activeCount = networks.filter(
     (network) => network.status === "active"
   ).length;
 
   const pausedCount = networks.length - activeCount;
-
-  const inputClass =
-    "w-full rounded-xl border border-slate-300 " +
-    "bg-white px-4 py-3 text-slate-900 " +
-    "outline-none focus:border-blue-500 " +
-    "focus:ring-2 focus:ring-blue-100";
-
-  const cardClass =
-    "rounded-2xl border border-slate-200 " +
-    "bg-white p-5 shadow-sm";
 
   return (
     <main className="min-h-screen bg-slate-100 p-4 text-slate-900 md:p-8">
@@ -269,7 +419,7 @@ export default function NetworksPage() {
             </h1>
 
             <p className="mt-2 text-sm text-slate-500">
-              Add and manage multiple advertiser networks.
+              Manage advertiser networks, tracking, and secure postbacks.
             </p>
           </div>
 
@@ -411,7 +561,7 @@ export default function NetworksPage() {
 
                   <p className="text-xs text-slate-500">
                     Examples: sub1, aff_sub, s1, click_id.
-                    Use the parameter required by your network.
+                    Do not use sub2 or offer_id.
                   </p>
                 </label>
 
@@ -465,9 +615,7 @@ export default function NetworksPage() {
 
         <section className={cardClass}>
           <div className="mb-5 flex items-center justify-between">
-            <h2 className="text-xl font-bold">
-              CPA Network List
-            </h2>
+            <h2 className="text-xl font-bold">CPA Network List</h2>
 
             <span className="text-sm text-slate-500">
               {networks.length} network(s)
@@ -573,13 +721,13 @@ export default function NetworksPage() {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <ShieldCheck
+                      <KeyRound
                         size={16}
                         className="text-green-600"
                       />
 
                       <span className="text-slate-600">
-                        Postback credential stored securely
+                        Individual Postback Secret
                       </span>
                     </div>
                   </div>
@@ -620,12 +768,232 @@ export default function NetworksPage() {
                         ? "Pause Network"
                         : "Activate Network"}
                     </button>
+
+                    <button
+                      type="button"
+                      disabled={secretLoading}
+                      onClick={() => void openPostback(network)}
+                      className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                      {secretLoading ? (
+                        <Loader2
+                          size={16}
+                          className="animate-spin"
+                        />
+                      ) : (
+                        <KeyRound size={16} />
+                      )}
+                      View Postback URL
+                    </button>
                   </div>
                 </article>
               ))}
             </div>
           )}
         </section>
+
+        {secretData && (
+          <section className={cardClass}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="flex items-center gap-2 text-xl font-bold">
+                  <ShieldCheck className="text-indigo-600" />
+                  Secure Postback Settings
+                </h2>
+
+                <p className="mt-2 text-sm text-slate-500">
+                  Network: {secretData.network_name}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closePostback}
+                aria-label="Close postback settings"
+                className="rounded-lg p-2 hover:bg-slate-100"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="mt-6 space-y-5">
+              <div>
+                <label className="mb-2 block text-sm font-semibold">
+                  Network ID
+                </label>
+
+                <div className="flex gap-2">
+                  <input
+                    readOnly
+                    value={secretData.network_id}
+                    className={inputClass}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void copyText(
+                        secretData.network_id,
+                        "Network ID"
+                      )
+                    }
+                    className="rounded-xl border border-slate-300 px-4 hover:bg-slate-50"
+                    aria-label="Copy Network ID"
+                  >
+                    <Copy size={18} />
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-semibold">
+                  Postback Secret
+                </label>
+
+                <div className="flex gap-2">
+                  <input
+                    readOnly
+                    type={showSecret ? "text" : "password"}
+                    value={secretData.postback_secret}
+                    className={inputClass}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => setShowSecret(!showSecret)}
+                    className="rounded-xl border border-slate-300 px-4 hover:bg-slate-50"
+                    aria-label={
+                      showSecret ? "Hide Secret" : "Show Secret"
+                    }
+                  >
+                    {showSecret ? (
+                      <EyeOff size={18} />
+                    ) : (
+                      <Eye size={18} />
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void copyText(
+                        secretData.postback_secret,
+                        "Secret"
+                      )
+                    }
+                    className="rounded-xl border border-slate-300 px-4 hover:bg-slate-50"
+                    aria-label="Copy Secret"
+                  >
+                    <Copy size={18} />
+                  </button>
+                </div>
+
+                <p className="mt-2 text-xs text-amber-700">
+                  Keep this secret private. Anyone with this
+                  credential may attempt to send postbacks.
+                </p>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold">
+                    Network Click ID Macro
+                  </span>
+
+                  <input
+                    value={clickMacro}
+                    onChange={(e) =>
+                      setClickMacro(e.target.value)
+                    }
+                    className={inputClass}
+                    placeholder="{click_id}"
+                  />
+                </label>
+
+                <label className="block space-y-2">
+                  <span className="text-sm font-semibold">
+                    Network Payout Macro
+                  </span>
+
+                  <input
+                    value={payoutMacro}
+                    onChange={(e) =>
+                      setPayoutMacro(e.target.value)
+                    }
+                    className={inputClass}
+                    placeholder="{payout}"
+                  />
+                </label>
+              </div>
+
+              <p className="text-sm text-slate-500">
+                Replace the sample macros with the exact
+                conversion macros supplied by your CPA network.
+                The payout macro is optional if the offer has
+                an advertiser payout configured.
+              </p>
+
+              <div>
+                <label className="mb-2 block text-sm font-semibold">
+                  Generated Postback URL
+                </label>
+
+                <textarea
+                  readOnly
+                  rows={4}
+                  value={buildPostbackUrl()}
+                  className={`${inputClass} break-all font-mono text-xs`}
+                />
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    void copyText(
+                      buildPostbackUrl(),
+                      "Postback URL"
+                    )
+                  }
+                  className="mt-3 flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700"
+                >
+                  <Copy size={18} />
+                  Copy Postback URL
+                </button>
+              </div>
+
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <h3 className="font-semibold text-amber-900">
+                  Rotate Postback Secret
+                </h3>
+
+                <p className="mt-2 text-sm text-amber-800">
+                  Rotating the secret immediately invalidates
+                  the old postback URL. Update the URL at your
+                  CPA network before sending new conversions.
+                </p>
+
+                <button
+                  type="button"
+                  disabled={rotating}
+                  onClick={() => void rotateSecret()}
+                  className="mt-4 flex items-center gap-2 rounded-xl bg-amber-600 px-5 py-3 font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+                >
+                  {rotating ? (
+                    <Loader2
+                      size={18}
+                      className="animate-spin"
+                    />
+                  ) : (
+                    <RotateCcw size={18} />
+                  )}
+
+                  {rotating
+                    ? "Rotating..."
+                    : "Rotate Secret"}
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
 
         <p className="text-center text-xs text-slate-500">
           UpNetwork CPA — Multi-Network Management
