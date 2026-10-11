@@ -3,21 +3,44 @@ import {
   NextResponse,
 } from "next/server";
 
-import {
-  createClient,
-} from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-type DatabaseRow = Record<string, unknown>;
+const DEFAULT_REFERRAL_RATE = 5;
+const PAGE_SIZE = 1000;
+
+type ReferralRow = {
+  id: string;
+  referrer_affiliate_id: string;
+  referred_user_id: string | null;
+  referred_affiliate_id: string;
+  status: string;
+  created_at: string;
+};
+
+type CommissionRow = {
+  id: string;
+  referrer_affiliate_id: string;
+  referred_affiliate_id: string;
+  click_id: string | null;
+  source_earnings: number | string | null;
+  commission_rate: number | string | null;
+  commission_amount: number | string | null;
+  status: string;
+  created_at: string;
+  paid_at: string | null;
+};
 
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !key) {
-    throw new Error("Supabase server configuration missing.");
+    throw new Error(
+      "Supabase server configuration is missing."
+    );
   }
 
   return createClient(url, key, {
@@ -28,28 +51,31 @@ function getAdminClient() {
   });
 }
 
-function text(value: unknown): string {
+function safeText(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function number(value: unknown): number {
-  const result = Number(value ?? 0);
-  return Number.isFinite(result) ? result : 0;
+function safeNumber(value: unknown): number {
+  const valueNumber = Number(value ?? 0);
+
+  return Number.isFinite(valueNumber)
+    ? valueNumber
+    : 0;
 }
 
-function currency(value: unknown): number {
-  return Math.round(number(value) * 100) / 100;
+function roundMoney(value: unknown): number {
+  return Math.round(safeNumber(value) * 100) / 100;
 }
 
-function respond(
-  error: string,
+function errorResponse(
+  message: string,
   status: number,
   code?: string
 ) {
   return NextResponse.json(
     {
       success: false,
-      error,
+      error: message,
       ...(code ? { code } : {}),
     },
     {
@@ -65,17 +91,24 @@ export async function GET(request: NextRequest) {
   try {
     const admin = getAdminClient();
 
-    const header =
+    // 1. Verify login token.
+    const authorization =
       request.headers.get("authorization") || "";
 
-    if (!header.startsWith("Bearer ")) {
-      return respond("Authentication required.", 401);
+    if (!authorization.startsWith("Bearer ")) {
+      return errorResponse(
+        "Authentication required.",
+        401
+      );
     }
 
-    const token = header.slice(7).trim();
+    const token = authorization.slice(7).trim();
 
     if (!token) {
-      return respond("Authentication token missing.", 401);
+      return errorResponse(
+        "Authentication token is missing.",
+        401
+      );
     }
 
     const {
@@ -84,7 +117,7 @@ export async function GET(request: NextRequest) {
     } = await admin.auth.getUser(token);
 
     if (authError || !authData.user) {
-      return respond(
+      return errorResponse(
         "Your login session has expired.",
         401
       );
@@ -92,7 +125,7 @@ export async function GET(request: NextRequest) {
 
     const user = authData.user;
 
-    // Use the CURRENT affiliate profile table.
+    // 2. Read the current profiles table.
     const {
       data: profile,
       error: profileError,
@@ -104,210 +137,283 @@ export async function GET(request: NextRequest) {
 
     if (profileError) {
       console.error(
-        "Referral profile error:",
+        "Referral profile query:",
         profileError.message
       );
 
-      return respond(
+      return errorResponse(
         "Unable to load affiliate profile.",
         500
       );
     }
 
     if (!profile) {
-      return respond(
+      return errorResponse(
         "Affiliate profile not found.",
-        404,
-        "AFFILIATE_PROFILE_NOT_FOUND"
+        404
       );
     }
 
-    const affiliateId = text(profile.affiliate_id);
+    const affiliateId = safeText(
+      profile.affiliate_id
+    );
 
     if (!affiliateId) {
-      return respond(
-        "Affiliate ID has not been assigned.",
-        400,
-        "AFFILIATE_ID_UNAVAILABLE"
+      return errorResponse(
+        "Affiliate ID is unavailable.",
+        400
       );
     }
 
-    const applicationStatus =
-      text(profile.application_status).toLowerCase();
+    const applicationStatus = safeText(
+      profile.application_status
+    ).toLowerCase();
 
     if (
       applicationStatus !== "approved" &&
       applicationStatus !== "active"
     ) {
-      return respond(
+      return errorResponse(
         "Approved affiliate account required.",
         403
       );
     }
 
-    // Existing referral commission rate.
-    const commissionRate = 5;
-
+    // 3. Build the referral link.
     const referralLink =
-      `https://upnetworkcpa.com/signup?ref=` +
+      "https://upnetworkcpa.com/signup?ref=" +
       encodeURIComponent(affiliateId);
 
-    // Read only referrals belonging to this affiliate.
-    const {
-      data: referralData,
-      error: referralError,
-    } = await admin
-      .from("referrals")
-      .select("*")
-      .eq("referrer_affiliate_id", affiliateId)
-      .order("created_at", {
-        ascending: false,
-      });
+    // 4. Load referral records.
+    const referralRows: ReferralRow[] = [];
 
-    if (referralError) {
-      console.error(
-        "Referral query error:",
-        referralError.message
-      );
+    let referralOffset = 0;
 
-      return respond(
-        "Unable to load referral records.",
-        500
-      );
-    }
+    while (true) {
+      const {
+        data,
+        error,
+      } = await admin
+        .from("referrals")
+        .select(
+          "id,referrer_affiliate_id,referred_user_id,referred_affiliate_id,status,created_at"
+        )
+        .eq("referrer_affiliate_id", affiliateId)
+        .order("created_at", {
+          ascending: false,
+        })
+        .order("id", {
+          ascending: false,
+        })
+        .range(
+          referralOffset,
+          referralOffset + PAGE_SIZE - 1
+        );
 
-    const referralRows =
-      (referralData ?? []) as DatabaseRow[];
+      if (error) {
+        console.error(
+          "Referral records query:",
+          error.message
+        );
 
-    // Load commission records for this affiliate.
-    const {
-      data: commissionData,
-      error: commissionError,
-    } = await admin
-      .from("referral_commissions")
-      .select("*")
-      .eq("affiliate_id", affiliateId)
-      .order("created_at", {
-        ascending: false,
-      });
-
-    if (commissionError) {
-      console.error(
-        "Referral commission error:",
-        commissionError.message
-      );
-
-      return respond(
-        "Unable to load referral commissions.",
-        500
-      );
-    }
-
-    const commissionRows =
-      (commissionData ?? []) as DatabaseRow[];
-
-    const commissionByReferral = new Map<
-      string,
-      number
-    >();
-
-    for (const row of commissionRows) {
-      const referralId = text(row.referral_id);
-
-      if (referralId) {
-        commissionByReferral.set(
-          referralId,
-          (commissionByReferral.get(referralId) || 0) +
-            currency(row.amount)
+        return errorResponse(
+          "Unable to load referral records.",
+          500
         );
       }
+
+      const page = (data ?? []) as ReferralRow[];
+
+      referralRows.push(...page);
+
+      if (page.length < PAGE_SIZE) break;
+
+      referralOffset += PAGE_SIZE;
     }
 
-    const referrals = referralRows.map((row) => {
-      const id = text(row.id);
-      const referredAffiliateId = text(
-        row.referred_affiliate_id
-      );
+    // 5. Load commissions using the actual
+    // database column names.
+    const commissionRows: CommissionRow[] = [];
 
-      return {
-        id,
-        affiliateId: referredAffiliateId,
-        name: referredAffiliateId || "Affiliate",
-        email: "",
-        status: text(row.status) || "pending",
-        joinedAt: row.created_at || null,
-        commission: currency(
-          commissionByReferral.get(id) || 0
-        ),
-      };
-    });
+    let commissionOffset = 0;
 
+    while (true) {
+      const {
+        data,
+        error,
+      } = await admin
+        .from("referral_commissions")
+        .select(
+          "id,referrer_affiliate_id,referred_affiliate_id,click_id,source_earnings,commission_rate,commission_amount,status,created_at,paid_at"
+        )
+        .eq(
+          "referrer_affiliate_id",
+          affiliateId
+        )
+        .order("created_at", {
+          ascending: false,
+        })
+        .order("id", {
+          ascending: false,
+        })
+        .range(
+          commissionOffset,
+          commissionOffset + PAGE_SIZE - 1
+        );
+
+      if (error) {
+        console.error(
+          "Referral commission query:",
+          error.message
+        );
+
+        return errorResponse(
+          "Unable to load referral commissions.",
+          500
+        );
+      }
+
+      const page = (data ?? []) as CommissionRow[];
+
+      commissionRows.push(...page);
+
+      if (page.length < PAGE_SIZE) break;
+
+      commissionOffset += PAGE_SIZE;
+    }
+
+    // 6. Calculate commission totals.
     let totalCommission = 0;
     let pendingCommission = 0;
     let paidCommission = 0;
 
-    const commissions = commissionRows.map((row) => {
-      const amount = currency(row.amount);
-      const status =
-        text(row.status).toLowerCase() || "pending";
+    const commissions = commissionRows.map(
+      (row) => {
+        const amount = roundMoney(
+          row.commission_amount
+        );
 
-      totalCommission += amount;
+        const status =
+          safeText(row.status).toLowerCase() ||
+          "pending";
 
-      if (status === "paid") {
-        paidCommission += amount;
-      } else {
-        pendingCommission += amount;
+        totalCommission += amount;
+
+        if (status === "paid") {
+          paidCommission += amount;
+        } else if (
+          status === "pending" ||
+          status === "approved"
+        ) {
+          pendingCommission += amount;
+        }
+
+        return {
+          id: row.id,
+          referralId: null,
+          referredAffiliateId:
+            row.referred_affiliate_id,
+          clickId: row.click_id,
+          sourceEarnings: roundMoney(
+            row.source_earnings
+          ),
+          commissionRate: safeNumber(
+            row.commission_rate ??
+              DEFAULT_REFERRAL_RATE
+          ),
+          commissionAmount: amount,
+          amount,
+          status,
+          createdAt: row.created_at,
+          paidAt: row.paid_at,
+        };
       }
+    );
 
-      return {
-        id: text(row.id),
-        referralId: text(row.referral_id),
-        referredAffiliateId:
-          text(row.referred_affiliate_id) ||
-          text(row.affiliate_id),
-        clickId: text(row.click_id) || null,
-        sourceEarnings: currency(
-          row.source_earnings
-        ),
-        commissionRate: number(
-          row.commission_rate ?? commissionRate
-        ),
-        commissionAmount: amount,
-        amount,
-        status,
-        createdAt: row.created_at || null,
-        paidAt: row.paid_at || null,
-      };
-    });
+    // 7. Calculate per-referred-affiliate
+    // commission amounts.
+    const commissionByAffiliate =
+      new Map<string, number>();
 
+    for (const row of commissionRows) {
+      const referredId = safeText(
+        row.referred_affiliate_id
+      );
+
+      if (!referredId) continue;
+
+      const previous =
+        commissionByAffiliate.get(referredId) || 0;
+
+      commissionByAffiliate.set(
+        referredId,
+        previous +
+          roundMoney(row.commission_amount)
+      );
+    }
+
+    // 8. Format referral records.
+    const referrals = referralRows.map(
+      (row) => {
+        const referredId = safeText(
+          row.referred_affiliate_id
+        );
+
+        return {
+          id: row.id,
+          affiliateId: referredId,
+          name: referredId || "Affiliate",
+          email: "",
+          status: row.status || "pending",
+          joinedAt: row.created_at,
+          commission: roundMoney(
+            commissionByAffiliate.get(
+              referredId
+            ) || 0
+          ),
+        };
+      }
+    );
+
+    // 9. Return data for the existing
+    // affiliate referrals page.
     return NextResponse.json(
       {
         success: true,
         affiliateId,
         referralLink,
-        commissionRate,
+        commissionRate:
+          DEFAULT_REFERRAL_RATE,
         commissionCurrency: "USD",
         totalReferrals: referrals.length,
         referrals,
-        totalCommission: currency(totalCommission),
-        pendingCommission: currency(pendingCommission),
-        paidCommission: currency(paidCommission),
+        totalCommission: roundMoney(
+          totalCommission
+        ),
+        pendingCommission: roundMoney(
+          pendingCommission
+        ),
+        paidCommission: roundMoney(
+          paidCommission
+        ),
         commissions,
       },
       {
+        status: 200,
         headers: {
           "Cache-Control":
             "no-store, no-cache, must-revalidate",
+          Pragma: "no-cache",
         },
       }
     );
   } catch (error) {
     console.error(
-      "Affiliate referrals API error:",
+      "Affiliate referrals API:",
       error
     );
 
-    return respond(
+    return errorResponse(
       "Could not load referral information.",
       500
     );
