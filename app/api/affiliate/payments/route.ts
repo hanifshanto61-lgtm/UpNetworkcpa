@@ -1,15 +1,22 @@
-import {
-  NextRequest,
-  NextResponse,
-} from "next/server";
-import {
-  createClient,
-} from "@supabase/supabase-js";
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const PAGE_SIZE = 1000;
+const MINIMUM_WITHDRAWAL = 50;
+const MAXIMUM_WITHDRAWAL = 1000000;
+
+const PAYMENT_METHODS = [
+  "Payoneer",
+  "Skrill",
+  "Binance Pay",
+  "USDT (TRC20)",
+  "USDT (ERC20)",
+  "Bitcoin (BTC)",
+  "Bank Wire Transfer",
+] as const;
 
 type ClickRow = {
   status: string | null;
@@ -38,43 +45,27 @@ const CONVERTED_STATUSES = new Set([
   "paid",
 ]);
 
-function responseError(
-  error: string,
-  status: number
-) {
+function responseError(error: string, status: number) {
   return NextResponse.json(
-    {
-      success: false,
-      error,
-    },
+    { success: false, error },
     {
       status,
-      headers: {
-        "Cache-Control": "no-store",
-      },
+      headers: { "Cache-Control": "no-store" },
     }
   );
 }
 
 function amount(value: unknown): number {
   const number = Number(value ?? 0);
-
-  return Number.isFinite(number)
-    ? number
-    : 0;
+  return Number.isFinite(number) ? number : 0;
 }
 
 function roundMoney(value: number): number {
-  return Math.round(
-    (value + Number.EPSILON) * 100
-  ) / 100;
+  return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
 function isConverted(row: ClickRow): boolean {
-  const status = String(
-    row.status || ""
-  ).trim().toLowerCase();
-
+  const status = String(row.status || "").trim().toLowerCase();
   return (
     CONVERTED_STATUSES.has(status) ||
     Boolean(row.converted_at)
@@ -82,16 +73,11 @@ function isConverted(row: ClickRow): boolean {
 }
 
 function createAdminClient() {
-  const url =
-    process.env.NEXT_PUBLIC_SUPABASE_URL;
-
-  const key =
-    process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !key) {
-    throw new Error(
-      "Supabase server configuration is missing."
-    );
+    throw new Error("Supabase server configuration is missing.");
   }
 
   return createClient(url, key, {
@@ -102,28 +88,15 @@ function createAdminClient() {
   });
 }
 
-function getBearerToken(
-  request: NextRequest
-): string | null {
-  const authorization =
-    request.headers.get("authorization");
-
-  if (!authorization) {
-    return null;
-  }
-
-  const match = authorization.match(
-    /^Bearer\s+(.+)$/i
-  );
-
+function getBearerToken(request: NextRequest): string | null {
+  const authorization = request.headers.get("authorization");
+  const match = authorization?.match(/^Bearer\s+(.+)$/i);
   return match?.[1]?.trim() || null;
 }
 
 async function authenticate(
   request: NextRequest,
-  supabase: ReturnType<
-    typeof createAdminClient
-  >
+  supabase: ReturnType<typeof createAdminClient>
 ) {
   const token = getBearerToken(request);
 
@@ -135,10 +108,8 @@ async function authenticate(
     };
   }
 
-  const {
-    data: authData,
-    error: authError,
-  } = await supabase.auth.getUser(token);
+  const { data: authData, error: authError } =
+    await supabase.auth.getUser(token);
 
   const user = authData?.user;
 
@@ -150,14 +121,9 @@ async function authenticate(
     };
   }
 
-  const {
-    data: profile,
-    error: profileError,
-  } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select(
-      "id, affiliate_id, application_status"
-    )
+    .select("id, affiliate_id, application_status")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -184,9 +150,7 @@ async function authenticate(
     };
   }
 
-  const affiliateId = String(
-    profile.affiliate_id || ""
-  ).trim();
+  const affiliateId = String(profile.affiliate_id || "").trim();
 
   if (!affiliateId) {
     return {
@@ -204,46 +168,29 @@ async function authenticate(
 }
 
 async function readAllClicks(
-  supabase: ReturnType<
-    typeof createAdminClient
-  >,
+  supabase: ReturnType<typeof createAdminClient>,
   affiliateId: string
 ): Promise<ClickRow[]> {
   const rows: ClickRow[] = [];
   let offset = 0;
 
   while (true) {
-    const {
-      data,
-      error,
-    } = await supabase
+    const { data, error } = await supabase
       .from("clicks")
-      .select(
-        "status, payout, converted_at"
-      )
+      .select("status, payout, converted_at")
       .eq("affiliate_id", affiliateId)
-      .order("created_at", {
-        ascending: false,
-      })
-      .order("click_id", {
-        ascending: false,
-      })
-      .range(
-        offset,
-        offset + PAGE_SIZE - 1
-      );
+      .order("created_at", { ascending: false })
+      .order("click_id", { ascending: false })
+      .range(offset, offset + PAGE_SIZE - 1);
 
     if (error) {
-      throw new Error(
-        "Unable to load affiliate earnings."
-      );
+      throw new Error("Unable to load affiliate earnings.");
     }
 
     const page = (data || []) as ClickRow[];
     rows.push(...page);
 
     if (page.length < PAGE_SIZE) break;
-
     offset += PAGE_SIZE;
   }
 
@@ -251,62 +198,41 @@ async function readAllClicks(
 }
 
 async function readAllPayments(
-  supabase: ReturnType<
-    typeof createAdminClient
-  >,
+  supabase: ReturnType<typeof createAdminClient>,
   affiliateId: string
 ): Promise<PaymentRow[]> {
   const rows: PaymentRow[] = [];
   let offset = 0;
 
   while (true) {
-    const {
-      data,
-      error,
-    } = await supabase
+    const { data, error } = await supabase
       .from("payment_requests")
       .select(
         "id, affiliate_id, amount, currency, payment_method, payment_address, status, admin_note, requested_at, processed_at, created_at"
       )
       .eq("affiliate_id", affiliateId)
-      .order("created_at", {
-        ascending: false,
-      })
-      .order("id", {
-        ascending: false,
-      })
-      .range(
-        offset,
-        offset + PAGE_SIZE - 1
-      );
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(offset, offset + PAGE_SIZE - 1);
 
     if (error) {
-      throw new Error(
-        "Unable to load payment history."
-      );
+      throw new Error("Unable to load payment history.");
     }
 
     const page = (data || []) as PaymentRow[];
     rows.push(...page);
 
     if (page.length < PAGE_SIZE) break;
-
     offset += PAGE_SIZE;
   }
 
   return rows;
 }
 
-export async function GET(
-  request: NextRequest
-) {
+export async function GET(request: NextRequest) {
   try {
     const supabase = createAdminClient();
-
-    const auth = await authenticate(
-      request,
-      supabase
-    );
+    const auth = await authenticate(request, supabase);
 
     if (!auth.affiliateId) {
       return responseError(
@@ -317,17 +243,10 @@ export async function GET(
 
     const affiliateId = auth.affiliateId;
 
-    const [clicks, payments] =
-      await Promise.all([
-        readAllClicks(
-          supabase,
-          affiliateId
-        ),
-        readAllPayments(
-          supabase,
-          affiliateId
-        ),
-      ]);
+    const [clicks, payments] = await Promise.all([
+      readAllClicks(supabase, affiliateId),
+      readAllPayments(supabase, affiliateId),
+    ]);
 
     let totalEarnings = 0;
     let conversions = 0;
@@ -335,9 +254,7 @@ export async function GET(
     for (const click of clicks) {
       if (isConverted(click)) {
         conversions++;
-        totalEarnings += amount(
-          click.payout
-        );
+        totalEarnings += amount(click.payout);
       }
     }
 
@@ -347,13 +264,9 @@ export async function GET(
     let rejectedAmount = 0;
 
     for (const payment of payments) {
-      const value = amount(
-        payment.amount
-      );
+      const value = amount(payment.amount);
 
-      switch (
-        String(payment.status).toLowerCase()
-      ) {
+      switch (String(payment.status).toLowerCase()) {
         case "pending":
           pendingAmount += value;
           break;
@@ -370,15 +283,11 @@ export async function GET(
     }
 
     const reservedAmount =
-      pendingAmount +
-      approvedAmount +
-      paidAmount;
+      pendingAmount + approvedAmount + paidAmount;
 
     const availableBalance = Math.max(
       0,
-      roundMoney(
-        totalEarnings - reservedAmount
-      )
+      roundMoney(totalEarnings - reservedAmount)
     );
 
     return NextResponse.json(
@@ -386,87 +295,49 @@ export async function GET(
         success: true,
         affiliateId,
         currency: "USD",
-
         stats: {
-          totalEarnings: roundMoney(
-            totalEarnings
-          ),
+          totalEarnings: roundMoney(totalEarnings),
           conversions,
-          pendingAmount: roundMoney(
-            pendingAmount
-          ),
-          approvedAmount: roundMoney(
-            approvedAmount
-          ),
-          paidAmount: roundMoney(
-            paidAmount
-          ),
-          rejectedAmount: roundMoney(
-            rejectedAmount
-          ),
-          reservedAmount: roundMoney(
-            reservedAmount
-          ),
+          pendingAmount: roundMoney(pendingAmount),
+          approvedAmount: roundMoney(approvedAmount),
+          paidAmount: roundMoney(paidAmount),
+          rejectedAmount: roundMoney(rejectedAmount),
+          reservedAmount: roundMoney(reservedAmount),
           availableBalance,
           totalRequests: payments.length,
         },
-
-        payments: payments.map(
-          (payment) => ({
-            id: payment.id,
-            amount: amount(
-              payment.amount
-            ),
-            currency:
-              payment.currency,
-            paymentMethod:
-              payment.payment_method,
-            paymentAddress:
-              payment.payment_address,
-            status: payment.status,
-            adminNote:
-              payment.admin_note,
-            requestedAt:
-              payment.requested_at,
-            processedAt:
-              payment.processed_at,
-          })
-        ),
-
+        payments: payments.map((payment) => ({
+          id: payment.id,
+          amount: amount(payment.amount),
+          currency: payment.currency,
+          paymentMethod: payment.payment_method,
+          paymentAddress: payment.payment_address,
+          status: payment.status,
+          adminNote: payment.admin_note,
+          requestedAt: payment.requested_at,
+          processedAt: payment.processed_at,
+        })),
         withdrawalEnabled: true,
-        minimumWithdrawal: 10,
+        minimumWithdrawal: MINIMUM_WITHDRAWAL,
+        paymentMethods: PAYMENT_METHODS,
       },
       {
         status: 200,
         headers: {
-          "Cache-Control":
-            "no-store, no-cache, must-revalidate",
+          "Cache-Control": "no-store, no-cache, must-revalidate",
         },
       }
     );
   } catch (error) {
-    console.error(
-      "Affiliate payments GET error:",
-      error
-    );
-
-    return responseError(
-      "Unable to load affiliate payments.",
-      500
-    );
+    console.error("Affiliate payments GET error:", error);
+    return responseError("Unable to load affiliate payments.", 500);
   }
 }
 
-export async function POST(
-  request: NextRequest
-) {
+export async function POST(request: NextRequest) {
   try {
     const adminClient = createAdminClient();
-
-    const auth = await authenticate(
-      request,
-      adminClient
-    );
+    const auth = await authenticate(request, adminClient);
 
     if (!auth.affiliateId) {
       return responseError(
@@ -478,72 +349,52 @@ export async function POST(
     const token = getBearerToken(request);
 
     if (!token) {
-      return responseError(
-        "Authentication required.",
-        401
-      );
+      return responseError("Authentication required.", 401);
     }
 
     let body: Record<string, unknown>;
 
     try {
-      const parsed: unknown =
-        await request.json();
+      const parsed: unknown = await request.json();
 
       if (
         !parsed ||
         typeof parsed !== "object" ||
         Array.isArray(parsed)
       ) {
-        return responseError(
-          "Invalid request body.",
-          400
-        );
+        return responseError("Invalid request body.", 400);
       }
 
-      body = parsed as Record<
-        string,
-        unknown
-      >;
+      body = parsed as Record<string, unknown>;
     } catch {
-      return responseError(
-        "Invalid JSON request.",
-        400
-      );
+      return responseError("Invalid JSON request.", 400);
     }
 
-    const requestedAmount =
-      body.amount;
-
-    const paymentMethod =
-      body.paymentMethod;
-
-    const paymentAddress =
-      body.paymentAddress;
+    const requestedAmount = body.amount;
+    const paymentMethod = body.paymentMethod;
+    const paymentAddress = body.paymentAddress;
 
     if (
       typeof requestedAmount !== "number" ||
       !Number.isFinite(requestedAmount) ||
-      requestedAmount < 10 ||
-      requestedAmount > 1000000 ||
-      Math.round(requestedAmount * 100) /
-        100 !== requestedAmount
+      requestedAmount < MINIMUM_WITHDRAWAL ||
+      requestedAmount > MAXIMUM_WITHDRAWAL ||
+      Math.round(requestedAmount * 100) / 100 !==
+        requestedAmount
     ) {
       return responseError(
-        "Amount must be between $10 and $1,000,000 with at most 2 decimal places.",
+        "Amount must be between $50 and $1,000,000 USD with at most 2 decimal places.",
         400
       );
     }
 
     if (
       typeof paymentMethod !== "string" ||
-      paymentMethod.trim().length < 2 ||
-      paymentMethod.trim().length > 100
+      !PAYMENT_METHODS.some(
+        (method) => method === paymentMethod.trim()
+      )
     ) {
-      return responseError(
-        "Enter a valid payment method.",
-        400
-      );
+      return responseError("Unsupported payment method.", 400);
     }
 
     if (
@@ -551,15 +402,11 @@ export async function POST(
       paymentAddress.trim().length < 3 ||
       paymentAddress.trim().length > 500
     ) {
-      return responseError(
-        "Enter a valid payment address.",
-        400
-      );
+      return responseError("Enter a valid payment address.", 400);
     }
 
     const supabaseUrl =
       process.env.NEXT_PUBLIC_SUPABASE_URL;
-
     const anonKey =
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -570,9 +417,6 @@ export async function POST(
       );
     }
 
-    // Use the affiliate's verified JWT for RPC.
-    // Never use service-role identity for
-    // request_affiliate_withdrawal().
     const affiliateClient = createClient(
       supabaseUrl,
       anonKey,
@@ -589,30 +433,20 @@ export async function POST(
       }
     );
 
-    const {
-      data: requestId,
-      error: rpcError,
-    } = await affiliateClient.rpc(
-      "request_affiliate_withdrawal",
-      {
-        p_amount: requestedAmount,
-        p_payment_method:
-          paymentMethod.trim(),
-        p_payment_address:
-          paymentAddress.trim(),
-      }
-    );
-
-    if (rpcError) {
-      const message = String(
-        rpcError.message || ""
+    const { data: requestId, error: rpcError } =
+      await affiliateClient.rpc(
+        "request_affiliate_withdrawal",
+        {
+          p_amount: requestedAmount,
+          p_payment_method: paymentMethod.trim(),
+          p_payment_address: paymentAddress.trim(),
+        }
       );
 
-      if (
-        message.includes(
-          "Insufficient available balance"
-        )
-      ) {
+    if (rpcError) {
+      const message = String(rpcError.message || "");
+
+      if (message.includes("Insufficient available balance")) {
         return responseError(
           "Insufficient available balance.",
           400
@@ -620,9 +454,15 @@ export async function POST(
       }
 
       if (
-        message.includes(
-          "Approved affiliate account required"
-        )
+        message.includes("Minimum withdrawal") ||
+        message.includes("Unsupported payment method") ||
+        message.includes("Invalid payment address")
+      ) {
+        return responseError(message, 400);
+      }
+
+      if (
+        message.includes("Approved affiliate account required")
       ) {
         return responseError(
           "Affiliate account is not approved.",
@@ -630,15 +470,8 @@ export async function POST(
         );
       }
 
-      if (
-        message.includes(
-          "Authentication required"
-        )
-      ) {
-        return responseError(
-          "Authentication required.",
-          401
-        );
+      if (message.includes("Authentication required")) {
+        return responseError("Authentication required.", 401);
       }
 
       console.error(
@@ -653,10 +486,7 @@ export async function POST(
       );
     }
 
-    if (
-      typeof requestId !== "string" ||
-      !requestId
-    ) {
+    if (typeof requestId !== "string" || !requestId) {
       return responseError(
         "Withdrawal request was not confirmed.",
         500
@@ -673,17 +503,11 @@ export async function POST(
       },
       {
         status: 201,
-        headers: {
-          "Cache-Control": "no-store",
-        },
+        headers: { "Cache-Control": "no-store" },
       }
     );
   } catch (error) {
-    console.error(
-      "Affiliate withdrawal POST error:",
-      error
-    );
-
+    console.error("Affiliate withdrawal POST error:", error);
     return responseError(
       "Unable to submit withdrawal request.",
       500
