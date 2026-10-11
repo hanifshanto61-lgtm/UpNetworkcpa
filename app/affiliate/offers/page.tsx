@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 
 type Offer = {
   id: string;
@@ -38,10 +39,12 @@ export default function AffiliateOffersPage() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
 
-  async function loadOffers() {
+  async function loadOffers(showLoading = true) {
     try {
-      setLoading(true);
-      setError("");
+      if (showLoading) {
+        setLoading(true);
+        setError("");
+      }
 
       if (!supabase) {
         throw new Error("Supabase client is not configured.");
@@ -138,19 +141,29 @@ export default function AffiliateOffersPage() {
 
       setOffers(activeOffers);
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to load offers."
-      );
+      if (showLoading) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to load offers."
+        );
+      } else {
+        console.error("Offers auto refresh failed:", err);
+      }
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
   }
 
   useEffect(() => {
     void loadOffers();
   }, []);
+
+  // Automatically refresh offers every 15 seconds.
+  // Refreshing does not reload the entire page.
+  useAutoRefresh(() => loadOffers(false), 15000);
 
   const categories = useMemo(() => {
     const values = offers
