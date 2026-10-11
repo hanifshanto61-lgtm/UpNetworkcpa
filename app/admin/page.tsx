@@ -71,10 +71,10 @@ const menuItems: MenuItem[] = [
   available: true,
   },
   {
-    label: "Statistics",
-    icon: Activity,
-    action: "statistics",
-    available: false,
+  label: "Statistics",
+  icon: Activity,
+  action: "/admin/statistics",
+  available: true,
   },
   {
     label: "Earnings",
@@ -136,11 +136,12 @@ const controlCards: ControlCard[] = [
   action: "/admin/smart-links",
   },
   {
-    title: "Statistics",
-    description:
-      "Control clicks, conversions, conversion rate, revenue and payout reporting.",
-    icon: BarChart3,
-    status: "Coming next",
+  title: "Statistics",
+  description:
+    "View clicks, conversions, conversion rate and affiliate earnings reports.",
+  icon: BarChart3,
+  status: "Active",
+  action: "/admin/statistics", 
   },
   {
     title: "Earnings",
