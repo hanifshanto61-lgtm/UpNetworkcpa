@@ -79,8 +79,8 @@ const menuItems: MenuItem[] = [
   {
     label: "Earnings",
     icon: DollarSign,
-    action: "earnings",
-    available: false,
+    action: "/admin/earnings",
+    available: true,
   },
   {
     label: "Referrals",
@@ -144,11 +144,12 @@ const controlCards: ControlCard[] = [
   action: "/admin/statistics", 
   },
   {
-    title: "Earnings",
-    description:
-      "Review affiliate earnings and manage earning-related information.",
-    icon: Wallet,
-    status: "Coming next",
+  title: "Earnings",
+  description:
+    "Review affiliate conversion earnings, paid payments and calculated balances.",
+  icon: Wallet,
+  status: "Active",
+  action: "/admin/earnings",
   },
   {
     title: "Referral System",
