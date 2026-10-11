@@ -29,7 +29,7 @@ type SummaryStats = {
 
 const RECENT_CLICKS_LIMIT = 20;
 const PAGE_SIZE = 1000;
-const TIME_ZONE = "Asia/Dhaka";
+const FALLBACK_TIMEZONE = "UTC";
 
 const CONVERSION_STATUSES = [
   "converted",
@@ -75,7 +75,32 @@ function makeAffiliateId(userId: string): string {
   );
 }
 
-function getDhakaDate(value: string | Date): string {
+function validTimezone(value: unknown): string | null {
+  if (
+    typeof value !== "string" ||
+    !value.trim() ||
+    value.length > 100
+  ) {
+    return null;
+  }
+
+  const timezone = value.trim();
+
+  try {
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+    });
+
+    return timezone;
+  } catch {
+    return null;
+  }
+}
+
+function dateInTimezone(
+  value: string | Date,
+  timezone: string
+): string {
   const date =
     value instanceof Date ? value : new Date(value);
 
@@ -84,7 +109,7 @@ function getDhakaDate(value: string | Date): string {
   }
 
   const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: TIME_ZONE,
+    timeZone: timezone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -118,7 +143,8 @@ function finalizeSummary(
   summary: SummaryStats
 ): SummaryStats {
   return {
-    ...summary,
+    totalClicks: summary.totalClicks,
+    conversions: summary.conversions,
     earnings: Number(summary.earnings.toFixed(2)),
     conversionRate:
       summary.totalClicks > 0
@@ -253,7 +279,7 @@ export async function GET(request: NextRequest) {
       user.user_metadata?.application_status
     );
 
-    // Preserve existing approved-profile recovery.
+    // Preserve approved-profile recovery.
     if (!profile) {
       if (metadataStatus !== "approved") {
         return NextResponse.json(
@@ -387,6 +413,74 @@ export async function GET(request: NextRequest) {
       user.email?.split("@")[0] ||
       "Affiliate";
 
+    // A saved timezone always takes priority.
+    let timezone = validTimezone(profile.timezone);
+
+    if (!timezone) {
+      const browserTimezone = validTimezone(
+        request.headers.get("x-affiliate-timezone")
+      );
+
+      // Only save when the profile has no timezone.
+      // This prevents a later login from another
+      // country from overwriting the original value.
+      if (
+        browserTimezone &&
+        !String(profile.timezone ?? "").trim()
+      ) {
+        const {
+          data: savedProfile,
+          error: timezoneError,
+        } = await supabaseAdmin
+          .from("profiles")
+          .update({
+            timezone: browserTimezone,
+          })
+          .eq("id", user.id)
+          .is("timezone", null)
+          .select("timezone")
+          .maybeSingle();
+
+        if (timezoneError) {
+          console.error(
+            "Affiliate timezone save error:",
+            timezoneError
+          );
+        }
+
+        if (savedProfile?.timezone) {
+          timezone = validTimezone(
+            savedProfile.timezone
+          );
+        }
+
+        // If another request saved the timezone
+        // first, read the already-saved value.
+        if (!timezone) {
+          const { data: currentProfile } =
+            await supabaseAdmin
+              .from("profiles")
+              .select("timezone")
+              .eq("id", user.id)
+              .maybeSingle();
+
+          timezone = validTimezone(
+            currentProfile?.timezone
+          );
+        }
+      }
+    }
+
+    // UTC is a temporary reporting fallback,
+    // not a replacement for a saved timezone.
+    const reportingTimezone =
+      timezone || FALLBACK_TIMEZONE;
+
+    const currentDate = dateInTimezone(
+      new Date(),
+      reportingTimezone
+    );
+
     // Exact all-time click count.
     const {
       count: databaseClickCount,
@@ -465,8 +559,6 @@ export async function GET(request: NextRequest) {
       offset += PAGE_SIZE;
     }
 
-    const currentDate = getDhakaDate(new Date());
-
     const todayStats = emptySummary();
     const allTimeStats = emptySummary();
 
@@ -474,7 +566,10 @@ export async function GET(request: NextRequest) {
 
     for (const click of allClicks) {
       const clickDate = click.created_at
-        ? getDhakaDate(click.created_at)
+        ? dateInTimezone(
+            click.created_at,
+            reportingTimezone
+          )
         : "";
 
       if (clickDate === currentDate) {
@@ -482,15 +577,20 @@ export async function GET(request: NextRequest) {
       }
 
       if (isConverted(click)) {
-        const payout = getNumericPayout(click.payout);
+        const payout = getNumericPayout(
+          click.payout
+        );
 
         allTimeStats.conversions += 1;
         allTimeStats.earnings += payout;
 
-        // Prefer actual conversion time.
-        // Fall back to click time for legacy rows.
+        // Use the conversion date, not the
+        // original click date, when available.
         const conversionDate = click.converted_at
-          ? getDhakaDate(click.converted_at)
+          ? dateInTimezone(
+              click.converted_at,
+              reportingTimezone
+            )
           : clickDate;
 
         if (conversionDate === currentDate) {
@@ -500,8 +600,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const todaySummary = finalizeSummary(todayStats);
-    const allTimeSummary = finalizeSummary(allTimeStats);
+    const todaySummary =
+      finalizeSummary(todayStats);
+
+    const allTimeSummary =
+      finalizeSummary(allTimeStats);
 
     if (allClicks.length !== databaseClickCount) {
       console.warn(
@@ -531,6 +634,7 @@ export async function GET(request: NextRequest) {
             "approved",
           referralCode: affiliateId,
           referralRate: 5,
+          timezone,
         },
 
         clicks: allClicks.slice(
@@ -538,29 +642,34 @@ export async function GET(request: NextRequest) {
           RECENT_CLICKS_LIMIT
         ),
 
-        // Keep old dashboard fields working.
+        // Backward compatibility with
+        // the current affiliate dashboard.
         stats: allTimeSummary,
 
-        // New separate daily and lifetime reports.
+        // New daily and all-time statistics.
         todayStats: todaySummary,
         allTimeStats: allTimeSummary,
 
         daily: {
           date: currentDate,
-          timezone: TIME_ZONE,
+          timezone: reportingTimezone,
+          timezoneSaved: Boolean(timezone),
           stats: todaySummary,
         },
 
         meta: {
           profileFound: true,
           profileLookup: "profiles.id",
-          recentClicksLimit: RECENT_CLICKS_LIMIT,
+          recentClicksLimit:
+            RECENT_CLICKS_LIMIT,
           applicationStatus,
-          clickCountSource: "database-exact-count",
+          clickCountSource:
+            "database-exact-count",
           databaseClickCount,
-          fetchedClickRows: allClicks.length,
+          fetchedClickRows:
+            allClicks.length,
           reportingDate: currentDate,
-          reportingTimezone: TIME_ZONE,
+          reportingTimezone,
         },
       },
       {
