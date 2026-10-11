@@ -4,13 +4,11 @@ import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const revalidate = 0;
 
 const ADMIN_EMAIL = "islamhanif122@gmail.com";
 
-function reply(
-  message: string,
-  status: number
-) {
+function reply(message: string, status: number) {
   return NextResponse.json(
     {
       success: false,
@@ -19,7 +17,7 @@ function reply(
     {
       status,
       headers: {
-        "Cache-Control": "no-store",
+        "Cache-Control": "private, no-store, no-cache, max-age=0",
       },
     }
   );
@@ -51,7 +49,9 @@ async function authorize(request: NextRequest) {
 
   const token = header.slice(7).trim();
 
-  if (!token) return null;
+  if (!token) {
+    return null;
+  }
 
   const client = getClient();
 
@@ -61,7 +61,8 @@ async function authorize(request: NextRequest) {
   if (
     error ||
     !data.user ||
-    data.user.email?.toLowerCase() !== ADMIN_EMAIL
+    data.user.email?.toLowerCase() !==
+      ADMIN_EMAIL.toLowerCase()
   ) {
     return null;
   }
@@ -69,13 +70,15 @@ async function authorize(request: NextRequest) {
   return client;
 }
 
+// FIXED: Correct UUID validation.
+// UUID format: 8-4-4-4-12
 function validUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
     value
   );
 }
 
-// Admin-only: retrieve the existing network secret.
+// GET: Admin-only network secret retrieval.
 export async function GET(request: NextRequest) {
   try {
     const client = await authorize(request);
@@ -100,7 +103,15 @@ export async function GET(request: NextRequest) {
       .maybeSingle();
 
     if (error) {
-      return reply("Unable to load network secret", 500);
+      console.error(
+        "Network secret lookup error:",
+        error.message
+      );
+
+      return reply(
+        "Unable to load network secret",
+        500
+      );
     }
 
     if (!data) {
@@ -115,19 +126,26 @@ export async function GET(request: NextRequest) {
         postback_secret: data.postback_secret,
       },
       {
+        status: 200,
         headers: {
-          "Cache-Control": "no-store",
-          "Pragma": "no-cache",
+          "Cache-Control":
+            "private, no-store, no-cache, max-age=0",
+          Pragma: "no-cache",
           "X-Content-Type-Options": "nosniff",
         },
       }
     );
-  } catch {
+  } catch (error) {
+    console.error(
+      "Network secret GET error:",
+      error
+    );
+
     return reply("Internal server error", 500);
   }
 }
 
-// Admin-only: rotate a network secret.
+// POST: Admin-only network secret rotation.
 export async function POST(request: NextRequest) {
   try {
     const client = await authorize(request);
@@ -139,22 +157,21 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     const networkId = String(
-      body.network_id || ""
+      body?.network_id || ""
     ).trim();
 
     if (!validUuid(networkId)) {
       return reply("Invalid network ID", 400);
     }
 
-    if (body.confirm !== true) {
+    if (body?.confirm !== true) {
       return reply(
         "Secret rotation requires confirmation",
         400
       );
     }
 
-    const newSecret =
-      randomBytes(32).toString("hex");
+    const newSecret = randomBytes(32).toString("hex");
 
     const { data, error } = await client
       .from("cpa_networks")
@@ -167,7 +184,15 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     if (error) {
-      return reply("Unable to rotate network secret", 500);
+      console.error(
+        "Network secret rotation error:",
+        error.message
+      );
+
+      return reply(
+        "Unable to rotate network secret",
+        500
+      );
     }
 
     if (!data) {
@@ -177,20 +202,28 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: true,
-        message: "Network secret rotated successfully",
+        message:
+          "Network secret rotated successfully",
         network_id: data.id,
         network_name: data.name,
         postback_secret: data.postback_secret,
       },
       {
+        status: 200,
         headers: {
-          "Cache-Control": "no-store",
-          "Pragma": "no-cache",
+          "Cache-Control":
+            "private, no-store, no-cache, max-age=0",
+          Pragma: "no-cache",
           "X-Content-Type-Options": "nosniff",
         },
       }
     );
-  } catch {
+  } catch (error) {
+    console.error(
+      "Network secret POST error:",
+      error
+    );
+
     return reply("Internal server error", 500);
   }
 }
