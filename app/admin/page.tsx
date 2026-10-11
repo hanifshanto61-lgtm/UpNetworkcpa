@@ -58,6 +58,12 @@ const menuItems: MenuItem[] = [
   available: true,
   },
   {
+  label: "Manage Conversions",
+  icon: CheckCircle2,
+  action: "/admin/conversions",
+  available: true,
+  },
+  {
     label: "Statistics",
     icon: Activity,
     action: "statistics",
