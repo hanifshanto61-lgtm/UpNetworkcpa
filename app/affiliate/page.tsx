@@ -493,8 +493,8 @@ export default function AffiliatePage() {
   );
 
   const pageBg = dark
-    ? "bg-[#05070c] text-white"
-    : "bg-slate-50 text-slate-900";
+  ? "bg-transparent text-white"
+  : "bg-transparent text-slate-900";
 
   const panelBg = dark
     ? "bg-[#090d17]"
@@ -545,13 +545,8 @@ export default function AffiliatePage() {
         className="pointer-events-none fixed inset-0 z-0"
         aria-hidden="true"
       >
-        <div
-          className={`absolute inset-0 ${
-            dark
-              ? "bg-[#05070c]"
-              : "bg-slate-50"
-          }`}
-        />
+        
+       <div className="absolute inset-0 bg-transparent" />
 
         <div
           className="absolute left-1/2 top-1/2 h-[520px] w-[520px] -translate-x-1/2 -translate-y-1/2 bg-contain bg-center bg-no-repeat sm:h-[700px] sm:w-[700px]"
