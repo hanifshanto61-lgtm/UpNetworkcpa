@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 
 type ClickRow = {
   click_id?: string | null;
@@ -334,9 +335,11 @@ export default function AffiliateStatisticsPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [tab, setTab] = useState("geography");
 
-  async function load(from: string, to: string) {
-    setLoading(true);
-    setError("");
+  async function load(from: string, to: string, showLoading = true) {
+    if (showLoading) {
+      setLoading(true);
+      setError("");
+    }
 
     try {
       const {
@@ -370,19 +373,32 @@ export default function AffiliateStatisticsPage() {
 
       setData(json);
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to load statistics."
-      );
+      if (showLoading) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to load statistics."
+        );
+      } else {
+        console.error("Statistics auto refresh failed:", err);
+      }
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
   }
 
   useEffect(() => {
     void load(monthStart(), today());
   }, []);
+
+  // Refresh the selected report every 15 seconds.
+  // Keep existing UI and filters unchanged.
+  useAutoRefresh(
+    () => load(appliedFrom, appliedTo, false),
+    15000
+  );
 
   const stats: Stats = {
     ...emptyStats,
