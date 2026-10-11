@@ -32,16 +32,16 @@ type AffiliateReport = {
   balance: number;
 };
 
-function money(value: number) {
+function money(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-function amount(value: number | string | null) {
+function amount(value: number | string | null): number {
   const n = Number(value ?? 0);
   return Number.isFinite(n) ? n : 0;
 }
 
-function isConverted(row: ClickRow) {
+function isConverted(row: ClickRow): boolean {
   return (
     Boolean(row.converted_at) ||
     ["converted", "conversion", "approved", "paid"].includes(
@@ -56,7 +56,9 @@ function respond(
 ) {
   return NextResponse.json(data, {
     status,
-    headers: { "Cache-Control": "no-store" },
+    headers: {
+      "Cache-Control": "no-store",
+    },
   });
 }
 
@@ -66,10 +68,13 @@ export async function GET(request: NextRequest) {
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!url || !key) {
-      return respond({
-        success: false,
-        error: "Supabase configuration missing.",
-      }, 500);
+      return respond(
+        {
+          success: false,
+          error: "Supabase configuration missing.",
+        },
+        500
+      );
     }
 
     const token = request.headers
@@ -78,10 +83,13 @@ export async function GET(request: NextRequest) {
       .trim();
 
     if (!token) {
-      return respond({
-        success: false,
-        error: "Authentication required.",
-      }, 401);
+      return respond(
+        {
+          success: false,
+          error: "Authentication required.",
+        },
+        401
+      );
     }
 
     const db = createClient(url, key, {
@@ -99,27 +107,39 @@ export async function GET(request: NextRequest) {
       !auth.user ||
       auth.user.email?.toLowerCase() !== ADMIN_EMAIL
     ) {
-      return respond({
-        success: false,
-        error: "Admin access required.",
-      }, 403);
+      return respond(
+        {
+          success: false,
+          error: "Admin access required.",
+        },
+        403
+      );
     }
 
     const reports = new Map<string, AffiliateReport>();
 
-    function getReport(id: string) {
-      if (!reports.has(id)) {
-        reports.set(id, {
-          affiliate_id: id,
-          clicks: 0,
-          conversions: 0,
-          earnings: 0,
-          paid: 0,
-          balance: 0,
-        });
+    // ES5-compatible arrow function.
+    // Fixes the Vercel TypeScript build error.
+    const getReport = (id: string): AffiliateReport => {
+      const existing = reports.get(id);
+
+      if (existing) {
+        return existing;
       }
-      return reports.get(id)!;
-    }
+
+      const newReport: AffiliateReport = {
+        affiliate_id: id,
+        clicks: 0,
+        conversions: 0,
+        earnings: 0,
+        paid: 0,
+        balance: 0,
+      };
+
+      reports.set(id, newReport);
+
+      return newReport;
+    };
 
     let totalClicks = 0;
     let totalConversions = 0;
@@ -136,6 +156,7 @@ export async function GET(request: NextRequest) {
 
     let offset = 0;
 
+    // Load click and conversion earnings.
     while (true) {
       const { data, error } = await db
         .from("clicks")
@@ -148,19 +169,26 @@ export async function GET(request: NextRequest) {
 
       if (error) {
         console.error("Admin earnings clicks:", error);
-        return respond({
-          success: false,
-          error: "Unable to load conversion earnings.",
-        }, 500);
+
+        return respond(
+          {
+            success: false,
+            error: "Unable to load conversion earnings.",
+          },
+          500
+        );
       }
 
       const page = (data || []) as ClickRow[];
 
       if (offset + page.length > MAX_ROWS) {
-        return respond({
-          success: false,
-          error: "Report exceeds the supported record limit.",
-        }, 413);
+        return respond(
+          {
+            success: false,
+            error: "Report exceeds the supported record limit.",
+          },
+          413
+        );
       }
 
       for (const row of page) {
@@ -170,7 +198,9 @@ export async function GET(request: NextRequest) {
         report.clicks++;
         totalClicks++;
 
-        if (!isConverted(row)) continue;
+        if (!isConverted(row)) {
+          continue;
+        }
 
         const payout = amount(row.payout);
 
@@ -189,10 +219,14 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      if (page.length < PAGE_SIZE) break;
+      if (page.length < PAGE_SIZE) {
+        break;
+      }
+
       offset += PAGE_SIZE;
     }
 
+    // Load completed payment records.
     offset = 0;
 
     while (true) {
@@ -204,25 +238,35 @@ export async function GET(request: NextRequest) {
 
       if (error) {
         console.error("Admin earnings payments:", error);
-        return respond({
-          success: false,
-          error: "Unable to load paid payment records.",
-        }, 500);
+
+        return respond(
+          {
+            success: false,
+            error: "Unable to load paid payment records.",
+          },
+          500
+        );
       }
 
       const page = (data || []) as PaymentRow[];
 
       if (offset + page.length > MAX_ROWS) {
-        return respond({
-          success: false,
-          error: "Payment report exceeds the supported record limit.",
-        }, 413);
+        return respond(
+          {
+            success: false,
+            error: "Payment report exceeds the supported record limit.",
+          },
+          413
+        );
       }
 
       for (const payment of page) {
-        if (payment.status !== "paid") continue;
+        if (payment.status !== "paid") {
+          continue;
+        }
 
         const value = amount(payment.amount);
+
         const report = getReport(
           payment.affiliate_id || "Unassigned"
         );
@@ -231,10 +275,14 @@ export async function GET(request: NextRequest) {
         totalPaid += value;
       }
 
-      if (page.length < PAGE_SIZE) break;
+      if (page.length < PAGE_SIZE) {
+        break;
+      }
+
       offset += PAGE_SIZE;
     }
 
+    // Calculate affiliate earnings.
     const affiliates = Array.from(reports.values())
       .map((item) => ({
         ...item,
@@ -244,8 +292,11 @@ export async function GET(request: NextRequest) {
       }))
       .sort((a, b) => b.earnings - a.earnings);
 
+    // Sort recent conversion history.
     history.sort((a, b) =>
-      String(b.date || "").localeCompare(String(a.date || ""))
+      String(b.date || "").localeCompare(
+        String(a.date || "")
+      )
     );
 
     return respond({
@@ -264,9 +315,12 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Admin earnings error:", error);
 
-    return respond({
-      success: false,
-      error: "Unable to load earnings report.",
-    }, 500);
+    return respond(
+      {
+        success: false,
+        error: "Unable to load earnings report.",
+      },
+      500
+    );
   }
 }
