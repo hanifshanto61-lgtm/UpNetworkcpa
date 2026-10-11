@@ -7,27 +7,35 @@ import { supabase } from "@/lib/supabase";
 type Offer = {
   id: string;
   name: string;
-  description: string | null;
   advertiser: string | null;
+  tracking_url: string | null;
   payout: number;
+  advertiser_payout: number | null;
+  network_id: string | null;
+  external_offer_id: string | null;
   currency: string | null;
   country: string | null;
   category: string | null;
   device: string | null;
-
-  // Database column
-  tracking_url: string | null;
-
+  description: string | null;
   image_url: string | null;
   status: "active" | "paused";
-  created_at: string;
-  updated_at: string;
+};
+
+type Network = {
+  id: string;
+  name: string;
+  status: string;
+  click_id_parameter: string;
 };
 
 const emptyForm = {
   name: "",
   advertiser: "",
   offer_url: "",
+  network_id: "",
+  external_offer_id: "",
+  advertiser_payout: "",
   payout: "",
   country: "Worldwide",
   category: "",
@@ -37,66 +45,74 @@ const emptyForm = {
   status: "active",
 };
 
+const fieldClass =
+  "w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100";
+
 export default function OffersPage() {
   const router = useRouter();
 
   const [offers, setOffers] = useState<Offer[]>([]);
+  const [networks, setNetworks] = useState<Network[]>([]);
+  const [form, setForm] = useState({ ...emptyForm });
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-
-  const [form, setForm] = useState(emptyForm);
-
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  async function getAccessToken() {
-    if (!supabase) {
-      throw new Error("Supabase client is not configured.");
+  async function getToken() {
+    const { data, error } = await supabase.auth.getSession();
+
+    if (error || !data.session?.access_token) {
+      throw new Error("Please log in as admin again.");
     }
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    if (!session?.access_token) {
-      throw new Error(
-        "Your admin session has expired. Please login again."
-      );
-    }
-
-    return session.access_token;
+    return data.session.access_token;
   }
 
-  async function loadOffers() {
+  async function api(
+    path: string,
+    method = "GET",
+    body?: Record<string, unknown>
+  ) {
+    const token = await getToken();
+
+    const response = await fetch(path, {
+      method,
+      cache: "no-store",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(body ? { "Content-Type": "application/json" } : {}),
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok || !result.success) {
+      throw new Error(result.message || "Request failed.");
+    }
+
+    return result;
+  }
+
+  async function loadData() {
     try {
       setLoading(true);
       setError("");
 
-      const token = await getAccessToken();
+      const [offersResult, networksResult] = await Promise.all([
+        api("/api/admin/offers"),
+        api("/api/admin/networks"),
+      ]);
 
-      const response = await fetch("/api/admin/offers", {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(
-          result.message || "Failed to load offers."
-        );
-      }
-
-      setOffers(result.offers || []);
+      setOffers(offersResult.offers || []);
+      setNetworks(networksResult.networks || []);
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to load offers."
+        err instanceof Error ? err.message : "Failed to load data."
       );
     } finally {
       setLoading(false);
@@ -104,11 +120,15 @@ export default function OffersPage() {
   }
 
   useEffect(() => {
-    loadOffers();
+    void loadData();
   }, []);
 
+  function change(field: keyof typeof emptyForm, value: string) {
+    setForm((previous) => ({ ...previous, [field]: value }));
+  }
+
   function resetForm() {
-    setForm(emptyForm);
+    setForm({ ...emptyForm });
     setEditingId(null);
     setShowForm(false);
   }
@@ -119,12 +139,13 @@ export default function OffersPage() {
     setForm({
       name: offer.name || "",
       advertiser: offer.advertiser || "",
-
-      // IMPORTANT:
-      // Database uses tracking_url
-      // Form uses offer_url
       offer_url: offer.tracking_url || "",
-
+      network_id: offer.network_id || "",
+      external_offer_id: offer.external_offer_id || "",
+      advertiser_payout:
+        offer.advertiser_payout == null
+          ? ""
+          : String(offer.advertiser_payout),
       payout: String(offer.payout ?? ""),
       country: offer.country || "Worldwide",
       category: offer.category || "",
@@ -138,77 +159,60 @@ export default function OffersPage() {
     setMessage("");
     setError("");
 
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function handleChange(
-    field: keyof typeof emptyForm,
-    value: string
-  ) {
-    setForm((previous) => ({
-      ...previous,
-      [field]: value,
-    }));
-  }
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
 
-  async function handleSubmit(
-    e: FormEvent<HTMLFormElement>
-  ) {
-    e.preventDefault();
+    const affiliatePayout = Number(form.payout);
+    const advertiserPayout =
+      form.advertiser_payout === ""
+        ? null
+        : Number(form.advertiser_payout);
+
+    if (
+      !Number.isFinite(affiliatePayout) ||
+      affiliatePayout < 0 ||
+      (advertiserPayout !== null &&
+        (!Number.isFinite(advertiserPayout) ||
+          advertiserPayout < affiliatePayout))
+    ) {
+      setError(
+        "Advertiser payout must be greater than or equal to affiliate payout."
+      );
+      return;
+    }
 
     try {
       setSaving(true);
-      setMessage("");
       setError("");
+      setMessage("");
 
-      const token = await getAccessToken();
+      const body = {
+        ...form,
+        network_id: form.network_id || null,
+        advertiser_payout: advertiserPayout,
+        ...(editingId ? { id: editingId } : {}),
+      };
 
-      const isEditing = Boolean(editingId);
+      await api(
+        "/api/admin/offers",
+        editingId ? "PATCH" : "POST",
+        body
+      );
 
-      const response = await fetch("/api/admin/offers", {
-        method: isEditing ? "PATCH" : "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(
-          isEditing
-            ? {
-                id: editingId,
-                ...form,
-              }
-            : form
-        ),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(
-          result.message ||
-            (isEditing
-              ? "Failed to update offer."
-              : "Failed to create offer.")
-        );
-      }
-
+      resetForm();
       setMessage(
-        isEditing
+        editingId
           ? "Offer updated successfully."
           : "Offer created successfully."
       );
 
-      resetForm();
-
-      await loadOffers();
+      await loadData();
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "Something went wrong."
+        err instanceof Error ? err.message : "Failed to save offer."
       );
     } finally {
       setSaving(false);
@@ -217,125 +221,104 @@ export default function OffersPage() {
 
   async function toggleStatus(offer: Offer) {
     try {
+      setBusyId(offer.id);
       setError("");
       setMessage("");
 
-      const token = await getAccessToken();
+      const status = offer.status === "active" ? "paused" : "active";
 
-      const nextStatus =
-        offer.status === "active"
-          ? "paused"
-          : "active";
+      await api("/api/admin/offers", "PATCH", {
+        id: offer.id,
+        status,
+      });
 
-      const response = await fetch(
-        "/api/admin/offers",
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            id: offer.id,
-            status: nextStatus,
-          }),
-        }
-      );
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(
-          result.message ||
-            "Failed to change offer status."
-        );
-      }
-
-      setMessage(
-        nextStatus === "active"
-          ? "Offer activated."
-          : "Offer paused."
-      );
-
-      await loadOffers();
+      setMessage(`Offer ${status === "active" ? "activated" : "paused"}.`);
+      await loadData();
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to change status."
+        err instanceof Error ? err.message : "Unable to change status."
       );
+    } finally {
+      setBusyId(null);
     }
   }
 
   async function deleteOffer(offer: Offer) {
-    const confirmed = window.confirm(
-      `Delete "${offer.name}"?\n\nThis action cannot be undone.`
-    );
-
-    if (!confirmed) {
+    if (
+      !window.confirm(
+        `Delete "${offer.name}"? This action cannot be undone.`
+      )
+    ) {
       return;
     }
 
     try {
+      setBusyId(offer.id);
       setError("");
       setMessage("");
 
-      const token = await getAccessToken();
-
-      const response = await fetch(
-        `/api/admin/offers?id=${encodeURIComponent(
-          offer.id
-        )}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+      await api(
+        `/api/admin/offers?id=${encodeURIComponent(offer.id)}`,
+        "DELETE"
       );
 
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(
-          result.message ||
-            "Failed to delete offer."
-        );
-      }
-
-      setMessage(
-        "Offer deleted successfully."
-      );
-
-      await loadOffers();
+      setMessage("Offer deleted successfully.");
+      await loadData();
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to delete offer."
+        err instanceof Error ? err.message : "Failed to delete offer."
       );
+    } finally {
+      setBusyId(null);
     }
+  }
+
+  const selectedNetwork = networks.find(
+    (network) => network.id === form.network_id
+  );
+
+  function input(
+    label: string,
+    field: keyof typeof emptyForm,
+    options?: {
+      type?: string;
+      required?: boolean;
+      placeholder?: string;
+      step?: string;
+    }
+  ) {
+    return (
+      <label className="block">
+        <span className="mb-2 block text-sm font-semibold text-slate-700">
+          {label}
+        </span>
+        <input
+          className={fieldClass}
+          type={options?.type || "text"}
+          required={options?.required}
+          min={options?.type === "number" ? "0" : undefined}
+          step={options?.step}
+          placeholder={options?.placeholder}
+          value={form[field]}
+          onChange={(e) => change(field, e.target.value)}
+        />
+      </label>
+    );
   }
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-900">
-      {/* Header */}
       <header className="border-b border-slate-200 bg-white">
         <div className="flex min-h-20 items-center justify-between gap-4 px-5 sm:px-8">
           <div>
-            <h1 className="text-2xl font-bold">
-              Offers & Links
-            </h1>
-
+            <h1 className="text-2xl font-bold">Offers & Links</h1>
             <p className="mt-1 text-sm text-slate-500">
-              Create and manage your CPA offers
+              Manage offers from multiple CPA networks
             </p>
           </div>
-
           <button
-            type="button"
             onClick={() => router.push("/admin")}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold"
           >
             ← Dashboard
           </button>
@@ -343,336 +326,225 @@ export default function OffersPage() {
       </header>
 
       <div className="p-5 sm:p-8">
-        {/* Top */}
-        <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="text-lg font-bold">
-              Offer Management
-            </h2>
-
+            <h2 className="text-lg font-bold">Offer Management</h2>
             <p className="text-sm text-slate-500">
-              Add offers that will become available to your affiliates.
+              {offers.length} offers · {networks.length} CPA networks
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              if (showForm && !editingId) {
-                resetForm();
-              } else {
-                setEditingId(null);
-                setForm(emptyForm);
-                setShowForm(true);
-                setMessage("");
-                setError("");
-              }
-            }}
-            className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700"
-          >
-            {showForm && !editingId
-              ? "Close Form"
-              : "+ Add New Offer"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => router.push("/admin/networks")}
+              className="rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm font-semibold text-blue-700"
+            >
+              Manage Networks
+            </button>
+            <button
+              onClick={() => {
+                if (showForm && !editingId) {
+                  resetForm();
+                } else {
+                  setForm({ ...emptyForm });
+                  setEditingId(null);
+                  setShowForm(true);
+                  setError("");
+                  setMessage("");
+                }
+              }}
+              className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white"
+            >
+              {showForm && !editingId
+                ? "Close Form"
+                : "+ Add New Offer"}
+            </button>
+          </div>
         </div>
 
-        {/* Messages */}
         {message && (
-          <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+          <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
             {message}
           </div>
         )}
 
         {error && (
-          <div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             {error}
           </div>
         )}
 
-        {/* Form */}
         {showForm && (
-          <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-6">
-              <h3 className="text-xl font-bold">
-                {editingId
-                  ? "Edit Offer"
-                  : "Create New Offer"}
-              </h3>
-
-              <p className="mt-1 text-sm text-slate-500">
-                {editingId
-                  ? "Update the offer information below."
-                  : "Enter the information for your CPA offer."}
-              </p>
-            </div>
+          <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <h3 className="mb-5 text-xl font-bold">
+              {editingId ? "Edit Offer" : "Create New Offer"}
+            </h3>
 
             <form
               onSubmit={handleSubmit}
               className="grid gap-5 md:grid-cols-2"
             >
-              {/* Name */}
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
-                  Offer Name
-                </label>
+              <label className="block md:col-span-2">
+                <span className="mb-2 block text-sm font-semibold text-slate-700">
+                  Select CPA Network
+                </span>
+                <select
+                  className={fieldClass}
+                  value={form.network_id}
+                  onChange={(e) => change("network_id", e.target.value)}
+                >
+                  <option value="">Independent / No Network</option>
+                  {networks.map((network) => (
+                    <option key={network.id} value={network.id}>
+                      {network.name}
+                      {network.status === "paused" ? " (Paused)" : ""}
+                    </option>
+                  ))}
+                </select>
+                {selectedNetwork && (
+                  <p className="mt-2 text-xs text-slate-500">
+                    Click ID parameter:{" "}
+                    <strong>{selectedNetwork.click_id_parameter}</strong>
+                  </p>
+                )}
+              </label>
 
-                <input
-                  type="text"
-                  required
-                  value={form.name}
-                  onChange={(e) =>
-                    handleChange(
-                      "name",
-                      e.target.value
-                    )
-                  }
-                  placeholder="Example: Survey Offer"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
-                />
-              </div>
+              {input("Offer Name", "name", {
+                required: true,
+                placeholder: "Example: Mobile App Install",
+              })}
 
-              {/* Advertiser */}
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
-                  Advertiser
-                </label>
+              {input("Advertiser", "advertiser", {
+                required: true,
+                placeholder: "Advertiser name",
+              })}
 
-                <input
-                  type="text"
-                  required
-                  value={form.advertiser}
-                  onChange={(e) =>
-                    handleChange(
-                      "advertiser",
-                      e.target.value
-                    )
-                  }
-                  placeholder="Example: Advertiser Name"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
-                />
-              </div>
+              {input("External Offer ID", "external_offer_id", {
+                placeholder: "Optional network offer ID",
+              })}
 
-              {/* URL */}
-              <div className="md:col-span-2">
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
-                  Offer / Landing Page URL
-                </label>
+              {input("Offer / Tracking URL", "offer_url", {
+                type: "url",
+                required: true,
+                placeholder: "https://example.com/offer",
+              })}
 
-                <input
-                  type="url"
-                  required
-                  value={form.offer_url}
-                  onChange={(e) =>
-                    handleChange(
-                      "offer_url",
-                      e.target.value
-                    )
-                  }
-                  placeholder="https://example.com/offer"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
-                />
+              {input("Advertiser Payout (USD)", "advertiser_payout", {
+                type: "number",
+                step: "0.01",
+                placeholder: "2.00",
+              })}
 
-                <p className="mt-1 text-xs text-slate-400">
-                  This URL is securely stored in the database as
-                  tracking_url.
-                </p>
-              </div>
+              {input("Affiliate Payout (USD)", "payout", {
+                type: "number",
+                required: true,
+                step: "0.01",
+                placeholder: "1.50",
+              })}
 
-              {/* Payout */}
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
-                  Payout (USD)
-                </label>
+              {form.advertiser_payout !== "" &&
+                form.payout !== "" && (
+                  <div className="rounded-xl bg-emerald-50 p-4 md:col-span-2">
+                    <p className="text-sm font-semibold text-emerald-800">
+                      Estimated Network Profit per Conversion: $
+                      {(
+                        Number(form.advertiser_payout) -
+                        Number(form.payout)
+                      ).toFixed(2)}
+                    </p>
+                    <p className="mt-1 text-xs text-emerald-700">
+                      Actual revenue requires a verified network postback.
+                    </p>
+                  </div>
+                )}
 
-                <input
-                  type="number"
-                  required
-                  min="0"
-                  step="0.01"
-                  value={form.payout}
-                  onChange={(e) =>
-                    handleChange(
-                      "payout",
-                      e.target.value
-                    )
-                  }
-                  placeholder="10.00"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
-                />
-              </div>
-
-              {/* Country */}
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
+              <label>
+                <span className="mb-2 block text-sm font-semibold text-slate-700">
                   Country
-                </label>
-
+                </span>
                 <select
+                  className={fieldClass}
                   value={form.country}
-                  onChange={(e) =>
-                    handleChange(
-                      "country",
-                      e.target.value
-                    )
-                  }
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                  onChange={(e) => change("country", e.target.value)}
                 >
-                  <option value="Worldwide">
-                    Worldwide
-                  </option>
-                  <option value="United States">
-                    United States
-                  </option>
-                  <option value="United Kingdom">
-                    United Kingdom
-                  </option>
-                  <option value="Canada">
-                    Canada
-                  </option>
-                  <option value="Australia">
-                    Australia
-                  </option>
-                  <option value="Germany">
-                    Germany
-                  </option>
-                  <option value="France">
-                    France
-                  </option>
-                  <option value="Bangladesh">
-                    Bangladesh
-                  </option>
-                  <option value="India">
-                    India
-                  </option>
+                  {[
+                    "Worldwide",
+                    "United States",
+                    "United Kingdom",
+                    "Canada",
+                    "Australia",
+                    "Germany",
+                    "France",
+                    "Bangladesh",
+                    "India",
+                  ].map((country) => (
+                    <option key={country}>{country}</option>
+                  ))}
                 </select>
-              </div>
+              </label>
 
-              {/* Category */}
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
-                  Category
-                </label>
+              {input("Category", "category", {
+                placeholder: "Survey, Dating, App, Finance",
+              })}
 
-                <input
-                  type="text"
-                  value={form.category}
-                  onChange={(e) =>
-                    handleChange(
-                      "category",
-                      e.target.value
-                    )
-                  }
-                  placeholder="Survey, Dating, App, Finance..."
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
-                />
-              </div>
-
-              {/* Device */}
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
+              <label>
+                <span className="mb-2 block text-sm font-semibold text-slate-700">
                   Device
-                </label>
-
+                </span>
                 <select
+                  className={fieldClass}
                   value={form.device}
-                  onChange={(e) =>
-                    handleChange(
-                      "device",
-                      e.target.value
-                    )
-                  }
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                  onChange={(e) => change("device", e.target.value)}
                 >
-                  <option value="All">
-                    All Devices
-                  </option>
-                  <option value="Mobile">
-                    Mobile
-                  </option>
-                  <option value="Desktop">
-                    Desktop
-                  </option>
-                  <option value="Android">
-                    Android
-                  </option>
-                  <option value="iOS">
-                    iOS
-                  </option>
+                  {["All", "Mobile", "Desktop", "Android", "iOS"].map(
+                    (device) => (
+                      <option key={device} value={device}>
+                        {device === "All" ? "All Devices" : device}
+                      </option>
+                    )
+                  )}
                 </select>
-              </div>
+              </label>
 
-              {/* Description */}
-              <div className="md:col-span-2">
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
+              <label>
+                <span className="mb-2 block text-sm font-semibold text-slate-700">
+                  Status
+                </span>
+                <select
+                  className={fieldClass}
+                  value={form.status}
+                  onChange={(e) => change("status", e.target.value)}
+                >
+                  <option value="active">Active</option>
+                  <option value="paused">Paused</option>
+                </select>
+              </label>
+
+              <label className="md:col-span-2">
+                <span className="mb-2 block text-sm font-semibold text-slate-700">
                   Description
-                </label>
-
+                </span>
                 <textarea
                   rows={4}
+                  className={fieldClass}
                   value={form.description}
-                  onChange={(e) =>
-                    handleChange(
-                      "description",
-                      e.target.value
-                    )
-                  }
-                  placeholder="Describe the offer..."
-                  className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                  onChange={(e) => change("description", e.target.value)}
+                  placeholder="Describe your offer"
                 />
-              </div>
+              </label>
 
-              {/* Image */}
               <div className="md:col-span-2">
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
-                  Image URL
-                </label>
-
-                <input
-                  type="url"
-                  value={form.image_url}
-                  onChange={(e) =>
-                    handleChange(
-                      "image_url",
-                      e.target.value
-                    )
-                  }
-                  placeholder="https://example.com/image.jpg"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
-                />
+                {input("Image URL", "image_url", {
+                  type: "url",
+                  placeholder: "https://example.com/image.jpg",
+                })}
               </div>
 
-              {/* Status */}
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
-                  Status
-                </label>
-
-                <select
-                  value={form.status}
-                  onChange={(e) =>
-                    handleChange(
-                      "status",
-                      e.target.value
-                    )
-                  }
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
-                >
-                  <option value="active">
-                    Active
-                  </option>
-
-                  <option value="paused">
-                    Paused
-                  </option>
-                </select>
-              </div>
-
-              {/* Buttons */}
-              <div className="flex items-end gap-3">
+              <div className="flex flex-wrap gap-3 md:col-span-2">
                 <button
                   type="submit"
                   disabled={saving}
-                  className="rounded-xl bg-blue-600 px-6 py-3 text-sm font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="rounded-xl bg-blue-600 px-6 py-3 text-sm font-bold text-white disabled:opacity-50"
                 >
                   {saving
                     ? "Saving..."
@@ -680,212 +552,110 @@ export default function OffersPage() {
                     ? "Update Offer"
                     : "Create Offer"}
                 </button>
-
                 <button
                   type="button"
                   onClick={resetForm}
-                  disabled={saving}
-                  className="rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  className="rounded-xl border border-slate-200 px-6 py-3 text-sm font-semibold"
                 >
                   Cancel
                 </button>
               </div>
             </form>
-          </div>
+          </section>
         )}
 
-        {/* Offers */}
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 p-6">
-            <h3 className="font-bold">
-              Your Offers
-            </h3>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Offers stored in your Supabase database.
-            </p>
+            <h3 className="font-bold">Your Offers</h3>
           </div>
 
           {loading ? (
-            <div className="flex min-h-64 items-center justify-center p-8">
-              <div className="text-center">
-                <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" />
-
-                <p className="mt-4 text-sm font-semibold text-slate-500">
-                  Loading offers...
-                </p>
-              </div>
-            </div>
+            <p className="p-8 text-center text-slate-500">
+              Loading offers and networks...
+            </p>
           ) : offers.length === 0 ? (
-            <div className="flex min-h-64 items-center justify-center p-8">
-              <div className="text-center">
-                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-2xl text-blue-600">
-                  ▣
-                </div>
-
-                <h4 className="mt-4 font-bold text-slate-700">
-                  No offers yet
-                </h4>
-
-                <p className="mt-1 max-w-sm text-sm text-slate-400">
-                  Create your first offer and it will be saved
-                  directly to Supabase.
-                </p>
-
-                <button
-                  type="button"
-                  onClick={() => setShowForm(true)}
-                  className="mt-5 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
-                >
-                  + Create First Offer
-                </button>
-              </div>
-            </div>
+            <p className="p-8 text-center text-slate-500">
+              No offers yet. Add your first offer.
+            </p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[950px] text-left">
-                <thead className="border-b border-slate-200 bg-slate-50">
+                <thead className="bg-slate-50 text-xs uppercase text-slate-500">
                   <tr>
-                    <th className="px-5 py-4 text-xs font-bold uppercase tracking-wide text-slate-500">
-                      Offer
-                    </th>
-
-                    <th className="px-5 py-4 text-xs font-bold uppercase tracking-wide text-slate-500">
-                      Advertiser
-                    </th>
-
-                    <th className="px-5 py-4 text-xs font-bold uppercase tracking-wide text-slate-500">
-                      Country
-                    </th>
-
-                    <th className="px-5 py-4 text-xs font-bold uppercase tracking-wide text-slate-500">
-                      Device
-                    </th>
-
-                    <th className="px-5 py-4 text-xs font-bold uppercase tracking-wide text-slate-500">
-                      Payout
-                    </th>
-
-                    <th className="px-5 py-4 text-xs font-bold uppercase tracking-wide text-slate-500">
-                      Status
-                    </th>
-
-                    <th className="px-5 py-4 text-right text-xs font-bold uppercase tracking-wide text-slate-500">
-                      Actions
-                    </th>
+                    {[
+                      "Offer",
+                      "CPA Network",
+                      "Advertiser",
+                      "Country",
+                      "Affiliate Payout",
+                      "Status",
+                      "Actions",
+                    ].map((heading) => (
+                      <th key={heading} className="px-5 py-4">
+                        {heading}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
-
                 <tbody className="divide-y divide-slate-100">
                   {offers.map((offer) => (
-                    <tr
-                      key={offer.id}
-                      className="transition hover:bg-slate-50"
-                    >
-                      <td className="px-5 py-5">
-                        <div className="flex items-center gap-3">
-                          {offer.image_url ? (
-                            <img
-                              src={offer.image_url}
-                              alt={offer.name}
-                              className="h-11 w-11 rounded-xl object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 font-bold text-blue-600">
-                              O
-                            </div>
-                          )}
-
-                          <div>
-                            <p className="font-bold text-slate-800">
-                              {offer.name}
-                            </p>
-
-                            <p className="mt-1 max-w-xs truncate text-xs text-slate-400">
-                              {offer.category ||
-                                "General"}
-                            </p>
-                          </div>
+                    <tr key={offer.id}>
+                      <td className="px-5 py-4">
+                        <div className="font-semibold">{offer.name}</div>
+                        <div className="text-xs text-slate-400">
+                          {offer.category || "General"}
                         </div>
                       </td>
-
-                      <td className="px-5 py-5 text-sm font-semibold text-slate-600">
+                      <td className="px-5 py-4 text-sm">
+                        {networks.find(
+                          (network) => network.id === offer.network_id
+                        )?.name || "Independent"}
+                      </td>
+                      <td className="px-5 py-4 text-sm">
                         {offer.advertiser || "—"}
                       </td>
-
-                      <td className="px-5 py-5 text-sm text-slate-600">
-                        {offer.country ||
-                          "Worldwide"}
+                      <td className="px-5 py-4 text-sm">
+                        {offer.country || "Worldwide"}
                       </td>
-
-                      <td className="px-5 py-5 text-sm text-slate-600">
-                        {offer.device || "All"}
+                      <td className="px-5 py-4 font-bold text-emerald-600">
+                        {offer.currency || "USD"}{" "}
+                        {Number(offer.payout || 0).toFixed(2)}
                       </td>
-
-                      <td className="px-5 py-5">
-                        <span className="font-bold text-emerald-600">
-                          {offer.currency || "USD"}{" "}
-                          {Number(
-                            offer.payout
-                          ).toFixed(2)}
-                        </span>
-                      </td>
-
-                      <td className="px-5 py-5">
+                      <td className="px-5 py-4">
                         <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${
+                          className={`rounded-full px-3 py-1 text-xs font-bold ${
                             offer.status === "active"
                               ? "bg-emerald-100 text-emerald-700"
                               : "bg-amber-100 text-amber-700"
                           }`}
                         >
-                          {offer.status ===
-                          "active"
+                          {offer.status === "active"
                             ? "Active"
                             : "Paused"}
                         </span>
                       </td>
-
-                      <td className="px-5 py-5">
-                        <div className="flex justify-end gap-2">
+                      <td className="px-5 py-4">
+                        <div className="flex gap-2">
                           <button
-                            type="button"
-                            onClick={() =>
-                              startEdit(offer)
-                            }
-                            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                            onClick={() => startEdit(offer)}
+                            disabled={busyId === offer.id}
+                            className="rounded-lg border px-3 py-2 text-xs font-bold"
                           >
                             Edit
                           </button>
-
                           <button
-                            type="button"
-                            onClick={() =>
-                              toggleStatus(
-                                offer
-                              )
-                            }
-                            className={`rounded-lg px-3 py-2 text-xs font-bold transition ${
-                              offer.status ===
-                              "active"
-                                ? "bg-amber-50 text-amber-700 hover:bg-amber-100"
-                                : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                            }`}
+                            onClick={() => toggleStatus(offer)}
+                            disabled={busyId === offer.id}
+                            className="rounded-lg bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700"
                           >
-                            {offer.status ===
-                            "active"
+                            {offer.status === "active"
                               ? "Pause"
                               : "Activate"}
                           </button>
-
                           <button
-                            type="button"
-                            onClick={() =>
-                              deleteOffer(
-                                offer
-                              )
-                            }
-                            className="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-600 transition hover:bg-red-100"
+                            onClick={() => deleteOffer(offer)}
+                            disabled={busyId === offer.id}
+                            className="rounded-lg bg-red-50 px-3 py-2 text-xs font-bold text-red-600"
                           >
                             Delete
                           </button>
@@ -897,22 +667,7 @@ export default function OffersPage() {
               </table>
             </div>
           )}
-        </div>
-
-        {/* Info */}
-        <div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50 p-5">
-          <h3 className="font-bold text-blue-900">
-            Offer system connected
-          </h3>
-
-          <p className="mt-1 text-sm leading-6 text-blue-800">
-            Admin Panel থেকে Offer তৈরি করলে সেটি
-            Supabase database-এ save হবে। এখান থেকেই
-            Offer edit, pause, activate এবং delete করা
-            যাবে। Active Offer পরবর্তী ধাপে Affiliate
-            Panel-এ দেখানো হবে।
-          </p>
-        </div>
+        </section>
       </div>
     </main>
   );
