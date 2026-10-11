@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Activity,
   BarChart3,
+  Building2,
   CheckCircle2,
   ChevronRight,
   CreditCard,
@@ -44,6 +45,12 @@ const menuItems: MenuItem[] = [
     icon: Target,
     action: "/admin/offers",
     available: true,
+  },
+  {
+  label: "Manage CPA Networks",
+  icon: Building2,
+  action: "/admin/networks",
+  available: true,
   },
   {
     label: "Affiliates",
