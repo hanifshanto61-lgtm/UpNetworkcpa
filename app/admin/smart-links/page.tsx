@@ -20,8 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-
-const ADMIN_EMAIL = "islamhanif122@gmail.com";
+import { verifyAdminAccess } from "@/lib/admin-access";
 
 type SmartLink = {
   id: string;
@@ -64,6 +63,7 @@ const buttonClass =
 
 function normalizeShare(value: number | string) {
   const number = Number(value);
+
   return Number.isFinite(number)
     ? Math.min(100, Math.max(0, number))
     : 30;
@@ -79,6 +79,7 @@ function money(value: number) {
 function validUrl(value: string) {
   try {
     const url = new URL(value);
+
     return (
       ["http:", "https:"].includes(url.protocol) &&
       !url.username &&
@@ -96,9 +97,7 @@ async function getAccessToken() {
     throw new Error("Please login again.");
   }
 
-  if (
-    data.session.user.email?.toLowerCase() !== ADMIN_EMAIL
-  ) {
+  if (!(await verifyAdminAccess(data.session.access_token))) {
     throw new Error("Admin access required.");
   }
 
@@ -220,6 +219,7 @@ function PostbackPanel({ link }: { link: SmartLink }) {
       );
 
       const next = result.setting as PostbackSetting;
+
       setSetting(next);
       setEnabled(next.enabled);
       setParameter(next.click_id_parameter);
@@ -319,6 +319,7 @@ function PostbackPanel({ link }: { link: SmartLink }) {
                 >
                   Network Click ID Parameter
                 </label>
+
                 <input
                   id={`parameter-${link.id}`}
                   value={parameter}
@@ -332,6 +333,7 @@ function PostbackPanel({ link }: { link: SmartLink }) {
                   className={inputClass}
                   placeholder="sub1"
                 />
+
                 <p className="mt-2 text-xs leading-5 text-slate-400">
                   Use the parameter your CPA network accepts
                   for your Click ID, such as sub1, aff_sub,
@@ -425,6 +427,7 @@ function PostbackPanel({ link }: { link: SmartLink }) {
 
 export default function AdminSmartLinksPage() {
   const router = useRouter();
+
   const [links, setLinks] = useState<SmartLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -445,14 +448,17 @@ export default function AdminSmartLinksPage() {
 
     try {
       const result = await api("/api/admin/smart-links");
+
       setLinks(
         Array.isArray(result.smartLinks)
           ? result.smartLinks
           : []
       );
+
       return true;
     } catch (err) {
       const text = errorText(err);
+
       setError(text);
 
       if (
@@ -476,7 +482,10 @@ export default function AdminSmartLinksPage() {
     field: keyof SmartLinkForm,
     value: string
   ) {
-    setForm((current) => ({ ...current, [field]: value }));
+    setForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
   }
 
   function closeForm() {
@@ -520,7 +529,9 @@ export default function AdminSmartLinksPage() {
     const share = Number(shareText);
 
     if (!name || name.length > 150) {
-      setError("Enter a Smart Link name of up to 150 characters.");
+      setError(
+        "Enter a Smart Link name of up to 150 characters."
+      );
       return;
     }
 
@@ -565,8 +576,11 @@ export default function AdminSmartLinksPage() {
         network_share_percent: share,
       };
 
-      if (editingId) payload.id = editingId;
-      else payload.slug = slug;
+      if (editingId) {
+        payload.id = editingId;
+      } else {
+        payload.slug = slug;
+      }
 
       await api(
         "/api/admin/smart-links",
@@ -575,6 +589,7 @@ export default function AdminSmartLinksPage() {
       );
 
       closeForm();
+
       const refreshed = await loadLinks();
 
       setMessage(
@@ -604,7 +619,9 @@ export default function AdminSmartLinksPage() {
         id: link.id,
         status,
       });
+
       await loadLinks();
+
       setMessage(
         status === "active"
           ? "Smart Link activated."
@@ -631,7 +648,9 @@ export default function AdminSmartLinksPage() {
     ? Math.max(0, rawRevenue)
     : 0;
   const grossCents = Math.round(revenue * 100);
-  const networkCents = Math.round(grossCents * share / 100);
+  const networkCents = Math.round(
+    (grossCents * share) / 100
+  );
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
@@ -639,6 +658,7 @@ export default function AdminSmartLinksPage() {
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-5 py-6">
           <div className="flex items-center gap-3">
             <Link2 size={28} className="text-cyan-400" />
+
             <div>
               <h1 className="text-xl font-bold sm:text-2xl">
                 Smart Link Management
@@ -686,6 +706,7 @@ export default function AdminSmartLinksPage() {
               <p className="text-sm text-slate-400">
                 {card.title}
               </p>
+
               <p
                 className={`mt-2 text-3xl font-black ${card.color}`}
               >
@@ -708,7 +729,9 @@ export default function AdminSmartLinksPage() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              disabled={loading || saving || updatingId !== null}
+              disabled={
+                loading || saving || updatingId !== null
+              }
               onClick={() => {
                 setError("");
                 void loadLinks();
@@ -718,6 +741,7 @@ export default function AdminSmartLinksPage() {
               <RefreshCw size={16} />
               Refresh
             </button>
+
             <button
               type="button"
               disabled={saving}
@@ -757,6 +781,7 @@ export default function AdminSmartLinksPage() {
                   ? "Edit Smart Link"
                   : "Create Global Smart Link"}
               </h3>
+
               <button
                 type="button"
                 disabled={saving}
@@ -773,9 +798,13 @@ export default function AdminSmartLinksPage() {
               className="grid gap-5 md:grid-cols-2"
             >
               <div>
-                <label htmlFor="link-name" className="mb-2 block text-sm">
+                <label
+                  htmlFor="link-name"
+                  className="mb-2 block text-sm"
+                >
                   Smart Link Name
                 </label>
+
                 <input
                   id="link-name"
                   required
@@ -791,9 +820,13 @@ export default function AdminSmartLinksPage() {
               </div>
 
               <div>
-                <label htmlFor="link-slug" className="mb-2 block text-sm">
+                <label
+                  htmlFor="link-slug"
+                  className="mb-2 block text-sm"
+                >
                   Smart Link Slug
                 </label>
+
                 <input
                   id="link-slug"
                   required
@@ -806,15 +839,20 @@ export default function AdminSmartLinksPage() {
                   className={inputClass}
                   placeholder="my-smartlink"
                 />
+
                 <p className="mt-2 text-xs text-slate-400">
                   Existing tracking slugs stay unchanged.
                 </p>
               </div>
 
               <div className="md:col-span-2">
-                <label htmlFor="link-url" className="mb-2 block text-sm">
+                <label
+                  htmlFor="link-url"
+                  className="mb-2 block text-sm"
+                >
                   Destination / Advertiser URL
                 </label>
+
                 <input
                   id="link-url"
                   required
@@ -833,9 +871,13 @@ export default function AdminSmartLinksPage() {
               </div>
 
               <div>
-                <label htmlFor="link-share" className="mb-2 block text-sm">
+                <label
+                  htmlFor="link-share"
+                  className="mb-2 block text-sm"
+                >
                   Network Commission (%)
                 </label>
+
                 <input
                   id="link-share"
                   required
@@ -868,9 +910,14 @@ export default function AdminSmartLinksPage() {
                 <h4 className="mb-3 font-semibold">
                   Revenue Share Preview
                 </h4>
-                <label htmlFor="example-revenue" className="mb-2 block text-sm text-slate-400">
+
+                <label
+                  htmlFor="example-revenue"
+                  className="mb-2 block text-sm text-slate-400"
+                >
                   Example Gross Revenue (USD)
                 </label>
+
                 <input
                   id="example-revenue"
                   type="number"
@@ -892,12 +939,15 @@ export default function AdminSmartLinksPage() {
                       {money(networkCents / 100)}
                     </p>
                   </div>
+
                   <div className="rounded-xl bg-emerald-500/10 p-4">
                     <p className="text-sm text-emerald-300">
                       Affiliate Earnings
                     </p>
                     <p className="mt-2 text-2xl font-bold">
-                      {money((grossCents - networkCents) / 100)}
+                      {money(
+                        (grossCents - networkCents) / 100
+                      )}
                     </p>
                   </div>
                 </div>
@@ -910,12 +960,18 @@ export default function AdminSmartLinksPage() {
                   className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-5 py-3 font-bold text-slate-950 disabled:opacity-50"
                 >
                   {saving ? (
-                    <Loader2 size={17} className="animate-spin" />
+                    <Loader2
+                      size={17}
+                      className="animate-spin"
+                    />
                   ) : (
                     <Save size={17} />
                   )}
-                  {editingId ? "Save Changes" : "Create Smart Link"}
+                  {editingId
+                    ? "Save Changes"
+                    : "Create Smart Link"}
                 </button>
+
                 <button
                   type="button"
                   disabled={saving}
@@ -931,7 +987,10 @@ export default function AdminSmartLinksPage() {
 
         {loading ? (
           <div className="flex items-center justify-center gap-3 rounded-2xl bg-slate-900 p-10">
-            <Loader2 size={22} className="animate-spin text-cyan-400" />
+            <Loader2
+              size={22}
+              className="animate-spin text-cyan-400"
+            />
             Loading Smart Links...
           </div>
         ) : globalLinks.length === 0 ? (
@@ -955,6 +1014,7 @@ export default function AdminSmartLinksPage() {
                       <h3 className="text-lg font-bold">
                         {link.name || link.slug}
                       </h3>
+
                       <span
                         className={`rounded-full px-3 py-1 text-xs font-bold ${
                           link.status === "active"
@@ -962,15 +1022,19 @@ export default function AdminSmartLinksPage() {
                             : "bg-amber-500/15 text-amber-400"
                         }`}
                       >
-                        {link.status === "active" ? "Active" : "Paused"}
+                        {link.status === "active"
+                          ? "Active"
+                          : "Paused"}
                       </span>
                     </div>
 
                     <p className="mt-2 text-xs text-slate-500">
                       Slug: {link.slug}
                     </p>
+
                     <p className="mt-2 break-all text-sm text-slate-400">
-                      {link.destination_url || "No destination"}
+                      {link.destination_url ||
+                        "No destination"}
                     </p>
 
                     {link.destination_url &&
@@ -997,6 +1061,7 @@ export default function AdminSmartLinksPage() {
                       <Edit3 size={16} />
                       Edit
                     </button>
+
                     <button
                       type="button"
                       disabled={updatingId !== null}
@@ -1004,13 +1069,18 @@ export default function AdminSmartLinksPage() {
                       className={buttonClass}
                     >
                       {updatingId === link.id ? (
-                        <Loader2 size={16} className="animate-spin" />
+                        <Loader2
+                          size={16}
+                          className="animate-spin"
+                        />
                       ) : link.status === "active" ? (
                         <PauseCircle size={16} />
                       ) : (
                         <PlayCircle size={16} />
                       )}
-                      {link.status === "active" ? "Pause" : "Activate"}
+                      {link.status === "active"
+                        ? "Pause"
+                        : "Activate"}
                     </button>
                   </div>
                 </div>
@@ -1024,6 +1094,7 @@ export default function AdminSmartLinksPage() {
                       {networkShare.toFixed(2)}%
                     </p>
                   </div>
+
                   <div className="rounded-xl bg-emerald-500/10 p-4">
                     <p className="text-sm text-emerald-300">
                       Affiliate Share
