@@ -11,6 +11,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { verifyAdminAccess } from "@/lib/admin-access";
 
 type Stats = {
   clicks: number;
@@ -33,8 +34,6 @@ const emptyStats: Stats = {
   earnings: 0,
   conversionRate: 0,
 };
-
-const ADMIN_EMAIL = "islamhanif122@gmail.com";
 
 export default function AdminStatisticsPage() {
   const router = useRouter();
@@ -59,11 +58,14 @@ export default function AdminStatisticsPage() {
 
         if (
           sessionError ||
-          !session ||
-          session.user.email?.toLowerCase() !==
-            ADMIN_EMAIL
+          !session?.access_token
         ) {
           router.replace("/login");
+          return;
+        }
+
+        if (!(await verifyAdminAccess(session.access_token))) {
+          router.replace("/affiliate");
           return;
         }
 
@@ -92,7 +94,12 @@ export default function AdminStatisticsPage() {
         }
 
         setStats(result.stats || emptyStats);
-        setAffiliates(result.affiliates || []);
+
+        setAffiliates(
+          Array.isArray(result.affiliates)
+            ? result.affiliates
+            : []
+        );
       } catch (err) {
         setError(
           err instanceof Error
@@ -223,7 +230,10 @@ export default function AdminStatisticsPage() {
         </section>
 
         {error && (
-          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
+          <div
+            role="alert"
+            className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700"
+          >
             {error}
           </div>
         )}
