@@ -1183,3 +1183,4 @@ export default function AdminPage() {
       </section>
     </main>
   );
+}
