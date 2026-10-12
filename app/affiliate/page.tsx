@@ -2065,7 +2065,7 @@ function SupportChatBot({
             <div className="relative flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15">
-              sizeUpNetworkLogo size={44} />
+               <UpNetworkLogo size={44} />
                 </div>
 
                 <div>
