@@ -1,16 +1,10 @@
-import {
-  NextRequest,
-  NextResponse,
-} from "next/server";
-
-import {
-  createClient,
-} from "@supabase/supabase-js";
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { getAdminSession } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const ADMIN_EMAIL = "islamhanif122@gmail.com";
 const PAGE_SIZE = 1000;
 
 type PaymentStatus =
@@ -51,11 +45,8 @@ function respond(
 }
 
 function getAdminClient() {
-  const url =
-    process.env.NEXT_PUBLIC_SUPABASE_URL;
-
-  const key =
-    process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !key) {
     throw new Error(
@@ -72,11 +63,8 @@ function getAdminClient() {
 }
 
 function getAffiliateClient(token: string) {
-  const url =
-    process.env.NEXT_PUBLIC_SUPABASE_URL;
-
-  const anonKey =
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!url || !anonKey) {
     throw new Error(
@@ -98,39 +86,17 @@ function getAffiliateClient(token: string) {
 }
 
 async function authorize(request: NextRequest) {
-  const header =
-    request.headers.get("authorization") || "";
+  const session = await getAdminSession(request);
 
-  const match = header.match(
-    /^Bearer\s+(.+)$/i
-  );
+  if (!session) return null;
 
-  const token = match?.[1]?.trim();
-
-  if (!token) {
-    return null;
-  }
-
-  const client = getAdminClient();
-
-  const {
-    data,
-    error,
-  } = await client.auth.getUser(token);
-
-  if (error || !data.user) {
-    return null;
-  }
-
-  if (
-    data.user.email?.toLowerCase() !==
-    ADMIN_EMAIL.toLowerCase()
-  ) {
-    return null;
-  }
+  const token = request.headers
+    .get("authorization")!
+    .slice(7)
+    .trim();
 
   return {
-    client,
+    client: session.client,
     token,
   };
 }
@@ -142,10 +108,7 @@ async function readAllPayments(
   let offset = 0;
 
   while (true) {
-    const {
-      data,
-      error,
-    } = await client
+    const { data, error } = await client
       .from("payment_requests")
       .select(
         "id,affiliate_id,amount,currency,payment_method,payment_address,status,admin_note,requested_at,processed_at,created_at,updated_at"
@@ -156,10 +119,7 @@ async function readAllPayments(
       .order("id", {
         ascending: false,
       })
-      .range(
-        offset,
-        offset + PAGE_SIZE - 1
-      );
+      .range(offset, offset + PAGE_SIZE - 1);
 
     if (error) {
       throw new Error(
@@ -181,9 +141,7 @@ async function readAllPayments(
   return payments;
 }
 
-export async function GET(
-  request: NextRequest
-) {
+export async function GET(request: NextRequest) {
   try {
     const auth = await authorize(request);
 
@@ -195,9 +153,7 @@ export async function GET(
       );
     }
 
-    const payments = await readAllPayments(
-      auth.client
-    );
+    const payments = await readAllPayments(auth.client);
 
     let pendingAmount = 0;
     let approvedAmount = 0;
@@ -210,9 +166,7 @@ export async function GET(
     let rejectedCount = 0;
 
     for (const payment of payments) {
-      const value = Number(
-        payment.amount || 0
-      );
+      const value = Number(payment.amount || 0);
 
       const safeAmount =
         Number.isFinite(value) ? value : 0;
@@ -258,34 +212,20 @@ export async function GET(
           rejectedAmount,
         },
 
-        payments: payments.map(
-          (payment) => ({
-            id: payment.id,
-            affiliateId:
-              payment.affiliate_id,
-            amount: Number(
-              payment.amount
-            ),
-            currency:
-              payment.currency,
-            paymentMethod:
-              payment.payment_method,
-            paymentAddress:
-              payment.payment_address,
-            status:
-              payment.status,
-            adminNote:
-              payment.admin_note,
-            requestedAt:
-              payment.requested_at,
-            processedAt:
-              payment.processed_at,
-            createdAt:
-              payment.created_at,
-            updatedAt:
-              payment.updated_at,
-          })
-        ),
+        payments: payments.map((payment) => ({
+          id: payment.id,
+          affiliateId: payment.affiliate_id,
+          amount: Number(payment.amount),
+          currency: payment.currency,
+          paymentMethod: payment.payment_method,
+          paymentAddress: payment.payment_address,
+          status: payment.status,
+          adminNote: payment.admin_note,
+          requestedAt: payment.requested_at,
+          processedAt: payment.processed_at,
+          createdAt: payment.created_at,
+          updatedAt: payment.updated_at,
+        })),
       },
       {
         headers: {
@@ -295,10 +235,7 @@ export async function GET(
       }
     );
   } catch (error) {
-    console.error(
-      "Admin payments GET error:",
-      error
-    );
+    console.error("Admin payments GET error:", error);
 
     return respond(
       false,
@@ -308,9 +245,7 @@ export async function GET(
   }
 }
 
-export async function PATCH(
-  request: NextRequest
-) {
+export async function PATCH(request: NextRequest) {
   try {
     const auth = await authorize(request);
 
@@ -325,8 +260,7 @@ export async function PATCH(
     let body: Record<string, unknown>;
 
     try {
-      const parsed: unknown =
-        await request.json();
+      const parsed: unknown = await request.json();
 
       if (
         !parsed ||
@@ -340,10 +274,7 @@ export async function PATCH(
         );
       }
 
-      body = parsed as Record<
-        string,
-        unknown
-      >;
+      body = parsed as Record<string, unknown>;
     } catch {
       return respond(
         false,
@@ -395,29 +326,22 @@ export async function PATCH(
       );
     }
 
-    // Use the verified admin's JWT.
-    // The database function checks
-    // auth.uid() and the admin email.
+    // Preserve the authenticated admin's identity
+    // for the database permission check.
     const affiliateClient =
       getAffiliateClient(auth.token);
 
-    const {
-      data,
-      error,
-    } = await affiliateClient.rpc(
+    const { data, error } = await affiliateClient.rpc(
       "admin_update_payment_status",
       {
         p_request_id: requestId,
         p_new_status: status,
-        p_admin_note:
-          adminNote || null,
+        p_admin_note: adminNote || null,
       }
     );
 
     if (error) {
-      const message = String(
-        error.message || ""
-      );
+      const message = String(error.message || "");
 
       if (
         message.includes(
@@ -431,11 +355,7 @@ export async function PATCH(
         );
       }
 
-      if (
-        message.includes(
-          "Payment request not found"
-        )
-      ) {
+      if (message.includes("Payment request not found")) {
         return respond(
           false,
           "Payment request not found.",
@@ -443,11 +363,7 @@ export async function PATCH(
         );
       }
 
-      if (
-        message.includes(
-          "Admin access required"
-        )
-      ) {
+      if (message.includes("Admin access required")) {
         return respond(
           false,
           "Admin access required.",
@@ -471,8 +387,7 @@ export async function PATCH(
     return NextResponse.json(
       {
         success: true,
-        message:
-          "Payment status updated successfully.",
+        message: "Payment status updated successfully.",
         result: data,
       },
       {
@@ -482,10 +397,7 @@ export async function PATCH(
       }
     );
   } catch (error) {
-    console.error(
-      "Admin payments PATCH error:",
-      error
-    );
+    console.error("Admin payments PATCH error:", error);
 
     return respond(
       false,
