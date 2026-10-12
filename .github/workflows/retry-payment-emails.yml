@@ -1,0 +1,67 @@
+name: Retry payment emails
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: payment-email-retry
+  cancel-in-progress: false
+
+jobs:
+  retry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    env:
+      PAYMENT_EMAIL_JOB_SECRET: ${{ secrets.PAYMENT_EMAIL_JOB_SECRET }}
+
+    steps:
+      - name: Process pending payment emails
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          secret = os.environ.get("PAYMENT_EMAIL_JOB_SECRET", "").strip()
+
+          if len(secret) < 32:
+              raise SystemExit("PAYMENT_EMAIL_JOB_SECRET is missing or too short.")
+
+          request = urllib.request.Request(
+              "https://upnetworkcpa.com/api/jobs/payment-emails",
+              method="POST",
+              headers={
+                  "Authorization": "Bearer " + secret,
+                  "Accept": "application/json",
+              },
+          )
+
+          try:
+              with urllib.request.urlopen(request, timeout=65) as response:
+                  result = json.load(response)
+          except urllib.error.HTTPError as error:
+              raise SystemExit(
+                  "Payment email endpoint returned HTTP " + str(error.code)
+              )
+          except Exception:
+              raise SystemExit(
+                  "Could not complete the payment email job request."
+              )
+
+          print(json.dumps(result, indent=2))
+
+          if result.get("success") is not True:
+              raise SystemExit("Payment email job did not succeed.")
+
+          if result.get("failed", 0) > 0:
+              raise SystemExit(
+                  "Some payment emails failed. Check Vercel logs and Resend."
+              )
+          PY
