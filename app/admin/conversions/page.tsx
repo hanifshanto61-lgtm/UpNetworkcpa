@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
@@ -13,8 +12,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-
-const ADMIN_EMAIL = "islamhanif122@gmail.com";
+import { verifyAdminAccess } from "@/lib/admin-access";
 
 type Click = {
   id: string | null;
@@ -49,7 +47,9 @@ function money(value: number | string | null) {
 
 function dateTime(value: string | null) {
   if (!value) return "—";
+
   const date = new Date(value);
+
   return Number.isNaN(date.getTime())
     ? "—"
     : date.toLocaleString("en-US");
@@ -65,7 +65,9 @@ export default function AdminConversionsPage() {
   const [clicks, setClicks] = useState<Click[]>([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
-  const [payouts, setPayouts] = useState<Record<string, string>>({});
+  const [payouts, setPayouts] = useState<
+    Record<string, string>
+  >({});
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -81,13 +83,12 @@ export default function AdminConversionsPage() {
     } = await supabase.auth.getSession();
 
     if (sessionError || !session?.access_token) {
-      throw new Error("Session expired. Please log in again.");
+      throw new Error(
+        "Session expired. Please log in again."
+      );
     }
 
-    if (
-      session.user.email?.toLowerCase() !==
-      ADMIN_EMAIL.toLowerCase()
-    ) {
+    if (!(await verifyAdminAccess(session.access_token))) {
       throw new Error("Administrator access required.");
     }
 
@@ -160,7 +161,7 @@ export default function AdminConversionsPage() {
       }
     }
 
-    initialize();
+    void initialize();
 
     return () => {
       active = false;
@@ -299,7 +300,9 @@ export default function AdminConversionsPage() {
             className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
           >
             <RefreshCw
-              className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+              className={`h-4 w-4 ${
+                loading ? "animate-spin" : ""
+              }`}
             />
             Refresh
           </button>
@@ -351,10 +354,12 @@ export default function AdminConversionsPage() {
               </label>
               <input
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={(event) =>
+                  setSearch(event.target.value)
+                }
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
-                    loadClicks(search, filter);
+                    void loadClicks(search, filter);
                   }
                 }}
                 placeholder="Enter Click ID or Affiliate ID"
@@ -371,7 +376,7 @@ export default function AdminConversionsPage() {
                 onChange={(event) => {
                   const next = event.target.value;
                   setFilter(next);
-                  loadClicks(search, next);
+                  void loadClicks(search, next);
                 }}
                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm"
               >
@@ -448,7 +453,9 @@ export default function AdminConversionsPage() {
                   {clicks.map((click, index) => {
                     const converted = isConverted(click);
                     const clickId = click.click_id || "";
-                    const status = (click.status || "").toLowerCase();
+                    const status = (
+                      click.status || ""
+                    ).toLowerCase();
 
                     const eligible =
                       !converted &&
@@ -520,7 +527,9 @@ export default function AdminConversionsPage() {
                         <td className="px-5 py-4">
                           {eligible ? (
                             <button
-                              onClick={() => approveConversion(click)}
+                              onClick={() =>
+                                approveConversion(click)
+                              }
                               disabled={savingId !== null}
                               className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
                             >
@@ -530,7 +539,9 @@ export default function AdminConversionsPage() {
                             </button>
                           ) : (
                             <span className="text-xs text-slate-400">
-                              {converted ? "Completed" : "Unavailable"}
+                              {converted
+                                ? "Completed"
+                                : "Unavailable"}
                             </span>
                           )}
                         </td>
