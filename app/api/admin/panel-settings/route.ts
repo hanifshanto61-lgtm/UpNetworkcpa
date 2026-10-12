@@ -1,116 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { getAdminSession } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
-const ADMIN_EMAIL = "islamhanif122@gmail.com";
-
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY =
-  process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-function getSupabaseAdmin() {
-  if (!SUPABASE_URL) {
-    throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL");
-  }
-
-  if (!SUPABASE_SERVICE_ROLE_KEY) {
-    throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY");
-  }
-
-  return createClient(
-    SUPABASE_URL,
-    SUPABASE_SERVICE_ROLE_KEY,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    }
-  );
-}
-
 async function verifyAdmin(request: NextRequest) {
-  const authorization =
-    request.headers.get("authorization");
+  const session = await getAdminSession(request);
 
-  if (!authorization) {
+  if (!session) {
     return {
       error: NextResponse.json(
         {
           success: false,
-          error: "Missing authorization header",
+          error: "Active admin access required",
         },
         { status: 401 }
-      ),
-    };
-  }
-
-  const token = authorization
-    .replace(/^Bearer\s+/i, "")
-    .trim();
-
-  if (!token) {
-    return {
-      error: NextResponse.json(
-        {
-          success: false,
-          error: "Missing access token",
-        },
-        { status: 401 }
-      ),
-    };
-  }
-
-  const supabase = getSupabaseAdmin();
-
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser(token);
-
-  if (userError || !user) {
-    console.error(
-      "Admin panel settings authentication error:",
-      userError
-    );
-
-    return {
-      error: NextResponse.json(
-        {
-          success: false,
-          error: "Invalid or expired authentication token",
-        },
-        { status: 401 }
-      ),
-    };
-  }
-
-  if (
-    user.email?.toLowerCase() !==
-    ADMIN_EMAIL.toLowerCase()
-  ) {
-    return {
-      error: NextResponse.json(
-        {
-          success: false,
-          error: "Admin access required",
-        },
-        { status: 403 }
       ),
     };
   }
 
   return {
-    supabase,
-    user,
+    supabase: session.client,
   };
 }
 
-/**
- * GET
- * Load all Affiliate Panel feature settings.
- */
+// GET: Load affiliate panel feature settings.
 export async function GET(request: NextRequest) {
   try {
     const auth = await verifyAdmin(request);
@@ -121,11 +34,7 @@ export async function GET(request: NextRequest) {
 
     const { supabase } = auth;
 
-    const {
-      data,
-      error,
-      count,
-    } = await supabase
+    const { data, error, count } = await supabase
       .from("affiliate_panel_settings")
       .select(
         `
@@ -137,9 +46,7 @@ export async function GET(request: NextRequest) {
           display_order,
           updated_at
         `,
-        {
-          count: "exact",
-        }
+        { count: "exact" }
       )
       .order("display_order", {
         ascending: true,
@@ -163,11 +70,6 @@ export async function GET(request: NextRequest) {
         { status: 500 }
       );
     }
-
-    console.log(
-      "Admin panel settings loaded:",
-      count ?? data?.length ?? 0
-    );
 
     return NextResponse.json(
       {
@@ -199,10 +101,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/**
- * PATCH
- * Turn an Affiliate Panel feature ON or OFF.
- */
+// PATCH: Turn an affiliate panel feature ON or OFF.
 export async function PATCH(request: NextRequest) {
   try {
     const auth = await verifyAdmin(request);
@@ -255,10 +154,7 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const {
-      data,
-      error,
-    } = await supabase
+    const { data, error } = await supabase
       .from("affiliate_panel_settings")
       .update({
         enabled: body.enabled,
@@ -300,19 +196,12 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "Feature setting was not found",
+          error: "Feature setting was not found",
           feature_key: featureKey,
         },
         { status: 404 }
       );
     }
-
-    console.log(
-      "Affiliate panel feature updated:",
-      featureKey,
-      body.enabled
-    );
 
     return NextResponse.json(
       {
