@@ -1,3 +1,4 @@
+
 "use client";
 
 import { FormEvent, useState } from "react";
@@ -24,8 +25,6 @@ import {
   Zap,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-
-const ADMIN_EMAIL = "islamhanif122@gmail.com";
 
 function BrandLogo({ light = false }: { light?: boolean }) {
   return (
@@ -105,14 +104,41 @@ export default function LoginPage() {
         });
 
       if (loginError) throw loginError;
-      if (!data.user) throw new Error("Login failed. Please try again.");
 
-      if (data.user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
-        router.replace("/admin");
-      } else {
-        router.replace("/affiliate");
+      if (!data.user || !data.session?.access_token) {
+        throw new Error("Login failed. Please try again.");
       }
 
+      const accessToken = data.session.access_token;
+
+      const adminResponse = await fetch("/api/admin/me", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        cache: "no-store",
+      });
+
+      if (adminResponse.ok) {
+        const adminData = await adminResponse.json();
+
+        const role = adminData?.admin?.role;
+
+        if (
+          adminData?.success === true &&
+          (role === "super_admin" || role === "sub_admin")
+        ) {
+          router.replace("/admin");
+          router.refresh();
+          return;
+        }
+      } else if (adminResponse.status !== 401) {
+        throw new Error(
+          "Unable to verify account role. Please try again."
+        );
+      }
+
+      router.replace("/affiliate");
       router.refresh();
     } catch (err) {
       setError(
