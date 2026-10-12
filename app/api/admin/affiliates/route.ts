@@ -1,10 +1,10 @@
+
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { sendAffiliateEmail } from "@/lib/send-email";
+import { getAdminSession } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
-
-const ADMIN_EMAIL = "islamhanif122@gmail.com";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -66,7 +66,12 @@ function jsonError(
       message,
       ...(details ? { details } : {}),
     },
-    { status }
+    {
+      status,
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    }
   );
 }
 
@@ -75,36 +80,65 @@ function jsonError(
 ========================================= */
 
 async function getAdminUser(request: NextRequest) {
+  const session = await getAdminSession(request);
+
+  if (!session) {
+    return null;
+  }
+
+  return {
+    id: session.userId,
+    email: session.email,
+    role: session.role,
+  };
+}
+
+/* =========================================
+   ADMIN ACCOUNT PROTECTION
+========================================= */
+
+async function getProtectedAdminIds(): Promise<Set<string>> {
   if (!supabaseAdmin) {
-    return null;
+    throw new Error("Supabase is not configured.");
   }
 
-  const authorization = request.headers.get("authorization");
+  const adminIds = new Set<string>();
+  let page = 0;
 
-  if (!authorization?.startsWith("Bearer ")) {
-    return null;
+  while (true) {
+    const from = page * 1000;
+
+    const { data, error } = await supabaseAdmin
+      .from("admin_roles")
+      .select("user_id")
+      .range(from, from + 999);
+
+    if (error) {
+      throw new Error(
+        `Unable to verify admin accounts: ${error.message}`
+      );
+    }
+
+    const rows = data || [];
+
+    for (const row of rows) {
+      adminIds.add(String(row.user_id));
+    }
+
+    if (rows.length < 1000) {
+      break;
+    }
+
+    page++;
+
+    if (page > 100) {
+      throw new Error(
+        "Admin protection list exceeded the supported limit."
+      );
+    }
   }
 
-  const accessToken = authorization.slice(7).trim();
-
-  if (!accessToken) {
-    return null;
-  }
-
-  const { data, error } =
-    await supabaseAdmin.auth.getUser(accessToken);
-
-  if (error || !data.user) {
-    return null;
-  }
-
-  const email = data.user.email?.trim().toLowerCase();
-
-  if (email !== ADMIN_EMAIL.toLowerCase()) {
-    return null;
-  }
-
-  return data.user;
+  return adminIds;
 }
 
 /* =========================================
@@ -191,6 +225,9 @@ export async function GET(request: NextRequest) {
     if (!admin) {
       return jsonError("Unauthorized.", 401);
     }
+
+    const protectedAdminIds =
+      await getProtectedAdminIds();
 
     const requestedStatus = clean(
       request.nextUrl.searchParams.get("status")
@@ -283,6 +320,12 @@ export async function GET(request: NextRequest) {
 
     const allAffiliates = users
       .filter((user) => {
+        /* NEVER SHOW ADMIN ACCOUNTS */
+
+        if (protectedAdminIds.has(String(user.id))) {
+          return false;
+        }
+
         const metadata = user.user_metadata || {};
         const profile = profileMap.get(String(user.id));
 
@@ -290,7 +333,10 @@ export async function GET(request: NextRequest) {
           metadata.account_type || profile?.account_type
         ).toLowerCase();
 
-        return accountType === "affiliate" || Boolean(profile);
+        return (
+          accountType === "affiliate" ||
+          Boolean(profile)
+        );
       })
       .map((user) => {
         const metadata = user.user_metadata || {};
@@ -720,9 +766,7 @@ export async function POST(request: NextRequest) {
       );
 
       /*
-       * Roll back only the new Auth account created
-       * by this request.
-       *
+       * Roll back only the newly created Auth account.
        * Never delete an existing affiliate account.
        */
 
@@ -879,6 +923,18 @@ export async function PATCH(request: NextRequest) {
 
     const newStatus =
       requestedStatus as AffiliateStatus;
+
+    /* PROTECT ALL ADMIN ACCOUNTS */
+
+    const protectedAdminIds =
+      await getProtectedAdminIds();
+
+    if (protectedAdminIds.has(userId)) {
+      return jsonError(
+        "Admin accounts cannot be modified through the Affiliate API.",
+        403
+      );
+    }
 
     /* LOAD AUTH USER */
 
