@@ -28,7 +28,6 @@ import {
   Moon,
   Zap,
   ShieldCheck,
-  Bot,
   Send,
   HelpCircle,
 } from "lucide-react";
@@ -1726,7 +1725,31 @@ type ChatMessage = {
   sender: "bot" | "user";
   text: string;
 };
+function UpNetworkLogo({ size = 32 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 192 192"
+      xmlns="http://www.w3.org/2000/svg"
+      role="img"
+      aria-label="UpNetwork CPA"
+      className="shrink-0 rounded-full"
+    >
+      <rect width="192" height="192" rx="96" fill="#0B1225" />
 
+      <path
+        d="M36 42H65V111C65 132 77 145 96 145C115 145 127 132 127 111V71H156V111C156 150 132 174 96 174C60 174 36 150 36 111Z"
+        fill="#2563EB"
+      />
+
+      <path
+        d="M135 22L174 66H151C143 118 113 145 64 149L54 132C97 125 121 103 126 66H103Z"
+        fill="#10D9B0"
+      />
+    </svg>
+  );
+}
 function SupportChatBot({
   dark,
   router,
@@ -2016,7 +2039,7 @@ function SupportChatBot({
           className="fixed bottom-5 right-5 z-[90] flex items-center gap-3 rounded-full bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-3.5 text-sm font-bold text-white shadow-2xl shadow-cyan-500/30 transition hover:-translate-y-1 hover:shadow-cyan-500/40"
         >
           <span className="relative flex h-8 w-8 items-center justify-center rounded-full bg-white/15">
-            <Bot size={19} />
+            <UpNetworkLogo size={32} />
             <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-cyan-500" />
           </span>
 
@@ -2042,7 +2065,7 @@ function SupportChatBot({
             <div className="relative flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15">
-                  <Bot size={22} />
+              sizeUpNetworkLogo size={44} />
                 </div>
 
                 <div>
@@ -2081,7 +2104,7 @@ function SupportChatBot({
               >
                 {message.sender === "bot" && (
                   <div className="mr-2 mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-cyan-500/10 text-cyan-500">
-                    <Bot size={14} />
+                    <UpNetworkLogo size={28} />
                   </div>
                 )}
 
