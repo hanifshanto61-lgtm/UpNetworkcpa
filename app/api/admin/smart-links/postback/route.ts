@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { getAdminSession } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const ADMIN_EMAIL = "islamhanif122@gmail.com";
 const POSTBACK_ENDPOINT =
   "https://upnetworkcpa.com/api/postback/smartlink";
 
@@ -48,6 +47,7 @@ function formatSetting(setting: Setting | null) {
   if (!setting) return null;
 
   const url = new URL(POSTBACK_ENDPOINT);
+
   url.searchParams.set("sl_id", setting.smartlink_id);
   url.searchParams.set("token", setting.postback_secret);
 
@@ -62,55 +62,35 @@ function formatSetting(setting: Setting | null) {
 }
 
 async function authorize(request: NextRequest) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url || !key) {
-    throw new Error("Server configuration missing.");
-  }
-
-  const header = request.headers.get("authorization") || "";
-
-  if (!header.startsWith("Bearer ")) return null;
-
-  const token = header.slice(7).trim();
-  if (!token) return null;
-
-  const client = createClient(url, key, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
-
-  const { data, error } = await client.auth.getUser(token);
-
-  if (
-    error ||
-    data.user?.email?.toLowerCase() !== ADMIN_EMAIL
-  ) {
-    return null;
-  }
-
-  return client;
+  const session = await getAdminSession(request);
+  return session?.client ?? null;
 }
 
+// GET: Load Smart Link postback settings.
 export async function GET(request: NextRequest) {
   try {
     const client = await authorize(request);
 
     if (!client) {
       return reply(
-        { success: false, message: "Admin access required." },
+        {
+          success: false,
+          message: "Admin access required.",
+        },
         401
       );
     }
 
-    const id = (request.nextUrl.searchParams.get("id") || "").trim();
+    const id = (
+      request.nextUrl.searchParams.get("id") || ""
+    ).trim();
 
     if (!validId(id)) {
       return reply(
-        { success: false, message: "Invalid Smart Link ID." },
+        {
+          success: false,
+          message: "Invalid Smart Link ID.",
+        },
         400
       );
     }
@@ -126,7 +106,10 @@ export async function GET(request: NextRequest) {
 
     if (!link) {
       return reply(
-        { success: false, message: "Smart Link not found." },
+        {
+          success: false,
+          message: "Smart Link not found.",
+        },
         404
       );
     }
@@ -145,19 +128,26 @@ export async function GET(request: NextRequest) {
     });
   } catch {
     return reply(
-      { success: false, message: "Unable to load postback settings." },
+      {
+        success: false,
+        message: "Unable to load postback settings.",
+      },
       500
     );
   }
 }
 
+// POST: Save Smart Link postback settings.
 export async function POST(request: NextRequest) {
   try {
     const client = await authorize(request);
 
     if (!client) {
       return reply(
-        { success: false, message: "Admin access required." },
+        {
+          success: false,
+          message: "Admin access required.",
+        },
         401
       );
     }
@@ -178,13 +168,18 @@ export async function POST(request: NextRequest) {
       body = parsed as Record<string, unknown>;
     } catch {
       return reply(
-        { success: false, message: "Invalid request body." },
+        {
+          success: false,
+          message: "Invalid request body.",
+        },
         400
       );
     }
 
     const id =
-      typeof body.id === "string" ? body.id.trim() : "";
+      typeof body.id === "string"
+        ? body.id.trim()
+        : "";
 
     const parameter =
       typeof body.click_id_parameter === "string"
@@ -199,7 +194,8 @@ export async function POST(request: NextRequest) {
       return reply(
         {
           success: false,
-          message: "Invalid Smart Link, enabled flag, or Click ID parameter.",
+          message:
+            "Invalid Smart Link, enabled flag, or Click ID parameter.",
         },
         400
       );
@@ -216,16 +212,20 @@ export async function POST(request: NextRequest) {
 
     if (!link) {
       return reply(
-        { success: false, message: "Smart Link not found." },
+        {
+          success: false,
+          message: "Smart Link not found.",
+        },
         404
       );
     }
 
-    const { data: existing, error: lookupError } = await client
-      .from("smartlink_postback_settings")
-      .select("smartlink_id")
-      .eq("smartlink_id", id)
-      .maybeSingle();
+    const { data: existing, error: lookupError } =
+      await client
+        .from("smartlink_postback_settings")
+        .select("smartlink_id")
+        .eq("smartlink_id", id)
+        .maybeSingle();
 
     if (lookupError) throw lookupError;
 
@@ -243,8 +243,8 @@ export async function POST(request: NextRequest) {
           ...changes,
         });
 
-      // If two requests create settings simultaneously,
-      // keep the existing secret and update settings below.
+      // Preserve the existing secret if simultaneous
+      // requests attempt to create the same settings.
       if (insertError && insertError.code !== "23505") {
         throw insertError;
       }
@@ -266,7 +266,10 @@ export async function POST(request: NextRequest) {
     });
   } catch {
     return reply(
-      { success: false, message: "Unable to save postback settings." },
+      {
+        success: false,
+        message: "Unable to save postback settings.",
+      },
       500
     );
   }
