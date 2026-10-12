@@ -20,6 +20,7 @@ import {
   Copy,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { verifyAdminAccess } from "@/lib/admin-access";
 
 type Status = "pending" | "approved" | "rejected" | "paid";
 
@@ -59,8 +60,6 @@ const EMPTY_STATS: Stats = {
   paidAmount: 0,
   rejectedAmount: 0,
 };
-
-const ADMIN_EMAIL = "islamhanif122@gmail.com";
 
 const money = (value: number) =>
   `$${Number(value || 0).toFixed(2)}`;
@@ -102,9 +101,7 @@ export default function AdminPaymentsPage() {
       throw new Error("Please log in as admin.");
     }
 
-    if (
-      data.session.user.email?.toLowerCase() !== ADMIN_EMAIL
-    ) {
+    if (!(await verifyAdminAccess(data.session.access_token))) {
       throw new Error("Admin access required.");
     }
 
@@ -218,10 +215,7 @@ export default function AdminPaymentsPage() {
       }
 
       await loadPayments();
-
-      setMessage(
-        `Payment request updated to ${newStatus}.`
-      );
+      setMessage(`Payment request updated to ${newStatus}.`);
     } catch (err) {
       setError(
         err instanceof Error
@@ -358,7 +352,9 @@ export default function AdminPaymentsPage() {
                 key={card.label}
                 className={`rounded-2xl border border-slate-200 p-5 ${card.bg}`}
               >
-                <div className={`flex items-center justify-between ${card.color}`}>
+                <div
+                  className={`flex items-center justify-between ${card.color}`}
+                >
                   <span className="font-semibold">
                     {card.label}
                   </span>
@@ -384,8 +380,7 @@ export default function AdminPaymentsPage() {
                 Withdrawal Requests
               </h2>
               <p className="text-sm text-slate-500">
-                {filtered.length} shown •{" "}
-                {stats.totalRequests} total
+                {filtered.length} shown • {stats.totalRequests} total
               </p>
             </div>
 
@@ -492,9 +487,7 @@ export default function AdminPaymentsPage() {
                         <button
                           type="button"
                           onClick={() =>
-                            void copyAddress(
-                              payment.paymentAddress
-                            )
+                            void copyAddress(payment.paymentAddress)
                           }
                           aria-label="Copy payment address"
                           className="rounded-lg bg-white p-3"
@@ -527,8 +520,7 @@ export default function AdminPaymentsPage() {
                         onChange={(event) =>
                           setNotes((current) => ({
                             ...current,
-                            [payment.id]:
-                              event.target.value,
+                            [payment.id]: event.target.value,
                           }))
                         }
                         placeholder="Optional payment note"
@@ -543,10 +535,7 @@ export default function AdminPaymentsPage() {
                         type="button"
                         disabled={Boolean(busyId)}
                         onClick={() =>
-                          void updateStatus(
-                            payment,
-                            "approved"
-                          )
+                          void updateStatus(payment, "approved")
                         }
                         className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
                       >
@@ -560,10 +549,7 @@ export default function AdminPaymentsPage() {
                         type="button"
                         disabled={Boolean(busyId)}
                         onClick={() =>
-                          void updateStatus(
-                            payment,
-                            "paid"
-                          )
+                          void updateStatus(payment, "paid")
                         }
                         className="flex items-center gap-2 rounded-xl bg-green-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
                       >
@@ -578,10 +564,7 @@ export default function AdminPaymentsPage() {
                         type="button"
                         disabled={Boolean(busyId)}
                         onClick={() =>
-                          void updateStatus(
-                            payment,
-                            "rejected"
-                          )
+                          void updateStatus(payment, "rejected")
                         }
                         className="flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
                       >
@@ -611,8 +594,7 @@ export default function AdminPaymentsPage() {
 
                   {payment.processedAt && (
                     <p className="mt-4 text-xs text-slate-500">
-                      Last processed:{" "}
-                      {dateText(payment.processedAt)}
+                      Last processed: {dateText(payment.processedAt)}
                     </p>
                   )}
                 </article>
