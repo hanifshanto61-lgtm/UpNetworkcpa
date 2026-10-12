@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { getAdminSession } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const ADMIN_EMAIL = "islamhanif122@gmail.com";
 const PAGE_SIZE = 1000;
 const MAX_ROWS = 100000;
 
@@ -25,57 +24,33 @@ function converted(click: Click) {
   );
 }
 
-function reply(data: Record<string, unknown>, status = 200) {
+function reply(
+  data: Record<string, unknown>,
+  status = 200
+) {
   return NextResponse.json(data, {
     status,
-    headers: { "Cache-Control": "no-store" },
+    headers: {
+      "Cache-Control": "no-store",
+    },
   });
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const session = await getAdminSession(request);
 
-    if (!url || !key) {
-      return reply({
-        success: false,
-        error: "Supabase configuration missing.",
-      }, 500);
+    if (!session) {
+      return reply(
+        {
+          success: false,
+          error: "Admin access required.",
+        },
+        401
+      );
     }
 
-    const token = request.headers
-      .get("authorization")
-      ?.replace(/^Bearer\s+/i, "")
-      .trim();
-
-    if (!token) {
-      return reply({
-        success: false,
-        error: "Authentication required.",
-      }, 401);
-    }
-
-    const supabase = createClient(url, key, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
-
-    const { data: auth, error: authError } =
-      await supabase.auth.getUser(token);
-
-    if (
-      authError ||
-      !auth.user ||
-      auth.user.email?.toLowerCase() !== ADMIN_EMAIL
-    ) {
-      return reply({
-        success: false,
-        error: "Admin access required.",
-      }, 403);
-    }
+    const supabase = session.client;
 
     const params = request.nextUrl.searchParams;
     const from = params.get("from") || "";
@@ -91,10 +66,13 @@ export async function GET(request: NextRequest) {
       !validDate(to) ||
       (from && to && from > to)
     ) {
-      return reply({
-        success: false,
-        error: "Invalid date range.",
-      }, 400);
+      return reply(
+        {
+          success: false,
+          error: "Invalid date range.",
+        },
+        400
+      );
     }
 
     const rows: Click[] = [];
@@ -106,7 +84,9 @@ export async function GET(request: NextRequest) {
         .select(
           "affiliate_id,status,payout,converted_at,created_at"
         )
-        .order("created_at", { ascending: false })
+        .order("created_at", {
+          ascending: false,
+        })
         .range(offset, offset + PAGE_SIZE - 1);
 
       if (from) {
@@ -130,24 +110,32 @@ export async function GET(request: NextRequest) {
 
       if (error) {
         console.error("Statistics query error:", error);
-        return reply({
-          success: false,
-          error: "Unable to load statistics.",
-        }, 500);
+
+        return reply(
+          {
+            success: false,
+            error: "Unable to load statistics.",
+          },
+          500
+        );
       }
 
       const page = (data || []) as Click[];
       rows.push(...page);
 
       if (rows.length >= MAX_ROWS) {
-        return reply({
-          success: false,
-          error:
-            "Too many records for this report. Select a smaller date range.",
-        }, 413);
+        return reply(
+          {
+            success: false,
+            error:
+              "Too many records for this report. Select a smaller date range.",
+          },
+          413
+        );
       }
 
       if (page.length < PAGE_SIZE) break;
+
       offset += PAGE_SIZE;
     }
 
@@ -182,6 +170,7 @@ export async function GET(request: NextRequest) {
 
       if (converted(click)) {
         const payout = Number(click.payout || 0);
+
         const amount = Number.isFinite(payout)
           ? payout
           : 0;
@@ -226,14 +215,20 @@ export async function GET(request: NextRequest) {
           : 0,
       },
       affiliates,
-      period: { from, to },
+      period: {
+        from,
+        to,
+      },
     });
   } catch (error) {
     console.error("Admin statistics error:", error);
 
-    return reply({
-      success: false,
-      error: "Statistics request failed.",
-    }, 500);
+    return reply(
+      {
+        success: false,
+        error: "Statistics request failed.",
+      },
+      500
+    );
   }
 }
