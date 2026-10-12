@@ -1,15 +1,19 @@
 "use client";
 
 import { Bell, CheckCheck, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useAffiliateNotifications } from "./notification-context";
 
 export default function NotificationBell() {
+  const router = useRouter();
+
   const {
     notifications,
     unreadCount,
     markAsRead,
     markAllAsRead,
     removeNotification,
+    syncError,
   } = useAffiliateNotifications();
 
   const recentNotifications = notifications.slice(0, 8);
@@ -58,89 +62,123 @@ export default function NotificationBell() {
             )}
           </div>
 
+          {syncError && (
+            <div
+              role="alert"
+              className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300"
+            >
+              {syncError}
+            </div>
+          )}
+
           <div className="max-h-[420px] overflow-y-auto">
             {recentNotifications.length === 0 ? (
               <div className="px-5 py-10 text-center">
                 <Bell className="mx-auto mb-3 h-9 w-9 text-gray-300 dark:text-gray-600" />
 
                 <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  No notifications
+                  {syncError
+                    ? "Notifications could not be synced"
+                    : "No notifications"}
                 </p>
 
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-500">
-                  New leads and offers will appear here.
+                  {syncError
+                    ? "The panel will retry automatically."
+                    : "New payments, leads and offers will appear here."}
                 </p>
               </div>
             ) : (
-              recentNotifications.map((notification) => (
-                <div
-                  key={notification.id}
-                  className={`relative border-b border-gray-100 px-4 py-3 transition dark:border-white/5 ${
-                    notification.read
-                      ? "bg-white dark:bg-[#111827]"
-                      : "bg-blue-50/70 dark:bg-blue-500/5"
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() =>
-                      removeNotification(notification.id)
-                    }
-                    className="absolute right-2 top-2 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/10 dark:hover:text-white"
-                    aria-label="Remove notification"
+              recentNotifications.map((notification) => {
+                const payment =
+                  notification.data?.kind === "payment";
+
+                const icon = payment
+                  ? "💳"
+                  : notification.type === "lead"
+                    ? "💰"
+                    : notification.type === "offer"
+                      ? "🎁"
+                      : "🔔";
+
+                const iconColor = payment
+                  ? "bg-blue-100 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400"
+                  : notification.type === "lead"
+                    ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
+                    : notification.type === "offer"
+                      ? "bg-purple-100 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400"
+                      : "bg-blue-100 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400";
+
+                return (
+                  <div
+                    key={notification.id}
+                    className={`relative border-b border-gray-100 px-4 py-3 transition dark:border-white/5 ${
+                      notification.read
+                        ? "bg-white dark:bg-[#111827]"
+                        : "bg-blue-50/70 dark:bg-blue-500/5"
+                    }`}
                   >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        removeNotification(notification.id)
+                      }
+                      className="absolute right-2 top-2 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/10 dark:hover:text-white"
+                      aria-label="Remove notification"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
 
-                  <button
-                    type="button"
-                    onClick={() =>
-                      markAsRead(notification.id)
-                    }
-                    className="w-full pr-5 text-left"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div
-                        className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm ${
-                          notification.type === "lead"
-                            ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
-                            : notification.type === "offer"
-                              ? "bg-purple-100 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400"
-                              : "bg-blue-100 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400"
-                        }`}
-                      >
-                        {notification.type === "lead"
-                          ? "💰"
-                          : notification.type === "offer"
-                            ? "🎁"
-                            : "🔔"}
-                      </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        markAsRead(notification.id);
 
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
-                            {notification.title}
-                          </p>
-
-                          {!notification.read && (
-                            <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />
-                          )}
+                        if (payment) {
+                          router.push("/affiliate/payments");
+                        }
+                      }}
+                      className="w-full pr-5 text-left"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm ${iconColor}`}
+                        >
+                          {icon}
                         </div>
 
-                        <p className="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-400">
-                          {notification.message}
-                        </p>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="truncate text-sm font-semibold text-gray-900 dark:text-white">
+                              {notification.title}
+                            </p>
 
-                        <p className="mt-1.5 text-[10px] text-gray-400 dark:text-gray-500">
-                          {new Date(
-                            notification.createdAt
-                          ).toLocaleString()}
-                        </p>
+                            {!notification.read && (
+                              <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />
+                            )}
+                          </div>
+
+                          <p className="mt-1 text-xs leading-5 text-gray-600 dark:text-gray-400">
+                            {notification.message}
+                          </p>
+
+                          {payment && (
+                            <p className="mt-1 text-xs font-medium text-blue-600 dark:text-blue-400">
+                              View payment history →
+                            </p>
+                          )}
+
+                          <p className="mt-1.5 text-[10px] text-gray-400 dark:text-gray-500">
+                            {new Date(
+                              notification.createdAt
+                            ).toLocaleString()}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  </button>
-                </div>
-              ))
+                    </button>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
