@@ -1,10 +1,10 @@
+
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getAdminSession } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-const ADMIN_EMAIL = "islamhanif122@gmail.com";
 
 function adminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -27,26 +27,13 @@ type Client = ReturnType<typeof adminClient>;
 async function authenticate(
   req: NextRequest
 ): Promise<Client | null> {
-  const header = req.headers.get("authorization") || "";
+  const session = await getAdminSession(req);
 
-  if (!header.startsWith("Bearer ")) return null;
-
-  const token = header.slice(7).trim();
-
-  if (!token) return null;
-
-  const client = adminClient();
-
-  const { data, error } = await client.auth.getUser(token);
-
-  if (
-    error ||
-    data.user?.email?.toLowerCase() !== ADMIN_EMAIL
-  ) {
+  if (!session) {
     return null;
   }
 
-  return client;
+  return session.client;
 }
 
 function response(message: string, status: number) {
