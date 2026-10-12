@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getAdminSession } from "@/lib/admin-auth";
+import { processPaymentEmail } from "@/lib/payment-notifications";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const PAGE_SIZE = 1000;
 
@@ -326,8 +328,7 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // Preserve the authenticated admin's identity
-    // for the database permission check.
+    // Keep the admin's identity for database authorization.
     const affiliateClient =
       getAffiliateClient(auth.token);
 
@@ -384,11 +385,34 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    // The Paid transaction has already committed.
+    // Its trigger created the notification record.
+    const email =
+      status === "paid"
+        ? await processPaymentEmail(
+            auth.client,
+            requestId
+          )
+        : null;
+
+    if (email?.error) {
+      console.error(
+        "Payment email notification:",
+        requestId,
+        email.error
+      );
+    }
+
     return NextResponse.json(
       {
         success: true,
-        message: "Payment status updated successfully.",
+        message:
+          status === "paid"
+            ? "Payment marked Paid."
+            : "Payment status updated successfully.",
         result: data,
+        emailStatus: email?.status ?? null,
+        emailError: email?.error ?? null,
       },
       {
         headers: {
