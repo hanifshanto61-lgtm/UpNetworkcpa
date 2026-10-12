@@ -1,51 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { getAdminSession } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const ADMIN_EMAIL = "islamhanif122@gmail.com";
-
-function getAdminClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url || !key) {
-    throw new Error("Supabase server configuration is missing.");
-  }
-
-  return createClient(url, key, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
-}
-
 async function authorize(request: NextRequest) {
-  const client = getAdminClient();
-
-  const header = request.headers.get("authorization");
-
-  if (!header?.startsWith("Bearer ")) {
-    return null;
-  }
-
-  const token = header.slice(7).trim();
-
-  if (!token) return null;
-
-  const { data, error } = await client.auth.getUser(token);
-
-  if (error || !data.user) return null;
-
-  if (
-    data.user.email?.toLowerCase() !== ADMIN_EMAIL.toLowerCase()
-  ) {
-    return null;
-  }
-
-  return client;
+  const session = await getAdminSession(request);
+  return session?.client ?? null;
 }
 
 function respond(
@@ -57,7 +18,9 @@ function respond(
     { success, message },
     {
       status,
-      headers: { "Cache-Control": "no-store" },
+      headers: {
+        "Cache-Control": "no-store",
+      },
     }
   );
 }
@@ -67,6 +30,7 @@ function validWebsite(value: string) {
 
   try {
     const url = new URL(value);
+
     return ["https:", "http:"].includes(url.protocol);
   } catch {
     return false;
@@ -77,7 +41,7 @@ function validParameter(value: string) {
   return /^[a-zA-Z][a-zA-Z0-9_]{0,49}$/.test(value);
 }
 
-// GET: List networks without exposing secrets
+// GET: List CPA networks.
 export async function GET(request: NextRequest) {
   try {
     const client = await authorize(request);
@@ -91,24 +55,39 @@ export async function GET(request: NextRequest) {
       .select(
         "id,name,website_url,click_id_parameter,status,created_at,updated_at"
       )
-      .order("created_at", { ascending: false });
+      .order("created_at", {
+        ascending: false,
+      });
 
     if (error) {
       console.error("Networks GET error:", error.message);
-      return respond(false, "Failed to load networks", 500);
+
+      return respond(
+        false,
+        "Failed to load networks",
+        500
+      );
     }
 
     return NextResponse.json(
-      { success: true, networks: data ?? [] },
-      { headers: { "Cache-Control": "no-store" } }
+      {
+        success: true,
+        networks: data ?? [],
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      }
     );
   } catch (error) {
     console.error("Networks GET exception:", error);
+
     return respond(false, "Internal server error", 500);
   }
 }
 
-// POST: Create a new CPA network
+// POST: Create a CPA network.
 export async function POST(request: NextRequest) {
   try {
     const client = await authorize(request);
@@ -120,7 +99,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     const name = String(body.name ?? "").trim();
-    const website = String(body.website_url ?? "").trim();
+
+    const website = String(
+      body.website_url ?? ""
+    ).trim();
+
     const parameter = String(
       body.click_id_parameter ?? "sub1"
     ).trim();
@@ -134,7 +117,11 @@ export async function POST(request: NextRequest) {
     }
 
     if (!validParameter(parameter)) {
-      return respond(false, "Invalid Click ID parameter", 400);
+      return respond(
+        false,
+        "Invalid Click ID parameter",
+        400
+      );
     }
 
     const { data, error } = await client
@@ -152,11 +139,20 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       if (error.code === "23505") {
-        return respond(false, "Network already exists", 409);
+        return respond(
+          false,
+          "Network already exists",
+          409
+        );
       }
 
       console.error("Networks POST error:", error.message);
-      return respond(false, "Failed to create network", 500);
+
+      return respond(
+        false,
+        "Failed to create network",
+        500
+      );
     }
 
     return NextResponse.json(
@@ -165,15 +161,18 @@ export async function POST(request: NextRequest) {
         message: "Network created successfully",
         network: data,
       },
-      { status: 201 }
+      {
+        status: 201,
+      }
     );
   } catch (error) {
     console.error("Networks POST exception:", error);
+
     return respond(false, "Internal server error", 500);
   }
 }
 
-// PATCH: Update an existing CPA network
+// PATCH: Update a CPA network.
 export async function PATCH(request: NextRequest) {
   try {
     const client = await authorize(request);
@@ -185,9 +184,10 @@ export async function PATCH(request: NextRequest) {
     const body = await request.json();
     const id = String(body.id ?? "").trim();
 
-    if (
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
-    ) {
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    if (!uuidRegex.test(id)) {
       return respond(false, "Invalid network ID", 400);
     }
 
@@ -197,17 +197,27 @@ export async function PATCH(request: NextRequest) {
       const name = String(body.name).trim();
 
       if (!name || name.length > 150) {
-        return respond(false, "Invalid network name", 400);
+        return respond(
+          false,
+          "Invalid network name",
+          400
+        );
       }
 
       updates.name = name;
     }
 
     if (body.website_url !== undefined) {
-      const website = String(body.website_url ?? "").trim();
+      const website = String(
+        body.website_url ?? ""
+      ).trim();
 
       if (!validWebsite(website)) {
-        return respond(false, "Invalid website URL", 400);
+        return respond(
+          false,
+          "Invalid website URL",
+          400
+        );
       }
 
       updates.website_url = website || null;
@@ -238,7 +248,11 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (!Object.keys(updates).length) {
-      return respond(false, "No changes provided", 400);
+      return respond(
+        false,
+        "No changes provided",
+        400
+      );
     }
 
     updates.updated_at = new Date().toISOString();
@@ -254,11 +268,20 @@ export async function PATCH(request: NextRequest) {
 
     if (error) {
       if (error.code === "23505") {
-        return respond(false, "Network name already exists", 409);
+        return respond(
+          false,
+          "Network name already exists",
+          409
+        );
       }
 
       console.error("Networks PATCH error:", error.message);
-      return respond(false, "Failed to update network", 500);
+
+      return respond(
+        false,
+        "Failed to update network",
+        500
+      );
     }
 
     return NextResponse.json({
@@ -268,6 +291,7 @@ export async function PATCH(request: NextRequest) {
     });
   } catch (error) {
     console.error("Networks PATCH exception:", error);
+
     return respond(false, "Internal server error", 500);
   }
 }
