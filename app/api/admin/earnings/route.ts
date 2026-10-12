@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { getAdminSession } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const ADMIN_EMAIL = "islamhanif122@gmail.com";
 const PAGE_SIZE = 1000;
 const MAX_ROWS = 100000;
 
@@ -64,62 +63,22 @@ function respond(
 
 export async function GET(request: NextRequest) {
   try {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const session = await getAdminSession(request);
 
-    if (!url || !key) {
-      return respond(
-        {
-          success: false,
-          error: "Supabase configuration missing.",
-        },
-        500
-      );
-    }
-
-    const token = request.headers
-      .get("authorization")
-      ?.replace(/^Bearer\s+/i, "")
-      .trim();
-
-    if (!token) {
-      return respond(
-        {
-          success: false,
-          error: "Authentication required.",
-        },
-        401
-      );
-    }
-
-    const db = createClient(url, key, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
-
-    const { data: auth, error: authError } =
-      await db.auth.getUser(token);
-
-    if (
-      authError ||
-      !auth.user ||
-      auth.user.email?.toLowerCase() !== ADMIN_EMAIL
-    ) {
+    if (!session) {
       return respond(
         {
           success: false,
           error: "Admin access required.",
         },
-        403
+        401
       );
     }
 
+    const db = session.client;
+
     const reports = new Map<string, AffiliateReport>();
 
-    // ES5-compatible arrow function.
-    // Fixes the Vercel TypeScript build error.
     const getReport = (id: string): AffiliateReport => {
       const existing = reports.get(id);
 
@@ -163,8 +122,12 @@ export async function GET(request: NextRequest) {
         .select(
           "click_id,affiliate_id,status,payout,converted_at,created_at"
         )
-        .order("created_at", { ascending: false })
-        .order("click_id", { ascending: false })
+        .order("created_at", {
+          ascending: false,
+        })
+        .order("click_id", {
+          ascending: false,
+        })
         .range(offset, offset + PAGE_SIZE - 1);
 
       if (error) {
@@ -233,7 +196,9 @@ export async function GET(request: NextRequest) {
       const { data, error } = await db
         .from("payment_requests")
         .select("affiliate_id,amount,status")
-        .order("id", { ascending: false })
+        .order("id", {
+          ascending: false,
+        })
         .range(offset, offset + PAGE_SIZE - 1);
 
       if (error) {
@@ -254,7 +219,8 @@ export async function GET(request: NextRequest) {
         return respond(
           {
             success: false,
-            error: "Payment report exceeds the supported record limit.",
+            error:
+              "Payment report exceeds the supported record limit.",
           },
           413
         );
@@ -282,7 +248,6 @@ export async function GET(request: NextRequest) {
       offset += PAGE_SIZE;
     }
 
-    // Calculate affiliate earnings.
     const affiliates = Array.from(reports.values())
       .map((item) => ({
         ...item,
@@ -292,7 +257,6 @@ export async function GET(request: NextRequest) {
       }))
       .sort((a, b) => b.earnings - a.earnings);
 
-    // Sort recent conversion history.
     history.sort((a, b) =>
       String(b.date || "").localeCompare(
         String(a.date || "")
