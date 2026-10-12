@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -24,8 +25,6 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
-const ADMIN_EMAIL = "islamhanif122@gmail.com";
-
 type MenuItem = {
   label: string;
   icon: React.ElementType;
@@ -47,10 +46,10 @@ const menuItems: MenuItem[] = [
     available: true,
   },
   {
-  label: "Manage CPA Networks",
-  icon: Building2,
-  action: "/admin/networks",
-  available: true,
+    label: "Manage CPA Networks",
+    icon: Building2,
+    action: "/admin/networks",
+    available: true,
   },
   {
     label: "Affiliates",
@@ -59,22 +58,22 @@ const menuItems: MenuItem[] = [
     available: true,
   },
   {
-  label: "Smart Links",
-  icon: Link2,
-  action: "/admin/smart-links",
-  available: true,
+    label: "Smart Links",
+    icon: Link2,
+    action: "/admin/smart-links",
+    available: true,
   },
   {
-  label: "Manage Conversions",
-  icon: CheckCircle2,
-  action: "/admin/conversions",
-  available: true,
+    label: "Manage Conversions",
+    icon: CheckCircle2,
+    action: "/admin/conversions",
+    available: true,
   },
   {
-  label: "Statistics",
-  icon: Activity,
-  action: "/admin/statistics",
-  available: true,
+    label: "Statistics",
+    icon: Activity,
+    action: "/admin/statistics",
+    available: true,
   },
   {
     label: "Earnings",
@@ -128,36 +127,36 @@ const controlCards: ControlCard[] = [
     action: "/admin/offers",
   },
   {
-  title: "Smart Links",
-  description:
-    "Manage smart links, tracking destinations and affiliate smart-link access.",
-  icon: Link2,
-  status: "Active",
-  action: "/admin/smart-links",
+    title: "Smart Links",
+    description:
+      "Manage smart links, tracking destinations and affiliate smart-link access.",
+    icon: Link2,
+    status: "Active",
+    action: "/admin/smart-links",
   },
   {
-  title: "Statistics",
-  description:
-    "View clicks, conversions, conversion rate and affiliate earnings reports.",
-  icon: BarChart3,
-  status: "Active",
-  action: "/admin/statistics", 
+    title: "Statistics",
+    description:
+      "View clicks, conversions, conversion rate and affiliate earnings reports.",
+    icon: BarChart3,
+    status: "Active",
+    action: "/admin/statistics",
   },
   {
-  title: "Earnings",
-  description:
-    "Review affiliate conversion earnings, paid payments and calculated balances.",
-  icon: Wallet,
-  status: "Active",
-  action: "/admin/earnings",
+    title: "Earnings",
+    description:
+      "Review affiliate conversion earnings, paid payments and calculated balances.",
+    icon: Wallet,
+    status: "Active",
+    action: "/admin/earnings",
   },
   {
-   title: "Referral System",
-   description:
-    "View affiliate referrals, referral earnings and commission status.",
-   icon: TrendingUp,
-   status: "Active",
-   action: "/admin/referrals",
+    title: "Referral System",
+    description:
+      "View affiliate referrals, referral earnings and commission status.",
+    icon: TrendingUp,
+    status: "Active",
+    action: "/admin/referrals",
   },
   {
     title: "Payments",
@@ -200,6 +199,9 @@ export default function AdminPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeMenu, setActiveMenu] = useState("Dashboard");
   const [adminEmail, setAdminEmail] = useState("");
+  const [adminRole, setAdminRole] = useState<
+    "super_admin" | "sub_admin" | null
+  >(null);
 
   const [affiliateCount, setAffiliateCount] = useState(0);
   const [offerCount, setOfferCount] = useState(0);
@@ -207,7 +209,9 @@ export default function AdminPage() {
 
   const [settings, setSettings] = useState<PanelSetting[]>([]);
   const [settingsLoading, setSettingsLoading] = useState(false);
-  const [updatingFeature, setUpdatingFeature] = useState<string | null>(null);
+  const [updatingFeature, setUpdatingFeature] = useState<string | null>(
+    null
+  );
 
   const [error, setError] = useState("");
 
@@ -233,15 +237,34 @@ export default function AdminPage() {
           return;
         }
 
-        const email = session.user.email.toLowerCase();
+        const roleResponse = await fetch("/api/admin/me", {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          cache: "no-store",
+        });
 
-        if (email !== ADMIN_EMAIL.toLowerCase()) {
+        if (!roleResponse.ok) {
+          router.replace("/affiliate");
+          return;
+        }
+
+        const roleData = await roleResponse.json();
+
+        if (
+          !roleData.success ||
+          !["super_admin", "sub_admin"].includes(
+            roleData.admin?.role
+          )
+        ) {
           router.replace("/affiliate");
           return;
         }
 
         if (!mounted) return;
 
+        setAdminRole(roleData.admin.role);
         setAuthorized(true);
         setAdminEmail(session.user.email);
 
@@ -288,6 +311,7 @@ export default function AdminPage() {
 
           setAffiliateCount(
             typeof affiliateData?.total === "number"
+
               ? affiliateData.total
               : affiliates.length
           );
@@ -569,6 +593,21 @@ export default function AdminPage() {
             </div>
 
             <div className="space-y-1">
+              {adminRole === "super_admin" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSidebarOpen(false);
+                    router.push("/admin/admins");
+                  }}
+                  className="mb-2 flex w-full items-center gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-3 py-3 text-left text-sm font-semibold text-cyan-300 transition hover:bg-cyan-500/20"
+                >
+                  <ShieldCheck size={18} />
+                  <span className="flex-1">Admin Management</span>
+                  <ChevronRight size={16} />
+                </button>
+              )}
+
               {menuItems.map((item) => {
                 const Icon = item.icon;
                 const active = activeMenu === item.label;
@@ -615,7 +654,9 @@ export default function AdminPage() {
 
                 <div className="min-w-0">
                   <div className="text-xs font-semibold text-white">
-                    Administrator
+                    {adminRole === "super_admin"
+                      ? "Main Admin"
+                      : "Sub Admin"}
                   </div>
 
                   <div className="truncate text-[10px] text-slate-500">
@@ -664,7 +705,9 @@ export default function AdminPage() {
             <div className="hidden items-center gap-3 sm:flex">
               <div className="rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-right">
                 <div className="text-[9px] uppercase tracking-wider text-slate-500">
-                  Admin
+                  {adminRole === "super_admin"
+                    ? "Main Admin"
+                    : "Sub Admin"}
                 </div>
 
                 <div className="max-w-[220px] truncate text-xs text-slate-300">
@@ -900,6 +943,7 @@ export default function AdminPage() {
                     key={card.title}
                     type="button"
                     onClick={() => handleControlAction(card)}
+
                     className={`group rounded-2xl border p-5 text-left transition ${
                       active
                         ? "border-cyan-500/20 bg-slate-900/70 hover:-translate-y-0.5 hover:border-cyan-500/40"
@@ -1035,9 +1079,7 @@ export default function AdminPage() {
                                       : "bg-slate-800 text-slate-500"
                                   }`}
                                 >
-                                  {setting.enabled
-                                    ? "ON"
-                                    : "OFF"}
+                                  {setting.enabled ? "ON" : "OFF"}
                                 </span>
                               </div>
 
@@ -1054,9 +1096,7 @@ export default function AdminPage() {
                           <button
                             type="button"
                             disabled={isUpdating}
-                            onClick={() =>
-                              toggleFeature(setting)
-                            }
+                            onClick={() => toggleFeature(setting)}
                             aria-label={`Turn ${setting.label} ${
                               setting.enabled ? "off" : "on"
                             }`}
@@ -1143,4 +1183,3 @@ export default function AdminPage() {
       </section>
     </main>
   );
-          }
