@@ -1,0 +1,68 @@
+import { ImageResponse } from "next/og";
+
+export const runtime = "edge";
+
+export const size = {
+  width: 192,
+  height: 192,
+};
+
+export const contentType = "image/png";
+
+export default function Icon() {
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "#0B1225",
+        }}
+      >
+        <svg
+          width="192"
+          height="192"
+          viewBox="0 0 192 192"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          {/* Blue U */}
+          <path
+            d="
+              M 36 42
+              H 65
+              V 111
+              C 65 132 77 145 96 145
+              C 115 145 127 132 127 111
+              V 71
+              H 156
+              V 111
+              C 156 150 132 174 96 174
+              C 60 174 36 150 36 111
+              Z
+            "
+            fill="#2563EB"
+          />
+
+          {/* Green growth arrow */}
+          <path
+            d="
+              M 135 22
+              L 174 66
+              H 151
+              C 143 118 113 145 64 149
+              L 54 132
+              C 97 125 121 103 126 66
+              H 103
+              Z
+            "
+            fill="#10D9B0"
+          />
+        </svg>
+      </div>
+    ),
+    { ...size }
+  );
+}
