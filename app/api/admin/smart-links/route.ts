@@ -1,17 +1,17 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getAdminSession } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
-
-const ADMIN_EMAIL = "islamhanif122@gmail.com";
 
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !serviceKey) {
-    throw new Error("Supabase server configuration is missing.");
+    throw new Error(
+      "Supabase server configuration is missing."
+    );
   }
 
   return createClient(url, serviceKey, {
@@ -23,30 +23,7 @@ function getAdminClient() {
 }
 
 async function verifyAdmin(request: NextRequest) {
-  const header = request.headers.get("authorization") || "";
-
-  if (!header.startsWith("Bearer ")) {
-    return false;
-  }
-
-  const token = header.slice(7).trim();
-
-  if (!token) {
-    return false;
-  }
-
-  const supabase = getAdminClient();
-
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser(token);
-
-  if (error || !user?.email) {
-    return false;
-  }
-
-  return user.email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  return Boolean(await getAdminSession(request));
 }
 
 function unauthorized() {
@@ -107,7 +84,7 @@ function validSlug(value: unknown): value is string {
   );
 }
 
-// GET: List all Smart Links
+// GET: List Smart Links.
 export async function GET(request: NextRequest) {
   try {
     if (!(await verifyAdmin(request))) {
@@ -121,7 +98,9 @@ export async function GET(request: NextRequest) {
       .select(
         "id, affiliate_id, name, slug, destination_url, status, is_global, network_share_percent, created_at"
       )
-      .order("created_at", { ascending: false });
+      .order("created_at", {
+        ascending: false,
+      });
 
     if (error) {
       console.error("Smart Links GET:", error);
@@ -144,7 +123,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST: Create a Global Smart Link
+// POST: Create a Global Smart Link.
 export async function POST(request: NextRequest) {
   try {
     if (!(await verifyAdmin(request))) {
@@ -233,7 +212,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: "This global Smart Link slug already exists.",
+          message:
+            "This global Smart Link slug already exists.",
         },
         { status: 409 }
       );
@@ -277,7 +257,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PATCH: Update a Global Smart Link
+// PATCH: Update a Global Smart Link.
 export async function PATCH(request: NextRequest) {
   try {
     if (!(await verifyAdmin(request))) {
@@ -291,11 +271,10 @@ export async function PATCH(request: NextRequest) {
         ? body.id.trim()
         : "";
 
-    if (
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        id
-      )
-    ) {
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    if (!uuidRegex.test(id)) {
       return NextResponse.json(
         {
           success: false,
