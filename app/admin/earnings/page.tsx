@@ -11,8 +11,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-
-const ADMIN_EMAIL = "islamhanif122@gmail.com";
+import { verifyAdminAccess } from "@/lib/admin-access";
 
 type Stats = {
   clicks: number;
@@ -70,12 +69,13 @@ export default function AdminEarningsPage() {
 
       const session = data.session;
 
-      if (
-        sessionError ||
-        !session ||
-        session.user.email?.toLowerCase() !== ADMIN_EMAIL
-      ) {
+      if (sessionError || !session?.access_token) {
         router.replace("/login");
+        return;
+      }
+
+      if (!(await verifyAdminAccess(session.access_token))) {
+        router.replace("/affiliate");
         return;
       }
 
@@ -95,11 +95,13 @@ export default function AdminEarningsPage() {
       }
 
       setStats(result.stats || emptyStats);
+
       setAffiliates(
         Array.isArray(result.affiliates)
           ? result.affiliates
           : []
       );
+
       setHistory(
         Array.isArray(result.history)
           ? result.history
@@ -187,7 +189,10 @@ export default function AdminEarningsPage() {
         </div>
 
         {error && (
-          <div className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-red-300">
+          <div
+            role="alert"
+            className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-red-300"
+          >
             {error}
           </div>
         )}
@@ -277,11 +282,13 @@ export default function AdminEarningsPage() {
               </tbody>
             </table>
 
-            {!loading && !error && affiliates.length === 0 && (
-              <p className="p-8 text-center text-slate-400">
-                No earnings records found.
-              </p>
-            )}
+            {!loading &&
+              !error &&
+              affiliates.length === 0 && (
+                <p className="p-8 text-center text-slate-400">
+                  No earnings records found.
+                </p>
+              )}
           </div>
         </section>
 
@@ -306,7 +313,10 @@ export default function AdminEarningsPage() {
                     "Status",
                     "Earnings",
                   ].map((heading) => (
-                    <th key={heading} className="px-5 py-4">
+                    <th
+                      key={heading}
+                      className="px-5 py-4"
+                    >
                       {heading}
                     </th>
                   ))}
@@ -338,11 +348,13 @@ export default function AdminEarningsPage() {
               </tbody>
             </table>
 
-            {!loading && !error && history.length === 0 && (
-              <p className="p-8 text-center text-slate-400">
-                No conversion history found.
-              </p>
-            )}
+            {!loading &&
+              !error &&
+              history.length === 0 && (
+                <p className="p-8 text-center text-slate-400">
+                  No conversion history found.
+                </p>
+              )}
           </div>
         </section>
 
