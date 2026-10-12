@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
@@ -14,8 +13,7 @@ import {
   History,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-
-const ADMIN_EMAIL = "islamhanif122@gmail.com";
+import { verifyAdminAccess } from "@/lib/admin-access";
 
 type Stats = {
   totalReferrals: number;
@@ -96,7 +94,9 @@ function formatDate(value?: string | null): string {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const normalized = String(status || "pending").toLowerCase();
+  const normalized = String(
+    status || "pending"
+  ).toLowerCase();
 
   let colors =
     "border-slate-500/20 bg-slate-500/10 text-slate-300";
@@ -137,7 +137,9 @@ export default function AdminReferralsPage() {
   const [stats, setStats] = useState<Stats>(EMPTY_STATS);
   const [referrers, setReferrers] = useState<Referrer[]>([]);
   const [referrals, setReferrals] = useState<Referral[]>([]);
-  const [commissions, setCommissions] = useState<Commission[]>([]);
+  const [commissions, setCommissions] = useState<
+    Commission[]
+  >([]);
   const [rate, setRate] = useState(5);
 
   const loadReferrals = useCallback(async () => {
@@ -150,17 +152,17 @@ export default function AdminReferralsPage() {
         error: sessionError,
       } = await supabase.auth.getSession();
 
-      if (sessionError || !sessionData.session) {
+      if (
+        sessionError ||
+        !sessionData.session?.access_token
+      ) {
         router.replace("/login");
         return;
       }
 
       const session = sessionData.session;
 
-      if (
-        session.user.email?.toLowerCase() !==
-        ADMIN_EMAIL.toLowerCase()
-      ) {
+      if (!(await verifyAdminAccess(session.access_token))) {
         router.replace("/affiliate");
         return;
       }
@@ -281,8 +283,6 @@ export default function AdminReferralsPage() {
   return (
     <main className="min-h-screen bg-slate-950 text-white">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-
-        {/* Back to dashboard */}
         <button
           type="button"
           onClick={() => router.push("/admin")}
@@ -292,7 +292,6 @@ export default function AdminReferralsPage() {
           Admin Dashboard
         </button>
 
-        {/* Header */}
         <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-cyan-400">
@@ -322,14 +321,15 @@ export default function AdminReferralsPage() {
           </button>
         </div>
 
-        {/* Error */}
         {error && (
-          <div className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">
+          <div
+            role="alert"
+            className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300"
+          >
             {error}
           </div>
         )}
 
-        {/* Summary cards */}
         <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {cards.map((card) => {
             const Icon = card.icon;
@@ -357,7 +357,6 @@ export default function AdminReferralsPage() {
           })}
         </section>
 
-        {/* Commission details */}
         <section className="mb-8 grid gap-4 sm:grid-cols-2">
           <div className="rounded-2xl border border-cyan-500/20 bg-slate-900/60 p-5">
             <div className="flex items-center gap-3">
@@ -396,7 +395,6 @@ export default function AdminReferralsPage() {
           </div>
         </section>
 
-        {/* Referrer performance */}
         <section className="mb-8 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60">
           <div className="border-b border-slate-800 p-5">
             <h2 className="text-lg font-bold">
@@ -447,15 +445,16 @@ export default function AdminReferralsPage() {
               </tbody>
             </table>
 
-            {!loading && !error && referrers.length === 0 && (
-              <p className="p-8 text-center text-sm text-slate-500">
-                No referrer records found.
-              </p>
-            )}
+            {!loading &&
+              !error &&
+              referrers.length === 0 && (
+                <p className="p-8 text-center text-sm text-slate-500">
+                  No referrer records found.
+                </p>
+              )}
           </div>
         </section>
 
-        {/* Referred affiliates */}
         <section className="mb-8 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60">
           <div className="border-b border-slate-800 p-5">
             <h2 className="text-lg font-bold">
@@ -472,7 +471,9 @@ export default function AdminReferralsPage() {
               <thead className="bg-slate-800/70 text-slate-400">
                 <tr>
                   <th className="px-5 py-4">Referrer</th>
-                  <th className="px-5 py-4">Referred Affiliate</th>
+                  <th className="px-5 py-4">
+                    Referred Affiliate
+                  </th>
                   <th className="px-5 py-4">Status</th>
                   <th className="px-5 py-4">Joined</th>
                 </tr>
@@ -503,15 +504,16 @@ export default function AdminReferralsPage() {
               </tbody>
             </table>
 
-            {!loading && !error && referrals.length === 0 && (
-              <p className="p-8 text-center text-sm text-slate-500">
-                No referral records found.
-              </p>
-            )}
+            {!loading &&
+              !error &&
+              referrals.length === 0 && (
+                <p className="p-8 text-center text-sm text-slate-500">
+                  No referral records found.
+                </p>
+              )}
           </div>
         </section>
 
-        {/* Commission history */}
         <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60">
           <div className="border-b border-slate-800 p-5">
             <h2 className="text-lg font-bold">
@@ -530,7 +532,9 @@ export default function AdminReferralsPage() {
                   <th className="px-5 py-4">Date</th>
                   <th className="px-5 py-4">Referrer</th>
                   <th className="px-5 py-4">Referred</th>
-                  <th className="px-5 py-4">Source Earnings</th>
+                  <th className="px-5 py-4">
+                    Source Earnings
+                  </th>
                   <th className="px-5 py-4">Rate</th>
                   <th className="px-5 py-4">Commission</th>
                   <th className="px-5 py-4">Status</th>
@@ -572,11 +576,13 @@ export default function AdminReferralsPage() {
               </tbody>
             </table>
 
-            {!loading && !error && commissions.length === 0 && (
-              <p className="p-8 text-center text-sm text-slate-500">
-                No commission records found.
-              </p>
-            )}
+            {!loading &&
+              !error &&
+              commissions.length === 0 && (
+                <p className="p-8 text-center text-sm text-slate-500">
+                  No commission records found.
+                </p>
+              )}
           </div>
         </section>
 
