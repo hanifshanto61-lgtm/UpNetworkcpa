@@ -1,11 +1,9 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getAdminSession } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-const ADMIN_EMAIL = "islamhanif122@gmail.com";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -40,28 +38,7 @@ function respond(
 }
 
 async function verifyAdmin(request: NextRequest) {
-  if (!supabaseAdmin) return false;
-
-  const authorization =
-    request.headers.get("authorization");
-
-  if (!authorization?.startsWith("Bearer ")) {
-    return false;
-  }
-
-  const token = authorization.slice(7).trim();
-
-  if (!token) return false;
-
-  const { data, error } =
-    await supabaseAdmin.auth.getUser(token);
-
-  if (error || !data.user) return false;
-
-  return (
-    data.user.email?.trim().toLowerCase() ===
-    ADMIN_EMAIL.toLowerCase()
-  );
+  return Boolean(await getAdminSession(request));
 }
 
 // GET: View clicks and conversion history.
@@ -107,9 +84,6 @@ export async function GET(request: NextRequest) {
       .limit(200);
 
     if (search) {
-      // Search by exact Click ID or Affiliate ID.
-      // Avoid interpolating untrusted values into
-      // PostgREST filter expressions.
       if (search.length > 200) {
         return respond(
           {
@@ -120,16 +94,11 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      const validSearch = /^[a-zA-Z0-9_-]+$/.test(
-        search
-      );
-
-      if (!validSearch) {
+      if (!/^[a-zA-Z0-9_-]+$/.test(search)) {
         return respond(
           {
             success: false,
-            error:
-              "Search using a Click ID or Affiliate ID.",
+            error: "Search using a Click ID or Affiliate ID.",
           },
           400
         );
@@ -141,10 +110,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (filter === "converted") {
-      query = query.in(
-        "status",
-        CONVERTED_STATUSES
-      );
+      query = query.in("status", CONVERTED_STATUSES);
     } else if (filter === "pending") {
       query = query
         .is("converted_at", null)
@@ -158,10 +124,7 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query;
 
     if (error) {
-      console.error(
-        "Admin conversions GET error:",
-        error
-      );
+      console.error("Admin conversions GET error:", error);
 
       return respond(
         {
@@ -177,10 +140,7 @@ export async function GET(request: NextRequest) {
       clicks: data ?? [],
     });
   } catch (error) {
-    console.error(
-      "Admin conversions GET exception:",
-      error
-    );
+    console.error("Admin conversions GET exception:", error);
 
     return respond(
       {
@@ -295,17 +255,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Find the original click.
-    const {
-      data: click,
-      error: lookupError,
-    } = await supabaseAdmin
-      .from("clicks")
-      .select(
-        "click_id, affiliate_id, status, converted_at"
-      )
-      .eq("click_id", clickId)
-      .maybeSingle();
+    const { data: click, error: lookupError } =
+      await supabaseAdmin
+        .from("clicks")
+        .select(
+          "click_id, affiliate_id, status, converted_at"
+        )
+        .eq("click_id", clickId)
+        .maybeSingle();
 
     if (lookupError) {
       console.error(
@@ -336,8 +293,7 @@ export async function POST(request: NextRequest) {
       return respond(
         {
           success: false,
-          error:
-            "This click has no assigned affiliate.",
+          error: "This click has no assigned affiliate.",
         },
         400
       );
@@ -354,15 +310,12 @@ export async function POST(request: NextRequest) {
       return respond(
         {
           success: false,
-          error:
-            "This click has already been converted.",
+          error: "This click has already been converted.",
         },
         409
       );
     }
 
-    // Only ordinary click records may be approved.
-    // Do not overwrite rejected or other statuses.
     if (
       currentStatus !== "click" &&
       currentStatus !== "pending" &&
@@ -378,31 +331,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify the affiliate still exists.
-    const {
-      data: affiliate,
-      error: affiliateError,
-    } = await supabaseAdmin
-      .from("profiles")
-      .select(
-        "affiliate_id, full_name, email"
-      )
-      .eq("affiliate_id", click.affiliate_id)
-      .maybeSingle();
+    const { data: affiliate, error: affiliateError } =
+      await supabaseAdmin
+        .from("profiles")
+        .select("affiliate_id, full_name, email")
+        .eq("affiliate_id", click.affiliate_id)
+        .maybeSingle();
 
     if (affiliateError || !affiliate) {
       return respond(
         {
           success: false,
-          error:
-            "The affiliate profile was not found.",
+          error: "The affiliate profile was not found.",
         },
         404
       );
     }
 
-    // Conditional update prevents simultaneous
-    // requests from approving the same click twice.
+    // Prevent duplicate approval of the same click.
     let updateQuery = supabaseAdmin
       .from("clicks")
       .update({
@@ -414,30 +360,18 @@ export async function POST(request: NextRequest) {
       .is("converted_at", null);
 
     if (click.status === null) {
-      updateQuery = updateQuery.is(
-        "status",
-        null
-      );
+      updateQuery = updateQuery.is("status", null);
     } else {
-      updateQuery = updateQuery.eq(
-        "status",
-        click.status
-      );
+      updateQuery = updateQuery.eq("status", click.status);
     }
 
-    const {
-      data: updated,
-      error: updateError,
-    } = await updateQuery
-      .select(
+    const { data: updated, error: updateError } =
+      await updateQuery.select(
         "click_id, affiliate_id, offer_id, status, payout, converted_at"
       );
 
     if (updateError) {
-      console.error(
-        "Conversion approval error:",
-        updateError
-      );
+      console.error("Conversion approval error:", updateError);
 
       return respond(
         {
@@ -470,10 +404,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error(
-      "Admin conversion POST exception:",
-      error
-    );
+    console.error("Admin conversion POST exception:", error);
 
     return respond(
       {
