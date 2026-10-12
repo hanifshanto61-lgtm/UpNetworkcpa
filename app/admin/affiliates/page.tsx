@@ -21,8 +21,7 @@ import {
   X,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-
-const ADMIN_EMAIL = "islamhanif122@gmail.com";
+import { verifyAdminAccess } from "@/lib/admin-access";
 
 type Status =
   | "pending"
@@ -140,7 +139,6 @@ export default function AdminAffiliatesPage() {
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  // Add Affiliate state
   const [addOpen, setAddOpen] = useState(false);
   const [addLoading, setAddLoading] = useState(false);
 
@@ -166,16 +164,17 @@ export default function AdminAffiliatesPage() {
           data: { session },
         } = await supabase.auth.getSession();
 
-        if (!session) {
+        if (!session?.access_token) {
           router.replace("/login");
           return;
         }
 
-        const email = session.user.email?.trim().toLowerCase();
+        const allowed = await verifyAdminAccess(
+          session.access_token
+        );
 
-        if (email !== ADMIN_EMAIL.toLowerCase()) {
-          await supabase.auth.signOut();
-          router.replace("/login");
+        if (!allowed) {
+          router.replace("/affiliate");
           return;
         }
 
@@ -186,7 +185,7 @@ export default function AdminAffiliatesPage() {
       }
     }
 
-    checkAdmin();
+    void checkAdmin();
   }, [router]);
 
   async function loadAffiliates() {
@@ -256,7 +255,7 @@ export default function AdminAffiliatesPage() {
 
   useEffect(() => {
     if (!checking) {
-      loadAffiliates();
+      void loadAffiliates();
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -266,7 +265,7 @@ export default function AdminAffiliatesPage() {
     if (checking) return;
 
     const timer = setTimeout(() => {
-      loadAffiliates();
+      void loadAffiliates();
     }, 400);
 
     return () => clearTimeout(timer);
@@ -503,9 +502,7 @@ export default function AdminAffiliatesPage() {
                 Add Affiliate
               </span>
 
-              <span className="sm:hidden">
-                Add
-              </span>
+              <span className="sm:hidden">Add</span>
             </button>
 
             <button
@@ -541,7 +538,6 @@ export default function AdminAffiliatesPage() {
           </div>
         )}
 
-        {/* Summary */}
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           {[
             {
@@ -593,7 +589,6 @@ export default function AdminAffiliatesPage() {
           ))}
         </div>
 
-        {/* Search/filter */}
         <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div className="relative w-full xl:max-w-md">
@@ -634,7 +629,6 @@ export default function AdminAffiliatesPage() {
           </div>
         </div>
 
-        {/* Affiliate list */}
         <div className="mt-6">
           {loading ? (
             <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center">
@@ -661,8 +655,7 @@ export default function AdminAffiliatesPage() {
           ) : (
             <div className="space-y-4">
               {affiliates.map((affiliate) => {
-                const updating =
-                  updatingId === affiliate.id;
+                const updating = updatingId === affiliate.id;
 
                 return (
                   <div
@@ -684,9 +677,7 @@ export default function AdminAffiliatesPage() {
                               </h3>
 
                               <StatusBadge
-                                status={
-                                  affiliate.application_status
-                                }
+                                status={affiliate.application_status}
                               />
                             </div>
 
@@ -701,14 +692,11 @@ export default function AdminAffiliatesPage() {
 
                             <p className="mt-1 text-xs text-slate-400">
                               Registered{" "}
-                              {formatDate(
-                                affiliate.created_at
-                              )}
+                              {formatDate(affiliate.created_at)}
                             </p>
                           </div>
                         </div>
 
-                        {/* Status controls */}
                         <div className="flex flex-wrap gap-2">
                           {affiliate.application_status !==
                             "approved" && (
@@ -716,10 +704,7 @@ export default function AdminAffiliatesPage() {
                               type="button"
                               disabled={updating}
                               onClick={() =>
-                                updateStatus(
-                                  affiliate,
-                                  "approved"
-                                )
+                                updateStatus(affiliate, "approved")
                               }
                               className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
                             >
@@ -733,10 +718,7 @@ export default function AdminAffiliatesPage() {
                               type="button"
                               disabled={updating}
                               onClick={() =>
-                                updateStatus(
-                                  affiliate,
-                                  "rejected"
-                                )
+                                updateStatus(affiliate, "rejected")
                               }
                               className="rounded-xl bg-red-50 px-4 py-2.5 text-sm font-bold text-red-700 hover:bg-red-100 disabled:opacity-50"
                             >
@@ -750,10 +732,7 @@ export default function AdminAffiliatesPage() {
                               type="button"
                               disabled={updating}
                               onClick={() =>
-                                updateStatus(
-                                  affiliate,
-                                  "suspended"
-                                )
+                                updateStatus(affiliate, "suspended")
                               }
                               className="rounded-xl bg-orange-50 px-4 py-2.5 text-sm font-bold text-orange-700 hover:bg-orange-100 disabled:opacity-50"
                             >
@@ -767,10 +746,7 @@ export default function AdminAffiliatesPage() {
                               type="button"
                               disabled={updating}
                               onClick={() =>
-                                updateStatus(
-                                  affiliate,
-                                  "pending"
-                                )
+                                updateStatus(affiliate, "pending")
                               }
                               className="rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-200 disabled:opacity-50"
                             >
@@ -780,7 +756,6 @@ export default function AdminAffiliatesPage() {
                         </div>
                       </div>
 
-                      {/* Basic information */}
                       <div className="mt-5 grid gap-3 border-t border-slate-100 pt-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                         <div className="rounded-xl bg-slate-50 p-3">
                           <p className="text-[11px] font-bold uppercase text-slate-400">
@@ -853,7 +828,6 @@ export default function AdminAffiliatesPage() {
                         </div>
                       </div>
 
-                      {/* Additional information */}
                       <div className="mt-3 grid gap-3 lg:grid-cols-3">
                         <div className="rounded-xl border border-slate-100 p-3">
                           <p className="text-[11px] font-bold uppercase text-slate-400">
@@ -861,8 +835,7 @@ export default function AdminAffiliatesPage() {
                           </p>
 
                           <p className="mt-1 text-sm">
-                            {affiliate.promotion_method ||
-                              "—"}
+                            {affiliate.promotion_method || "—"}
                           </p>
                         </div>
 
@@ -882,13 +855,11 @@ export default function AdminAffiliatesPage() {
                           </p>
 
                           <p className="mt-1 text-sm">
-                            {affiliate.previous_networks ||
-                              "—"}
+                            {affiliate.previous_networks || "—"}
                           </p>
                         </div>
                       </div>
 
-                      {/* Account information */}
                       <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-400">
                         <span className="inline-flex items-center gap-1.5">
                           <Mail className="h-3.5 w-3.5" />
@@ -908,10 +879,8 @@ export default function AdminAffiliatesPage() {
                           </span>
                         )}
 
-                        {affiliate.referral_rate !==
-                          undefined &&
-                          affiliate.referral_rate !==
-                            null && (
+                        {affiliate.referral_rate !== undefined &&
+                          affiliate.referral_rate !== null && (
                             <span>
                               Referral rate:{" "}
                               <b className="text-slate-600">
@@ -923,22 +892,17 @@ export default function AdminAffiliatesPage() {
                         {affiliate.last_sign_in_at && (
                           <span>
                             Last login:{" "}
-                            {formatDate(
-                              affiliate.last_sign_in_at
-                            )}
+                            {formatDate(affiliate.last_sign_in_at)}
                           </span>
                         )}
                       </div>
 
-                      {/* Address */}
                       {affiliate.address && (
                         <div className="mt-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
-                          <b>Address:</b>{" "}
-                          {affiliate.address}
+                          <b>Address:</b> {affiliate.address}
                         </div>
                       )}
 
-                      {/* Traffic/social */}
                       {(affiliate.traffic_url ||
                         affiliate.social_profile) && (
                         <div className="mt-3 grid gap-3 lg:grid-cols-2">
@@ -981,7 +945,6 @@ export default function AdminAffiliatesPage() {
           )}
         </div>
 
-        {/* Security notice */}
         <div className="mt-6 flex items-start gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-4">
           <ShieldCheck className="h-5 w-5 shrink-0 text-blue-600" />
 
@@ -999,11 +962,9 @@ export default function AdminAffiliatesPage() {
         </div>
       </div>
 
-      {/* Add Affiliate Modal */}
       {addOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
           <div className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl">
-            {/* Modal header */}
             <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
               <div>
                 <h2 className="text-lg font-extrabold text-slate-900">
@@ -1026,7 +987,6 @@ export default function AdminAffiliatesPage() {
               </button>
             </div>
 
-            {/* Modal body */}
             <div className="max-h-[75vh] overflow-y-auto px-5 py-5">
               <div className="space-y-4">
                 <div>
@@ -1037,9 +997,7 @@ export default function AdminAffiliatesPage() {
                   <input
                     type="text"
                     value={addName}
-                    onChange={(e) =>
-                      setAddName(e.target.value)
-                    }
+                    onChange={(e) => setAddName(e.target.value)}
                     placeholder="Affiliate full name"
                     disabled={addLoading}
                     className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100 disabled:opacity-60"
@@ -1054,9 +1012,7 @@ export default function AdminAffiliatesPage() {
                   <input
                     type="email"
                     value={addEmail}
-                    onChange={(e) =>
-                      setAddEmail(e.target.value)
-                    }
+                    onChange={(e) => setAddEmail(e.target.value)}
                     placeholder="affiliate@gmail.com"
                     disabled={addLoading}
                     autoComplete="off"
@@ -1149,7 +1105,6 @@ export default function AdminAffiliatesPage() {
               </div>
             </div>
 
-            {/* Modal footer */}
             <div className="flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end">
               <button
                 type="button"
@@ -1189,4 +1144,4 @@ export default function AdminAffiliatesPage() {
       )}
     </main>
   );
-                          }
+}
