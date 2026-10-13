@@ -38,11 +38,16 @@ const menuItems: MenuItem[] = [
     icon: BarChart3,
     action: "/admin",
     available: true,
-  },
-  {
+    {
     label: "Offers",
     icon: Target,
     action: "/admin/offers",
+    available: true,
+  },
+  {
+    label: "Offer Requests",
+    icon: Target,
+    action: "/admin/offer-requests",
     available: true,
   },
   {
