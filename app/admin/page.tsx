@@ -32,13 +32,19 @@ type MenuItem = {
 };
 
 const menuItems: MenuItem[] = [
-  { label: "Contact Manager Emails", icon: Users, action: "/admin/contact-managers", available: true },
+  {
+    label: "Contact Manager Emails",
+    icon: Users,
+    action: "/admin/contact-managers",
+    available: true,
+  },
   {
     label: "Dashboard",
     icon: BarChart3,
     action: "/admin",
     available: true,
-    {
+  },
+  {
     label: "Offers",
     icon: Target,
     action: "/admin/offers",
