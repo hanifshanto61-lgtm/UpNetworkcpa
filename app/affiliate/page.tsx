@@ -1949,32 +1949,26 @@ function SupportChatBot({
 
   function handleQuickAction(action: string) {
     if (action === "manager") {
+      setOpen(false);
       openManager();
       return;
     }
 
-    const questions: Record<string, string> = {
-      offers:
-        "How do I choose an offer and get its tracking link?",
-      smartlink:
-        "How do I use my Smart Link?",
-      earnings:
-        "Where can I check earnings and how are they recorded?",
-      statistics:
-        "How do I read my click and conversion statistics?",
-      payments:
-        "Where can I check payment information and payment history?",
-      verification:
-        "What should I do if I have an email or account verification problem?",
+    const routes: Record<string, string> = {
+      offers: "/affiliate/offers",
+      smartlink: "/affiliate/smart-link",
+      earnings: "/affiliate/earnings",
+      statistics: "/affiliate/statistics",
+      payments: "/affiliate/payments",
+      verification: "/affiliate/settings",
     };
 
-    if (questions[action]) {
-      void askAI(questions[action]);
-    }
-  }
+    const route = routes[action];
 
-  function handleSend() {
-    void askAI(input);
+    if (route) {
+      setOpen(false);
+      router.push(route);
+    }
   }
 
   function handleKeyDown(
