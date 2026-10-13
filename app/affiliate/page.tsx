@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   Menu,
@@ -2161,6 +2161,402 @@ function SupportChatBot({
                       ? "border-white/10 bg-white/[0.03] text-slate-300 hover:border-cyan-400/30 hover:bg-cyan-400/10 hover:text-cyan-300"
                       : "border-slate-200 bg-slate-50 text-slate-600 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-600"
                   }`}
+function SupportChatBot({
+  dark,
+  router,
+  openManager,
+}: {
+  dark: boolean;
+  router: ReturnType<typeof useRouter>;
+  openManager: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [chatError, setChatError] = useState("");
+
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: 1,
+      sender: "bot",
+      text:
+        "Hello! 👋 I am the UpNetwork CPA AI support assistant. Ask me in English or বাংলা. For account-specific help, choose Talk to Manager.",
+    },
+  ]);
+
+  const pendingRef = useRef(false);
+  const requestRef = useRef<AbortController | null>(null);
+  const messagesRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const element = messagesRef.current;
+
+    if (element) {
+      element.scrollTop = element.scrollHeight;
+    }
+  }, [messages, busy, open]);
+
+  useEffect(() => {
+    return () => requestRef.current?.abort();
+  }, []);
+
+  const quickButtons = [
+    { label: "Offers", action: "offers" },
+    { label: "Smart Links", action: "smartlink" },
+    { label: "Earnings", action: "earnings" },
+    { label: "Statistics", action: "statistics" },
+    { label: "Payments", action: "payments" },
+    { label: "Verification", action: "verification" },
+    { label: "Talk to Manager", action: "manager" },
+  ];
+
+  function addMessage(
+    sender: "bot" | "user",
+    text: string
+  ) {
+    setMessages((current) => [
+      ...current,
+      {
+        id: Date.now() + Math.random(),
+        sender,
+        text,
+      },
+    ]);
+  }
+
+  async function askAI(value: string) {
+    const question = value.trim();
+
+    if (!question || pendingRef.current) {
+      return;
+    }
+
+    pendingRef.current = true;
+    setBusy(true);
+    setChatError("");
+    setInput("");
+
+    const messageId = Date.now() + Math.random();
+
+    const nextMessages: ChatMessage[] = [
+      ...messages,
+      {
+        id: messageId,
+        sender: "user",
+        text: question,
+      },
+    ];
+
+    setMessages(nextMessages);
+
+    const controller = new AbortController();
+    requestRef.current = controller;
+
+    const timer = setTimeout(
+      () => controller.abort(),
+      40000
+    );
+
+    try {
+      if (!supabase) {
+        throw new Error(
+          "Support is not configured. Please contact a manager."
+        );
+      }
+
+      const { data, error } =
+        await supabase.auth.getSession();
+
+      const token = data.session?.access_token;
+
+      if (error || !token) {
+        throw new Error(
+          "Your session expired. Please log in again."
+        );
+      }
+
+      const history: {
+        role: "user" | "assistant";
+        content: string;
+      }[] = [];
+
+      let characters = 0;
+
+      for (
+        const item of nextMessages.slice(1).reverse()
+      ) {
+        const content = item.text.slice(0, 2000);
+
+        if (
+          history.length >= 12 ||
+          characters + content.length > 10000
+        ) {
+          break;
+        }
+
+        history.unshift({
+          role:
+            item.sender === "user"
+              ? "user"
+              : "assistant",
+          content,
+        });
+
+        characters += content.length;
+      }
+
+      const response = await fetch(
+        "/api/affiliate/support-chat",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messages: history,
+          }),
+          signal: controller.signal,
+          cache: "no-store",
+        }
+      );
+
+      const result = await response.json();
+
+      if (
+        !response.ok ||
+        typeof result.reply !== "string" ||
+        !result.reply.trim()
+      ) {
+        throw new Error(
+          result.error ||
+            "AI support could not answer. Please try again."
+        );
+      }
+
+      addMessage("bot", result.reply);
+    } catch (error) {
+      setMessages((current) =>
+        current.filter(
+          (item) => item.id !== messageId
+        )
+      );
+
+      setInput((current) => current || question);
+
+      setChatError(
+        controller.signal.aborted
+          ? "AI support took too long. Please try again or contact a manager."
+          : error instanceof Error
+            ? error.message
+            : "Unable to connect. Please try again or contact a manager."
+      );
+    } finally {
+      clearTimeout(timer);
+      requestRef.current = null;
+      pendingRef.current = false;
+      setBusy(false);
+    }
+  }
+
+  function handleQuickAction(action: string) {
+    if (action === "manager") {
+      openManager();
+      return;
+    }
+
+    const questions: Record<string, string> = {
+      offers:
+        "How do I choose an offer and get its tracking link?",
+      smartlink:
+        "How do I use my Smart Link?",
+      earnings:
+        "Where can I check earnings and how are they recorded?",
+      statistics:
+        "How do I read my click and conversion statistics?",
+      payments:
+        "Where can I check payment information and payment history?",
+      verification:
+        "What should I do if I have an email or account verification problem?",
+    };
+
+    if (questions[action]) {
+      void askAI(questions[action]);
+    }
+  }
+
+  function handleSend() {
+    void askAI(input);
+  }
+
+  function handleKeyDown(
+    event: React.KeyboardEvent<HTMLInputElement>
+  ) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      handleSend();
+    }
+  }
+
+  return (
+    <>
+      {!open && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label="Open UpNetwork Support Chat"
+          className="fixed bottom-5 right-5 z-[90] flex items-center gap-3 rounded-full bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-3.5 text-sm font-bold text-white shadow-2xl shadow-cyan-500/30 transition hover:-translate-y-1 hover:shadow-cyan-500/40"
+        >
+          <span className="relative flex h-8 w-8 items-center justify-center rounded-full bg-white/15">
+            <UpNetworkLogo size={32} />
+            <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-cyan-500" />
+          </span>
+
+          <span className="hidden sm:block">
+            UpNetwork Support
+          </span>
+        </button>
+      )}
+
+      {open && (
+        <div
+          className={`fixed bottom-4 right-4 z-[90] flex h-[min(680px,calc(100vh-32px))] w-[calc(100vw-32px)] max-w-[390px] flex-col overflow-hidden rounded-3xl border shadow-2xl ${
+            dark
+              ? "border-white/10 bg-[#090d17]"
+              : "border-slate-200 bg-white"
+          }`}
+        >
+          {/* Chat header */}
+          <div className="relative overflow-hidden bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-4 text-white">
+            <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-white/10 blur-2xl" />
+
+            <div className="relative flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15">
+                  <UpNetworkLogo size={44} />
+                </div>
+
+                <div>
+                  <p className="font-black">
+                    UpNetwork Support
+                  </p>
+
+                  <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-cyan-50">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+                    AI Support
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                aria-label="Close support chat"
+                className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 transition hover:bg-white/20"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div
+            ref={messagesRef}
+            role="log"
+            aria-label="Support conversation"
+            aria-live="polite"
+            className="flex-1 space-y-3 overflow-y-auto p-4"
+          >
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={`flex ${
+                  message.sender === "user"
+                    ? "justify-end"
+                    : "justify-start"
+                }`}
+              >
+                {message.sender === "bot" && (
+                  <div className="mr-2 mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-cyan-500/10 text-cyan-500">
+                    <UpNetworkLogo size={28} />
+                  </div>
+                )}
+
+                <div
+                  className={`max-w-[82%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2.5 text-xs leading-5 ${
+                    message.sender === "user"
+                      ? "rounded-br-md bg-gradient-to-r from-cyan-500 to-blue-600 text-white"
+                      : dark
+                        ? "rounded-bl-md bg-white/[0.06] text-slate-300"
+                        : "rounded-bl-md bg-slate-100 text-slate-700"
+                  }`}
+                >
+                  {message.text}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {busy && (
+            <p
+              role="status"
+              className="px-4 pb-2 text-xs text-cyan-500"
+            >
+              AI is thinking…
+            </p>
+          )}
+
+          {chatError && (
+            <div
+              role="alert"
+              className="mx-4 mb-2 rounded-xl bg-red-500/10 p-3 text-xs text-red-500"
+            >
+              {chatError}
+            </div>
+          )}
+
+          {/* Quick buttons */}
+          <div
+            className={`border-t px-4 pb-3 pt-3 ${
+              dark
+                ? "border-white/10"
+                : "border-slate-200"
+            }`}
+          >
+            <div className="mb-2 flex items-center gap-1.5">
+              <HelpCircle
+                size={13}
+                className="text-cyan-500"
+              />
+
+              <span
+                className={`text-[10px] font-bold uppercase tracking-wider ${
+                  dark
+                    ? "text-slate-500"
+                    : "text-slate-400"
+                }`}
+              >
+                Quick Help
+              </span>
+            </div>
+
+            <div className="flex gap-1.5 overflow-x-auto pb-1">
+              {quickButtons.map((button) => (
+                <button
+                  type="button"
+                  key={button.action}
+                  disabled={
+                    busy &&
+                    button.action !== "manager"
+                  }
+                  onClick={() =>
+                    handleQuickAction(button.action)
+                  }
+                  className={`shrink-0 rounded-full border px-3 py-1.5 text-[10px] font-semibold transition ${
+                    dark
+                      ? "border-white/10 bg-white/[0.03] text-slate-300 hover:border-cyan-400/30 hover:bg-cyan-400/10 hover:text-cyan-300"
+                      : "border-slate-200 bg-slate-50 text-slate-600 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-600"
+                  }`}
                 >
                   {button.label}
                 </button>
@@ -2190,7 +2586,9 @@ function SupportChatBot({
                   setInput(event.target.value)
                 }
                 onKeyDown={handleKeyDown}
-                placeholder="Ask support..."
+                placeholder="Ask AI in English or বাংলা..."
+                maxLength={2000}
+                disabled={busy}
                 className={`min-w-0 flex-1 bg-transparent px-2.5 py-2 text-xs outline-none ${
                   dark
                     ? "text-white placeholder:text-slate-600"
@@ -2201,7 +2599,7 @@ function SupportChatBot({
               <button
                 type="button"
                 onClick={handleSend}
-                disabled={!input.trim()}
+                disabled={busy || !input.trim()}
                 aria-label="Send message"
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-500 text-white transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-40"
               >
@@ -2216,7 +2614,8 @@ function SupportChatBot({
                   : "text-slate-400"
               }`}
             >
-              UpNetwork CPA Support Assistant
+              AI replies may be inaccurate.
+              Contact a manager to confirm.
             </p>
           </div>
         </div>
