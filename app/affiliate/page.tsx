@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import ManagerEmailContacts from "@/components/manager-email-contacts";
 import NotificationBell from "./notification-bell";
 import { useAffiliateTheme } from "./theme-context";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
@@ -1612,7 +1613,7 @@ export default function AffiliatePage() {
               }
             >
               <div
-                className={`w-full max-w-md rounded-2xl border p-5 shadow-2xl ${panelBg} ${border}`}
+                className={`max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl border p-5 shadow-2xl ${panelBg} ${border}`}
                 onClick={(event) =>
                   event.stopPropagation()
                 }
@@ -1626,8 +1627,7 @@ export default function AffiliatePage() {
                     <p
                       className={`mt-1 text-xs ${faint}`}
                     >
-                      Choose a panel manager on
-                      Telegram.
+                      Contact your manager by Email or Telegram.
                     </p>
                   </div>
 
@@ -1648,6 +1648,8 @@ export default function AffiliatePage() {
                   </button>
                 </div>
 
+                <ManagerEmailContacts dark={dark} affiliateId={affiliateId} />
+                <h3 className="mb-3 text-sm font-bold">Telegram Contact</h3>
                 <div className="space-y-3">
                   {PANEL_MANAGERS.map(
                     (
