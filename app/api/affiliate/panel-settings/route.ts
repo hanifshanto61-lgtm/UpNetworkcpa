@@ -78,19 +78,14 @@ export async function GET(request: NextRequest) {
 
     // Confirm that this account belongs to an affiliate.
     const { data: profile } = await supabase
-      .from("affiliate_profiles")
+      .from("profiles")
       .select("id")
-      .eq("user_id", user.id)
+      .eq("id", user.id)
       .maybeSingle();
 
-    const accountType =
-      user.user_metadata?.account_type;
-
-    if (!profile && accountType !== "affiliate") {
+    if (!profile) {
       return NextResponse.json(
-        {
-          error: "Affiliate account required.",
-        },
+        { error: "Affiliate account required." },
         { status: 403 }
       );
     }
