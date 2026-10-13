@@ -1,138 +1,111 @@
-export const dynamic = "force-dynamic";
-
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const SUPABASE_URL =
-  process.env.NEXT_PUBLIC_SUPABASE_URL;
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
-const SUPABASE_SERVICE_ROLE_KEY =
-  process.env.SUPABASE_SERVICE_ROLE_KEY;
+function reply(body: object, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: {
+      "Cache-Control": "private, no-store, max-age=0",
+      "CDN-Cache-Control": "no-store",
+      "Vercel-CDN-Cache-Control": "no-store",
+    },
+  });
+}
 
 export async function GET(request: NextRequest) {
   try {
-    if (
-      !SUPABASE_URL ||
-      !SUPABASE_SERVICE_ROLE_KEY
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Supabase server configuration is missing.",
-        },
-        { status: 500 }
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!url || !key) {
+      return reply(
+        { error: "Supabase server configuration missing." },
+        500
       );
     }
 
-    const authorization =
-      request.headers.get("authorization");
-
-    if (!authorization) {
-      return NextResponse.json(
-        {
-          error: "Unauthorized.",
-        },
-        { status: 401 }
-      );
-    }
-
-    const token = authorization.replace(
-      /^Bearer\s+/i,
-      ""
-    );
+    const token = request.headers
+      .get("authorization")
+      ?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
 
     if (!token) {
-      return NextResponse.json(
-        {
-          error: "Unauthorized.",
-        },
-        { status: 401 }
-      );
+      return reply({ error: "Unauthorized." }, 401);
     }
 
-    const supabase = createClient(
-      SUPABASE_URL,
-      SUPABASE_SERVICE_ROLE_KEY,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
-    );
+    const client = createClient(url, key, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+      global: {
+        fetch: (input, init) =>
+          fetch(input, { ...init, cache: "no-store" }),
+      },
+    });
 
-    // Verify the logged-in affiliate session.
     const {
       data: { user },
-      error: userError,
-    } = await supabase.auth.getUser(token);
+      error: authError,
+    } = await client.auth.getUser(token);
 
-    if (userError || !user) {
-      return NextResponse.json(
-        {
-          error: "Unauthorized.",
-        },
-        { status: 401 }
-      );
+    if (authError || !user) {
+      return reply({ error: "Unauthorized." }, 401);
     }
 
-    // Confirm that this account belongs to an affiliate.
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("id", user.id)
-      .maybeSingle();
+    const { data: profile, error: profileError } =
+      await client
+        .from("profiles")
+        .select("id")
+        .eq("id", user.id)
+        .maybeSingle();
+
+    if (profileError) {
+      console.error("Panel settings profile", profileError);
+
+      return reply(
+        { error: "Unable to verify affiliate profile." },
+        500
+      );
+    }
 
     if (!profile) {
-      return NextResponse.json(
+      return reply(
         { error: "Affiliate account required." },
-        { status: 403 }
+        403
       );
     }
 
-    // Only expose the fields needed by the Affiliate Panel.
-    const { data: settings, error: settingsError } =
-      await supabase
-        .from("affiliate_panel_settings")
-        .select("feature_key, enabled")
-        .order("display_order", {
-          ascending: true,
-        });
+    const { data: settings, error } = await client
+      .from("affiliate_panel_settings")
+      .select("feature_key, enabled")
+      .order("display_order", { ascending: true });
 
-    if (settingsError) {
-      console.error(
-        "Affiliate panel settings error:",
-        settingsError
-      );
+    if (error) {
+      console.error("Affiliate panel settings", error);
 
-      return NextResponse.json(
-        {
-          error:
-            "Unable to load affiliate panel settings.",
-        },
-        { status: 500 }
+      return reply(
+        { error: "Unable to load panel settings." },
+        500
       );
     }
 
-    return NextResponse.json(
-      {
-        success: true,
-        settings: settings || [],
-      },
-      { status: 200 }
-    );
+    return reply({
+      success: true,
+      settings: settings ?? [],
+      projectRef: new URL(url).hostname.split(".")[0],
+      checkedAt: new Date().toISOString(),
+      revision: "settings-check-v2",
+    });
   } catch (error) {
-    console.error(
-      "Affiliate panel settings route error:",
-      error
-    );
+    console.error("Affiliate panel settings exception", error);
 
-    return NextResponse.json(
-      {
-        error:
-          "Internal server error.",
-      },
-      { status: 500 }
+    return reply(
+      { error: "Unable to load panel settings." },
+      500
     );
   }
 }
