@@ -1,7 +1,14 @@
 import { timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { processPendingPaymentEmails } from "@/lib/payment-notifications";
+
+import {
+  processPendingPaymentEmails,
+} from "@/lib/payment-notifications";
+
+import {
+  processOfferRequestEmails,
+} from "@/lib/offer-request-emails";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -78,22 +85,41 @@ export async function POST(request: NextRequest) {
         autoRefreshToken: false,
         persistSession: false,
       },
+      global: {
+        fetch: (input, init) =>
+          fetch(input, {
+            ...init,
+            cache: "no-store",
+          }),
+      },
     });
 
     const outcomes =
       await processPendingPaymentEmails(client);
 
+    const offerEmails =
+      await processOfferRequestEmails(
+        client,
+        undefined,
+        3
+      );
+
     return reply({
       success: true,
+
       checked: outcomes.length,
 
       accepted: outcomes.filter(
         (item) => item.status === "sent"
       ).length,
 
-      failed: outcomes.filter(
-        (item) => item.status === "failed"
-      ).length,
+      failed:
+        outcomes.filter(
+          (item) => item.status === "failed"
+        ).length +
+        offerEmails.filter(
+          (item) => item.status === "failed"
+        ).length,
 
       processing: outcomes.filter(
         (item) => item.status === "processing"
@@ -102,17 +128,30 @@ export async function POST(request: NextRequest) {
       skipped: outcomes.filter(
         (item) => item.status === "skipped"
       ).length,
+
+      offerEmailsChecked:
+        offerEmails.length,
+
+      offerEmailsAccepted:
+        offerEmails.filter(
+          (item) => item.status === "sent"
+        ).length,
+
+      offerEmailsFailed:
+        offerEmails.filter(
+          (item) => item.status === "failed"
+        ).length,
     });
   } catch (error) {
     console.error(
-      "Scheduled payment email processing failed:",
+      "Scheduled notification email processing failed:",
       error
     );
 
     return reply(
       {
         success: false,
-        error: "Payment email job failed.",
+        error: "Notification email job failed.",
       },
       500
     );
