@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -33,6 +32,7 @@ type MenuItem = {
 };
 
 const menuItems: MenuItem[] = [
+  { label: "Contact Manager Emails", icon: Users, action: "/admin/contact-managers", available: true },
   {
     label: "Dashboard",
     icon: BarChart3,
@@ -188,7 +188,7 @@ const featureDescriptions: Record<string, string> = {
   payments: "Controls payment information and payment requests.",
   profile: "Controls affiliate profile management.",
   settings: "Controls affiliate account settings.",
-  manager_contact: "Controls Telegram manager contact options.",
+  manager_contact: "Controls Email and Telegram manager contact options.",
 };
 
 export default function AdminPage() {
@@ -222,6 +222,8 @@ export default function AdminPage() {
       try {
         setLoading(true);
         setError("");
+
+        if (!supabase) throw new Error("Supabase is not configured.");
 
         const { data, error: sessionError } =
           await supabase.auth.getSession();
@@ -416,7 +418,7 @@ export default function AdminPage() {
   );
 
   async function handleLogout() {
-    await supabase.auth.signOut();
+    if (supabase) await supabase.auth.signOut();
     router.replace("/login");
   }
 
@@ -477,6 +479,8 @@ export default function AdminPage() {
     try {
       setUpdatingFeature(setting.feature_key);
       setError("");
+
+      if (!supabase) throw new Error("Supabase is not configured.");
 
       const {
         data: { session },
@@ -1152,6 +1156,13 @@ export default function AdminPage() {
                 </div>
               </div>
             </div>
+          </section>
+
+          <section className="mt-8 rounded-2xl border border-slate-800 bg-slate-900/50 p-5">
+            <h2 className="text-lg font-bold">Contact Manager Emails</h2>
+            <p className="mt-2 text-sm text-slate-400">Manage email contacts displayed in the Affiliate Panel.</p>
+            <button type="button" onClick={() => router.push("/admin/contact-managers")}
+              className="mt-4 rounded-xl bg-cyan-500 px-4 py-3 text-sm font-bold text-slate-950">Manage Manager Emails</button>
           </section>
 
           {/* Current status */}
