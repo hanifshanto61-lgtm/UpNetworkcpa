@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { createHash } from "node:crypto";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -146,7 +145,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -316,69 +315,120 @@ export async function POST(request: NextRequest) {
     );
 
     try {
+      const model = "gemini-2.5-flash-lite";
+
+      const contents: {
+        role: "user" | "model";
+        parts: { text: string }[];
+      }[] = [];
+
+      for (const message of messages) {
+        const role =
+          message.role === "assistant"
+            ? "model"
+            : "user";
+
+        const last = contents[contents.length - 1];
+
+        if (last?.role === role) {
+          last.parts.push({
+            text: message.content,
+          });
+        } else {
+          contents.push({
+            role,
+            parts: [{ text: message.content }],
+          });
+        }
+      }
+
+      if (contents[0]?.role === "model") {
+        contents.shift();
+      }
+
       const response = await fetch(
-        "https://api.openai.com/v1/responses",
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${apiKey}`,
+            "x-goog-api-key": apiKey,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model:
-              process.env.OPENAI_SUPPORT_MODEL ||
-              "gpt-4.1-mini",
-            instructions: INSTRUCTIONS,
-            input: messages,
-            max_output_tokens: 600,
-            store: false,
-            safety_identifier: createHash("sha256")
-              .update(auth.user.id)
-              .digest("hex"),
+            systemInstruction: {
+              parts: [{ text: INSTRUCTIONS }],
+            },
+            contents,
+            generationConfig: {
+              maxOutputTokens: 600,
+              thinkingConfig: {
+                thinkingBudget: 0,
+              },
+            },
           }),
           signal: controller.signal,
           cache: "no-store",
         }
       );
 
+      const data = await response
+        .json()
+        .catch(() => null);
+
       if (!response.ok) {
+        const providerCode =
+          typeof data?.error?.status === "string"
+            ? data.error.status
+                .replace(/[^A-Z_]/g, "")
+                .slice(0, 80)
+            : "UNKNOWN";
+
         console.error(
-          "AI support provider unavailable",
-          response.status
+          "Gemini support provider unavailable",
+          response.status,
+          providerCode
         );
 
         return json(
           {
             error:
-              "AI support could not answer right now. Please try again or contact a manager.",
+              response.status === 429
+                ? "The free AI service limit has been reached. Please try later or contact a manager."
+                : "AI support could not answer right now. Please try again or contact a manager.",
+          },
+          response.status === 429 ? 429 : 503
+        );
+      }
+
+      const candidate = data?.candidates?.[0];
+
+      if (
+        data?.promptFeedback?.blockReason ||
+        !candidate ||
+        !["STOP", "MAX_TOKENS"].includes(
+          candidate.finishReason
+        )
+      ) {
+        return json(
+          {
+            error:
+              "AI support could not answer this question. Please rephrase it or contact a manager.",
           },
           503
         );
       }
 
-      const data = await response.json();
-
-      const text = Array.isArray(data.output)
-        ? data.output
-            .filter(
-              (item: { type?: string }) =>
-                item.type === "message"
-            )
-            .flatMap(
-              (item: {
-                content?: {
-                  type?: string;
-                  text?: string;
-                }[];
-              }) => item.content || []
-            )
+      const text = Array.isArray(
+        candidate.content?.parts
+      )
+        ? candidate.content.parts
             .filter(
               (part: {
-                type?: string;
                 text?: string;
+                thought?: boolean;
               }) =>
-                part.type === "output_text" &&
-                typeof part.text === "string"
+                typeof part.text === "string" &&
+                !part.thought
             )
             .map(
               (part: { text: string }) => part.text
