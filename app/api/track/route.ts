@@ -1,9 +1,12 @@
 import { createHmac, randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { hasOfferApproval } from "@/lib/offer-access";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const fetchCache = "force-no-store";
+export const revalidate = 0;
 
 const LEGACY_SMARTLINKS = [
   "https://sexforfuns.com/pY1PVjKw?aid=pkkfxdhdk&kid=hxxfzdzzbgg",
@@ -27,20 +30,28 @@ function clean(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-function limited(value: unknown, max = 200): string | null {
+function limited(
+  value: unknown,
+  max = 200
+): string | null {
   const text = clean(value);
   return text ? text.slice(0, max) : null;
 }
 
 function normalizePayout(value: unknown): number {
   const amount = Number(value);
+
   return Number.isFinite(amount) && amount >= 0
     ? Number(amount.toFixed(2))
     : 0;
 }
 
 function commission(value: unknown): number | null {
-  if (value === null || value === undefined || value === "") {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
     return null;
   }
 
@@ -50,8 +61,9 @@ function commission(value: unknown): number | null {
     !Number.isFinite(amount) ||
     amount < 0 ||
     amount > 100 ||
-    Math.abs(amount * 100 - Math.round(amount * 100)) >
-      0.000001
+    Math.abs(
+      amount * 100 - Math.round(amount * 100)
+    ) > 0.000001
   ) {
     return null;
   }
@@ -100,8 +112,14 @@ function getHeader(
   return limited(request.headers.get(name), max);
 }
 
-function getCity(request: NextRequest): string | null {
-  const raw = getHeader(request, "x-vercel-ip-city");
+function getCity(
+  request: NextRequest
+): string | null {
+  const raw = getHeader(
+    request,
+    "x-vercel-ip-city"
+  );
+
   if (!raw) return null;
 
   try {
@@ -118,12 +136,17 @@ function getVisitorHash(
 ): string | null {
   const ip =
     request.headers.get("x-vercel-forwarded-for") ||
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers
+      .get("x-forwarded-for")
+      ?.split(",")[0]
+      ?.trim() ||
     "";
 
   if (!ip) return null;
 
-  const day = new Date().toISOString().slice(0, 10);
+  const day = new Date()
+    .toISOString()
+    .slice(0, 10);
 
   return createHmac("sha256", secret)
     .update(`${day}|${ip}|${ua}`)
@@ -141,32 +164,49 @@ function getTrafficSource(
   if (source) return source;
 
   const referrer = request.headers.get("referer");
+
   if (!referrer) return "Direct / Unknown";
 
   try {
-    return limited(new URL(referrer).hostname, 100);
+    return limited(
+      new URL(referrer).hostname,
+      100
+    );
   } catch {
     return "Unknown";
   }
 }
 
-function getSafeReferrer(request: NextRequest): string | null {
+function getSafeReferrer(
+  request: NextRequest
+): string | null {
   const value = request.headers.get("referer");
+
   if (!value) return null;
 
   try {
     const url = new URL(value);
-    if (!["http:", "https:"].includes(url.protocol)) {
+
+    if (
+      !["http:", "https:"].includes(url.protocol)
+    ) {
       return null;
     }
-    return limited(`${url.origin}${url.pathname}`, 500);
+
+    return limited(
+      `${url.origin}${url.pathname}`,
+      500
+    );
   } catch {
     return null;
   }
 }
 
-function parseDestination(value: unknown): URL | null {
+function parseDestination(
+  value: unknown
+): URL | null {
   const input = clean(value);
+
   if (!input) return null;
 
   try {
@@ -186,12 +226,16 @@ function parseDestination(value: unknown): URL | null {
   }
 }
 
-function validClickIdParameter(value: unknown): string | null {
+function validClickIdParameter(
+  value: unknown
+): string | null {
   const parameter = clean(value);
 
   if (
     !/^[a-zA-Z][a-zA-Z0-9_]{0,49}$/.test(parameter) ||
-    ["sub2", "offer_id"].includes(parameter.toLowerCase())
+    ["sub2", "offer_id"].includes(
+      parameter.toLowerCase()
+    )
   ) {
     return null;
   }
@@ -206,30 +250,54 @@ function addTrackingParameters(
   offerId: string | null,
   parameter: string
 ): string {
-  destination.searchParams.set(parameter, clickId);
-  destination.searchParams.set("sub2", affiliateId);
+  destination.searchParams.set(
+    parameter,
+    clickId
+  );
 
-  if (offerId && !destination.searchParams.has("offer_id")) {
-    destination.searchParams.set("offer_id", offerId);
+  destination.searchParams.set(
+    "sub2",
+    affiliateId
+  );
+
+  if (
+    offerId &&
+    !destination.searchParams.has("offer_id")
+  ) {
+    destination.searchParams.set(
+      "offer_id",
+      offerId
+    );
   }
 
   return destination.toString();
 }
 
-function errorResponse(message: string, status: number) {
+function errorResponse(
+  message: string,
+  status: number
+) {
   return NextResponse.json(
-    { success: false, error: message },
+    {
+      success: false,
+      error: message,
+    },
     {
       status,
-      headers: { "Cache-Control": "no-store" },
+      headers: {
+        "Cache-Control": "no-store",
+      },
     }
   );
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const url =
+      process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+    const key =
+      process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!url || !key) {
       return errorResponse(
@@ -243,43 +311,74 @@ export async function GET(request: NextRequest) {
         autoRefreshToken: false,
         persistSession: false,
       },
+      global: {
+        fetch: (input, init) =>
+          fetch(input, {
+            ...init,
+            cache: "no-store",
+          }),
+      },
     });
 
-    const params = request.nextUrl.searchParams;
+    const params =
+      request.nextUrl.searchParams;
 
     const affiliateId = clean(
-      params.get("aid") || params.get("affiliate_id")
+      params.get("aid") ||
+        params.get("affiliate_id")
     );
 
     const offerId = clean(
-      params.get("offerId") || params.get("offer_id")
+      params.get("offerId") ||
+        params.get("offer_id")
     );
 
-    const slug = clean(params.get("sl")) || "default-smartlink";
+    const slug =
+      clean(params.get("sl")) ||
+      "default-smartlink";
 
     if (!affiliateId) {
-      return errorResponse("Affiliate ID is required.", 400);
+      return errorResponse(
+        "Affiliate ID is required.",
+        400
+      );
     }
 
-    const { data: affiliate, error: affiliateError } =
-      await supabase
-        .from("profiles")
-        .select("id,affiliate_id,application_status")
-        .eq("affiliate_id", affiliateId)
-        .maybeSingle();
+    const {
+      data: affiliate,
+      error: affiliateError,
+    } = await supabase
+      .from("profiles")
+      .select(
+        "id,affiliate_id,application_status"
+      )
+      .eq("affiliate_id", affiliateId)
+      .maybeSingle();
 
     if (affiliateError) {
-      console.error("Affiliate lookup:", affiliateError.code);
-      return errorResponse("Unable to validate affiliate.", 500);
+      console.error(
+        "Affiliate lookup:",
+        affiliateError.code
+      );
+
+      return errorResponse(
+        "Unable to validate affiliate.",
+        500
+      );
     }
 
     if (!affiliate) {
-      return errorResponse("Invalid affiliate ID.", 404);
+      return errorResponse(
+        "Invalid affiliate ID.",
+        404
+      );
     }
 
     if (
       !["approved", "active"].includes(
-        clean(affiliate.application_status).toLowerCase()
+        clean(
+          affiliate.application_status
+        ).toLowerCase()
       )
     ) {
       return errorResponse(
@@ -289,6 +388,7 @@ export async function GET(request: NextRequest) {
     }
 
     const clickId = randomUUID();
+
     let destination: URL | null = null;
     let payout = 0;
     let trackedOfferId: string | null = null;
@@ -297,24 +397,53 @@ export async function GET(request: NextRequest) {
     let clickIdParameter = "sub1";
 
     if (offerId) {
-      const { data: offer, error: offerError } =
-        await supabase
-          .from("offers")
-          .select("id,name,payout,tracking_url,status,network_id")
-          .eq("id", offerId)
-          .eq("status", "active")
-          .maybeSingle();
+      const {
+        data: offer,
+        error: offerError,
+      } = await supabase
+        .from("offers")
+        .select(
+          "id,name,payout,tracking_url,status,network_id"
+        )
+        .eq("id", offerId)
+        .eq("status", "active")
+        .maybeSingle();
 
       if (offerError) {
-        console.error("Offer lookup:", offerError.code);
-        return errorResponse("Unable to validate offer.", 500);
+        console.error(
+          "Offer lookup:",
+          offerError.code
+        );
+
+        return errorResponse(
+          "Unable to validate offer.",
+          500
+        );
       }
 
       if (!offer) {
-        return errorResponse("Offer is unavailable or paused.", 404);
+        return errorResponse(
+          "Offer is unavailable or paused.",
+          404
+        );
       }
 
-      destination = parseDestination(offer.tracking_url);
+      const approved = await hasOfferApproval(
+        supabase,
+        affiliate.id,
+        String(offer.id)
+      );
+
+      if (!approved) {
+        return errorResponse(
+          "Request this offer and wait for admin approval before promoting it.",
+          403
+        );
+      }
+
+      destination = parseDestination(
+        offer.tracking_url
+      );
 
       if (!destination) {
         return errorResponse(
@@ -324,29 +453,47 @@ export async function GET(request: NextRequest) {
       }
 
       if (offer.network_id) {
-        const { data: network, error: networkError } =
-          await supabase
-            .from("cpa_networks")
-            .select("status,click_id_parameter")
-            .eq("id", offer.network_id)
-            .maybeSingle();
+        const {
+          data: network,
+          error: networkError,
+        } = await supabase
+          .from("cpa_networks")
+          .select(
+            "status,click_id_parameter"
+          )
+          .eq("id", offer.network_id)
+          .maybeSingle();
 
         if (networkError) {
-          console.error("Network lookup:", networkError.code);
-          return errorResponse("Unable to validate CPA network.", 500);
+          console.error(
+            "Network lookup:",
+            networkError.code
+          );
+
+          return errorResponse(
+            "Unable to validate CPA network.",
+            500
+          );
         }
 
         if (!network) {
-          return errorResponse("CPA network is unavailable.", 404);
+          return errorResponse(
+            "CPA network is unavailable.",
+            404
+          );
         }
 
         if (network.status !== "active") {
-          return errorResponse("CPA network is paused.", 403);
+          return errorResponse(
+            "CPA network is paused.",
+            403
+          );
         }
 
-        const parameter = validClickIdParameter(
-          network.click_id_parameter
-        );
+        const parameter =
+          validClickIdParameter(
+            network.click_id_parameter
+          );
 
         if (!parameter) {
           return errorResponse(
@@ -358,90 +505,151 @@ export async function GET(request: NextRequest) {
         clickIdParameter = parameter;
       }
 
-      payout = normalizePayout(offer.payout);
+      payout = normalizePayout(
+        offer.payout
+      );
+
       trackedOfferId = String(offer.id);
     } else {
-      const { data: personalLink, error: personalError } =
-        await supabase
-          .from("smart_links")
-          .select(SMARTLINK_COLUMNS)
-          .eq("affiliate_id", affiliateId)
-          .eq("slug", slug)
-          .maybeSingle();
+      const {
+        data: personalLink,
+        error: personalError,
+      } = await supabase
+        .from("smart_links")
+        .select(SMARTLINK_COLUMNS)
+        .eq("affiliate_id", affiliateId)
+        .eq("slug", slug)
+        .maybeSingle();
 
       if (personalError) {
-        console.error("Personal link lookup:", personalError.code);
-        return errorResponse("Unable to load Smart Link.", 500);
+        console.error(
+          "Personal link lookup:",
+          personalError.code
+        );
+
+        return errorResponse(
+          "Unable to load Smart Link.",
+          500
+        );
       }
 
       let selectedLink =
-        (personalLink as SmartLinkRow | null) ?? null;
+        (personalLink as SmartLinkRow | null) ??
+        null;
 
-      if (!selectedLink && slug === "default-smartlink") {
-        const { data: globalLinks, error: globalError } =
-          await supabase
-            .from("smart_links")
-            .select(SMARTLINK_COLUMNS)
-            .eq("is_global", true)
-            .eq("status", "active")
-            .order("slug", { ascending: true });
+      if (
+        !selectedLink &&
+        slug === "default-smartlink"
+      ) {
+        const {
+          data: globalLinks,
+          error: globalError,
+        } = await supabase
+          .from("smart_links")
+          .select(SMARTLINK_COLUMNS)
+          .eq("is_global", true)
+          .eq("status", "active")
+          .order("slug", {
+            ascending: true,
+          });
 
         if (globalError) {
-          console.error("Global links lookup:", globalError.code);
-          return errorResponse("Unable to load global Smart Links.", 500);
+          console.error(
+            "Global links lookup:",
+            globalError.code
+          );
+
+          return errorResponse(
+            "Unable to load global Smart Links.",
+            500
+          );
         }
 
         const validLinks = (
           (globalLinks || []) as SmartLinkRow[]
         ).filter(
-          (link) => parseDestination(link.destination_url) !== null
+          (link) =>
+            parseDestination(
+              link.destination_url
+            ) !== null
         );
 
         const selector = Number.parseInt(
-          clickId.replace(/-/g, "").slice(0, 8),
+          clickId
+            .replace(/-/g, "")
+            .slice(0, 8),
           16
         );
 
         if (validLinks.length) {
-          selectedLink = validLinks[selector % validLinks.length];
+          selectedLink =
+            validLinks[
+              selector % validLinks.length
+            ];
         } else {
-          const { count, error: countError } =
-            await supabase
-              .from("smart_links")
-              .select("id", { count: "exact", head: true })
-              .eq("is_global", true);
+          const {
+            count,
+            error: countError,
+          } = await supabase
+            .from("smart_links")
+            .select("id", {
+              count: "exact",
+              head: true,
+            })
+            .eq("is_global", true);
 
           if (countError) {
-            return errorResponse("Unable to verify Smart Links.", 500);
+            return errorResponse(
+              "Unable to verify Smart Links.",
+              500
+            );
           }
 
           if (count === 0) {
             destination = parseDestination(
-              LEGACY_SMARTLINKS[selector % LEGACY_SMARTLINKS.length]
+              LEGACY_SMARTLINKS[
+                selector %
+                  LEGACY_SMARTLINKS.length
+              ]
             );
           }
         }
       } else if (!selectedLink) {
-        const { data: globalLink, error: globalError } =
-          await supabase
-            .from("smart_links")
-            .select(SMARTLINK_COLUMNS)
-            .eq("is_global", true)
-            .eq("slug", slug)
-            .maybeSingle();
+        const {
+          data: globalLink,
+          error: globalError,
+        } = await supabase
+          .from("smart_links")
+          .select(SMARTLINK_COLUMNS)
+          .eq("is_global", true)
+          .eq("slug", slug)
+          .maybeSingle();
 
         if (globalError) {
-          console.error("Global link lookup:", globalError.code);
-          return errorResponse("Unable to load Smart Link.", 500);
+          console.error(
+            "Global link lookup:",
+            globalError.code
+          );
+
+          return errorResponse(
+            "Unable to load Smart Link.",
+            500
+          );
         }
 
         selectedLink =
-          (globalLink as SmartLinkRow | null) ?? null;
+          (globalLink as SmartLinkRow | null) ??
+          null;
       }
 
       if (selectedLink) {
-        if (selectedLink.status !== "active") {
-          return errorResponse("Smart Link is paused.", 404);
+        if (
+          selectedLink.status !== "active"
+        ) {
+          return errorResponse(
+            "Smart Link is paused.",
+            404
+          );
         }
 
         destination = parseDestination(
@@ -449,10 +657,14 @@ export async function GET(request: NextRequest) {
         );
 
         if (!destination) {
-          return errorResponse("Smart Link destination is invalid.", 500);
+          return errorResponse(
+            "Smart Link destination is invalid.",
+            500
+          );
         }
 
         smartlinkId = selectedLink.id;
+
         shareSnapshot = commission(
           selectedLink.network_share_percent
         );
@@ -464,20 +676,23 @@ export async function GET(request: NextRequest) {
           );
         }
 
-        // Read only the tracking parameter.
-        // Never send a postback secret to the destination.
-        const { data: settings, error: settingsError } =
-          await supabase
-            .from("smartlink_postback_settings")
-            .select("click_id_parameter")
-            .eq("smartlink_id", smartlinkId)
-            .maybeSingle();
+        const {
+          data: settings,
+          error: settingsError,
+        } = await supabase
+          .from(
+            "smartlink_postback_settings"
+          )
+          .select("click_id_parameter")
+          .eq("smartlink_id", smartlinkId)
+          .maybeSingle();
 
         if (settingsError) {
           console.error(
             "Smart Link settings lookup:",
             settingsError.code
           );
+
           return errorResponse(
             "Unable to load Smart Link tracking settings.",
             500
@@ -485,9 +700,10 @@ export async function GET(request: NextRequest) {
         }
 
         if (settings) {
-          const parameter = validClickIdParameter(
-            settings.click_id_parameter
-          );
+          const parameter =
+            validClickIdParameter(
+              settings.click_id_parameter
+            );
 
           if (!parameter) {
             return errorResponse(
@@ -501,15 +717,23 @@ export async function GET(request: NextRequest) {
       }
 
       if (!destination) {
-        return errorResponse("Smart Link is unavailable.", 404);
+        return errorResponse(
+          "Smart Link is unavailable.",
+          404
+        );
       }
     }
 
     if (!destination) {
-      return errorResponse("Tracking destination is unavailable.", 404);
+      return errorResponse(
+        "Tracking destination is unavailable.",
+        404
+      );
     }
 
-    const ua = request.headers.get("user-agent") || "";
+    const ua =
+      request.headers.get("user-agent") ||
+      "";
 
     const clickData: Record<string, unknown> = {
       click_id: clickId,
@@ -517,32 +741,71 @@ export async function GET(request: NextRequest) {
       smartlink_id: smartlinkId,
 
       country:
-        getHeader(request, "x-vercel-ip-country", 10) ||
-        getHeader(request, "cf-ipcountry", 10),
-      region: getHeader(request, "x-vercel-ip-country-region"),
+        getHeader(
+          request,
+          "x-vercel-ip-country",
+          10
+        ) ||
+        getHeader(
+          request,
+          "cf-ipcountry",
+          10
+        ),
+
+      region: getHeader(
+        request,
+        "x-vercel-ip-country-region"
+      ),
+
       city: getCity(request),
+
       postal_code: getHeader(
         request,
         "x-vercel-ip-postal-code",
         30
       ),
-      timezone: getHeader(request, "x-vercel-ip-timezone"),
+
+      timezone: getHeader(
+        request,
+        "x-vercel-ip-timezone"
+      ),
 
       device: detectDevice(ua),
       browser: detectBrowser(ua),
       operating_system: detectOS(ua),
 
       referer: getSafeReferrer(request),
-      traffic_source: getTrafficSource(request, params),
+
+      traffic_source: getTrafficSource(
+        request,
+        params
+      ),
+
       campaign:
-        limited(params.get("utm_campaign"), 150) ||
-        limited(params.get("campaign"), 150),
+        limited(
+          params.get("utm_campaign"),
+          150
+        ) ||
+        limited(
+          params.get("campaign"),
+          150
+        ),
 
-      visitor_hash: getVisitorHash(request, ua, key),
+      visitor_hash: getVisitorHash(
+        request,
+        ua,
+        key
+      ),
+
       is_suspicious: detectSuspicious(ua),
-      asn: getHeader(request, "x-vercel-ip-as-number", 50),
-      isp: null,
 
+      asn: getHeader(
+        request,
+        "x-vercel-ip-as-number",
+        50
+      ),
+
+      isp: null,
       status: "click",
       payout: trackedOfferId ? payout : 0,
     };
@@ -551,38 +814,58 @@ export async function GET(request: NextRequest) {
       clickData.offer_id = trackedOfferId;
     }
 
-    if (smartlinkId && shareSnapshot !== null) {
-      // Keep the commission rate from the time of the click.
-      clickData.network_share_percent = shareSnapshot;
+    if (
+      smartlinkId &&
+      shareSnapshot !== null
+    ) {
+      clickData.network_share_percent =
+        shareSnapshot;
+
       clickData.gross_revenue = 0;
       clickData.network_profit = 0;
     }
 
-    const { error: clickError } = await supabase
-      .from("clicks")
-      .insert(clickData);
+    const { error: clickError } =
+      await supabase
+        .from("clicks")
+        .insert(clickData);
 
     if (clickError) {
-      console.error("Tracking insert:", clickError.code);
-      return errorResponse("Unable to record click.", 500);
+      console.error(
+        "Tracking insert:",
+        clickError.code
+      );
+
+      return errorResponse(
+        "Unable to record click.",
+        500
+      );
     }
 
-    const redirectUrl = addTrackingParameters(
-      destination,
-      clickId,
-      affiliateId,
-      trackedOfferId,
-      clickIdParameter
-    );
+    const redirectUrl =
+      addTrackingParameters(
+        destination,
+        clickId,
+        affiliateId,
+        trackedOfferId,
+        clickIdParameter
+      );
 
-    return NextResponse.redirect(redirectUrl, {
-      status: 302,
-      headers: {
-        "Cache-Control": "no-store",
-        "Referrer-Policy": "strict-origin-when-cross-origin",
-      },
-    });
+    return NextResponse.redirect(
+      redirectUrl,
+      {
+        status: 302,
+        headers: {
+          "Cache-Control": "no-store",
+          "Referrer-Policy":
+            "strict-origin-when-cross-origin",
+        },
+      }
+    );
   } catch {
-    return errorResponse("Internal tracking service error.", 500);
+    return errorResponse(
+      "Internal tracking service error.",
+      500
+    );
   }
 }
