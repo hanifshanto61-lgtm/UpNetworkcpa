@@ -1652,56 +1652,59 @@ export default function AffiliatePage() {
                 <h3 className="mb-3 text-sm font-bold">Telegram Contact</h3>
                 <div className="space-y-3">
                   {PANEL_MANAGERS.map(
-                    (
-                      manager,
-                      index
-                    ) => (
-                      <a
-                        key={
-                          manager.id
-                        }
-                        href={
-                          manager.telegramUrl
-                        }
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={`flex items-center gap-3 rounded-xl border p-4 transition ${
-                          dark
-                            ? "border-white/10 bg-white/[0.025] hover:border-cyan-400/30 hover:bg-cyan-400/5"
-                            : "border-slate-200 bg-slate-50 hover:border-cyan-300 hover:bg-cyan-50"
-                        }`}
-                      >
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-500">
-                          <MessageCircle
-                            size={19}
-                          />
-                        </div>
+{/* Manager Modal */}
+        {managerOpen &&
+          featureEnabled("manager_contact") && (
+            <div
+              className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm"
+              onClick={() => setManagerOpen(false)}
+            >
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="contact-manager-title"
+                className={`max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl border p-5 shadow-2xl ${panelBg} ${border}`}
+                onClick={(event) =>
+                  event.stopPropagation()
+                }
+              >
+                <div className="mb-5 flex items-center justify-between">
+                  <div>
+                    <h2
+                      id="contact-manager-title"
+                      className="font-bold"
+                    >
+                      Contact Manager
+                    </h2>
 
-                        <div className="flex-1">
-                          <p className="text-sm font-semibold">
-                            Manager{" "}
-                            {index + 1}
-                          </p>
+                    <p
+                      className={`mt-1 text-xs ${faint}`}
+                    >
+                      Contact your manager by Email
+                      or Telegram.
+                    </p>
+                  </div>
 
-                          <p className="mt-0.5 text-xs text-cyan-500">
-                            {
-                              manager.telegram
-                            }
-                          </p>
-                        </div>
-
-                        <ChevronRight
-                          size={17}
-                          className={
-                            dark
-                              ? "text-slate-700"
-                              : "text-slate-400"
-                          }
-                        />
-                      </a>
-                    )
-                  )}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setManagerOpen(false)
+                    }
+                    aria-label="Close Contact Manager"
+                    className={`flex h-9 w-9 items-center justify-center rounded-lg ${
+                      dark
+                        ? "bg-white/5 text-slate-400"
+                        : "bg-slate-100 text-slate-500"
+                    }`}
+                  >
+                    <X size={18} />
+                  </button>
                 </div>
+
+                <ManagerEmailContacts
+                  dark={dark}
+                  affiliateId={affiliateId}
+                />
               </div>
             </div>
           )}
