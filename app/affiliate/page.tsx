@@ -2105,62 +2105,7 @@ function SupportChatBot({
                 {message.sender === "bot" && (
                   <div className="mr-2 mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-cyan-500/10 text-cyan-500">
                     <UpNetworkLogo size={28} />
-                  </div>
-                )}
 
-                <div
-                  className={`max-w-[82%] rounded-2xl px-3.5 py-2.5 text-xs leading-5 ${
-                    message.sender === "user"
-                      ? "rounded-br-md bg-gradient-to-r from-cyan-500 to-blue-600 text-white"
-                      : dark
-                        ? "rounded-bl-md bg-white/[0.06] text-slate-300"
-                        : "rounded-bl-md bg-slate-100 text-slate-700"
-                  }`}
-                >
-                  {message.text}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Quick buttons */}
-          <div
-            className={`border-t px-4 pb-3 pt-3 ${
-              dark
-                ? "border-white/10"
-                : "border-slate-200"
-            }`}
-          >
-            <div className="mb-2 flex items-center gap-1.5">
-              <HelpCircle
-                size={13}
-                className="text-cyan-500"
-              />
-
-              <span
-                className={`text-[10px] font-bold uppercase tracking-wider ${
-                  dark
-                    ? "text-slate-500"
-                    : "text-slate-400"
-                }`}
-              >
-                Quick Help
-              </span>
-            </div>
-
-            <div className="flex gap-1.5 overflow-x-auto pb-1">
-              {quickButtons.map((button) => (
-                <button
-                  type="button"
-                  key={button.action}
-                  onClick={() =>
-                    handleQuickAction(button.action)
-                  }
-                  className={`shrink-0 rounded-full border px-3 py-1.5 text-[10px] font-semibold transition ${
-                    dark
-                      ? "border-white/10 bg-white/[0.03] text-slate-300 hover:border-cyan-400/30 hover:bg-cyan-400/10 hover:text-cyan-300"
-                      : "border-slate-200 bg-slate-50 text-slate-600 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-600"
-                  }`}
 function SupportChatBot({
   dark,
   router,
