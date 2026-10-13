@@ -1970,7 +1970,11 @@ function SupportChatBot({
       router.push(route);
     }
   }
-
+  
+  function handleSend() {
+    void askAI(input);
+  }
+  
   function handleKeyDown(
     event: React.KeyboardEvent<HTMLInputElement>
   ) {
