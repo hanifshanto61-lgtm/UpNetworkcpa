@@ -1599,59 +1599,7 @@ export default function AffiliatePage() {
           </div>
         )}
 
-        {/* Manager Modal */}
-        {managerOpen &&
-          featureEnabled(
-            "manager_contact"
-          ) && (
-            <div
-              className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm"
-              onClick={() =>
-                setManagerOpen(
-                  false
-                )
-              }
-            >
-              <div
-                className={`max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl border p-5 shadow-2xl ${panelBg} ${border}`}
-                onClick={(event) =>
-                  event.stopPropagation()
-                }
-              >
-                <div className="mb-5 flex items-center justify-between">
-                  <div>
-                    <h2 className="font-bold">
-                      Contact Manager
-                    </h2>
-
-                    <p
-                      className={`mt-1 text-xs ${faint}`}
-                    >
-                      Contact your manager by Email or Telegram.
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setManagerOpen(
-                        false
-                      )
-                    }
-                    className={`flex h-9 w-9 items-center justify-center rounded-lg ${
-                      dark
-                        ? "bg-white/5 text-slate-400"
-                        : "bg-slate-100 text-slate-500"
-                    }`}
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-
-                <ManagerEmailContacts dark={dark} affiliateId={affiliateId} />
-                <h3 className="mb-3 text-sm font-bold">Telegram Contact</h3>
-                <div className="space-y-3">
-                  {PANEL_MANAGERS.map(
+        
 {/* Manager Modal */}
         {managerOpen &&
           featureEnabled("manager_contact") && (
