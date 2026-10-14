@@ -6,7 +6,8 @@ export const dynamic = "force-dynamic";
 
 function getAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const serviceKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !serviceKey) {
     throw new Error(
@@ -55,8 +56,7 @@ function validUrl(value: unknown): value is string {
     const url = new URL(value);
 
     return (
-      (url.protocol === "https:" ||
-        url.protocol === "http:") &&
+      ["https:", "http:"].includes(url.protocol) &&
       !url.username &&
       !url.password
     );
@@ -84,7 +84,7 @@ function validSlug(value: unknown): value is string {
   );
 }
 
-// GET: List Smart Links.
+// List Smart Links.
 export async function GET(request: NextRequest) {
   try {
     if (!(await verifyAdmin(request))) {
@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
     const { data, error } = await supabase
       .from("smart_links")
       .select(
-        "id, affiliate_id, name, slug, destination_url, status, is_global, network_share_percent, created_at"
+        "id, affiliate_id, name, slug, destination_url, status, is_global, smartlink_group, network_share_percent, created_at"
       )
       .order("created_at", {
         ascending: false,
@@ -123,7 +123,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST: Create a Global Smart Link.
+// Create a Global destination or Individual Smart Link.
 export async function POST(request: NextRequest) {
   try {
     if (!(await verifyAdmin(request))) {
@@ -146,6 +146,36 @@ export async function POST(request: NextRequest) {
       typeof body.destination_url === "string"
         ? body.destination_url.trim()
         : "";
+
+    const group =
+      body.smartlink_group ?? "global_pool";
+
+    if (
+      group !== "global_pool" &&
+      group !== "individual"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Invalid Smart Link type.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (
+      group === "individual" &&
+      slug === "default-smartlink"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "default-smartlink is reserved for Global.",
+        },
+        { status: 400 }
+      );
+    }
 
     const share =
       body.network_share_percent === undefined
@@ -196,24 +226,24 @@ export async function POST(request: NextRequest) {
 
     const supabase = getAdminClient();
 
-    const { data: existing, error: checkError } =
-      await supabase
-        .from("smart_links")
-        .select("id")
-        .eq("slug", slug)
-        .eq("is_global", true)
-        .limit(1);
+    const {
+      data: existing,
+      error: checkError,
+    } = await supabase
+      .from("smart_links")
+      .select("id")
+      .eq("slug", slug)
+      .eq("is_global", true)
+      .limit(1);
 
-    if (checkError) {
-      throw checkError;
-    }
+    if (checkError) throw checkError;
 
     if (existing && existing.length > 0) {
       return NextResponse.json(
         {
           success: false,
           message:
-            "This global Smart Link slug already exists.",
+            "This Smart Link slug already exists.",
         },
         { status: 409 }
       );
@@ -224,6 +254,7 @@ export async function POST(request: NextRequest) {
       .insert({
         affiliate_id: null,
         is_global: true,
+        smartlink_group: group,
         name,
         slug,
         destination_url: destinationUrl,
@@ -257,7 +288,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PATCH: Update a Global Smart Link.
+// Update Smart Link settings.
 export async function PATCH(request: NextRequest) {
   try {
     if (!(await verifyAdmin(request))) {
@@ -284,7 +315,10 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const updates: Record<string, string | number> = {};
+    const updates: Record<
+      string,
+      string | number
+    > = {};
 
     if (body.name !== undefined) {
       if (
@@ -352,6 +386,51 @@ export async function PATCH(request: NextRequest) {
       updates.status = body.status;
     }
 
+    if (body.smartlink_group !== undefined) {
+      if (
+        body.smartlink_group !== "global_pool" &&
+        body.smartlink_group !== "individual"
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Invalid Smart Link type.",
+          },
+          { status: 400 }
+        );
+      }
+
+      updates.smartlink_group =
+        body.smartlink_group;
+
+      if (body.smartlink_group === "individual") {
+        const {
+          data: existing,
+          error: lookupError,
+        } = await getAdminClient()
+          .from("smart_links")
+          .select("slug")
+          .eq("id", id)
+          .eq("is_global", true)
+          .maybeSingle();
+
+        if (lookupError) throw lookupError;
+
+        if (
+          existing?.slug === "default-smartlink"
+        ) {
+          return NextResponse.json(
+            {
+              success: false,
+              message:
+                "default-smartlink is reserved for Global.",
+            },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
     if (Object.keys(updates).length === 0) {
       return NextResponse.json(
         {
@@ -388,7 +467,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: "Global Smart Link not found.",
+          message: "Smart Link not found.",
         },
         { status: 404 }
       );
