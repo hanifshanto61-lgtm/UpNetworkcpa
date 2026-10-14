@@ -37,6 +37,13 @@ type Offer = {
   country?: string | null;
   payout?: number | string | null;
   status?: string | null;
+  access_status?: string | null;
+};
+
+type SmartLinkChoice = {
+  id: string;
+  name: string;
+  slug: string;
 };
 
 type Stats = {
@@ -57,6 +64,12 @@ export default function SmartLinksPage() {
 
   const [affiliateId, setAffiliateId] = useState("");
   const [affiliateName, setAffiliateName] = useState("");
+
+  const [smartLinks, setSmartLinks] = useState<
+    SmartLinkChoice[]
+  >([]);
+  const [smartLinksError, setSmartLinksError] =
+    useState("");
 
   const [offers, setOffers] = useState<Offer[]>([]);
   const [search, setSearch] = useState("");
@@ -96,6 +109,7 @@ export default function SmartLinksPage() {
         }
 
         setError("");
+        setOffers([]);
 
         if (!supabase) {
           throw new Error(
@@ -116,8 +130,7 @@ export default function SmartLinksPage() {
         }
 
         const headers = {
-          Authorization:
-            `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${session.access_token}`,
         };
 
         const dashboardResponse = await fetch(
@@ -144,8 +157,8 @@ export default function SmartLinksPage() {
 
         const id = String(
           profile.affiliateId ||
-          profile.affiliate_id ||
-          ""
+            profile.affiliate_id ||
+            ""
         ).trim();
 
         if (!id) {
@@ -159,8 +172,8 @@ export default function SmartLinksPage() {
         setAffiliateName(
           String(
             profile.name ||
-            profile.full_name ||
-            "Affiliate"
+              profile.full_name ||
+              "Affiliate"
           )
         );
 
@@ -177,7 +190,7 @@ export default function SmartLinksPage() {
         });
 
         const offersResponse = await fetch(
-          "/api/affiliate/offers",
+          "/api/affiliate/offers?approved_only=true",
           {
             method: "GET",
             headers,
@@ -202,11 +215,50 @@ export default function SmartLinksPage() {
             : []
         ).filter(
           (offer: Offer) =>
-            !offer.status ||
-            offer.status.toLowerCase() === "active"
+            offer.status === "active" &&
+            offer.access_status === "approved"
         );
 
         setOffers(activeOffers);
+
+        setSmartLinksError("");
+
+        try {
+          const response = await fetch(
+            "/api/affiliate/smart-links",
+            {
+              headers,
+              cache: "no-store",
+            }
+          );
+
+          const result = await response.json();
+
+          if (!response.ok || !result.success) {
+            throw new Error(
+              result.error ||
+                "Unable to load Smart Links."
+            );
+          }
+
+          setSmartLinks(
+            (
+              Array.isArray(result.smartLinks)
+                ? result.smartLinks
+                : []
+            ).filter(
+              (link: SmartLinkChoice) =>
+                link.slug !== "default-smartlink"
+            )
+          );
+        } catch (err) {
+          setSmartLinks([]);
+          setSmartLinksError(
+            err instanceof Error
+              ? err.message
+              : "Unable to load Smart Links."
+          );
+        }
       } catch (err) {
         console.error(
           "Smart Links loading error:",
@@ -242,6 +294,20 @@ export default function SmartLinksPage() {
     return `${origin}/api/track?${params.toString()}`;
   }, [origin, affiliateId]);
 
+  const getSmartLink = useCallback(
+    (slug: string) => {
+      if (!origin || !affiliateId) return "";
+
+      const params = new URLSearchParams({
+        aid: affiliateId,
+        sl: slug,
+      });
+
+      return `${origin}/api/track?${params.toString()}`;
+    },
+    [origin, affiliateId]
+  );
+
   const getOfferLink = useCallback(
     (offerId: string) => {
       if (!origin || !affiliateId) return "";
@@ -261,8 +327,8 @@ export default function SmartLinksPage() {
 
     if (!query) return offers;
 
-    return offers.filter((offer) => {
-      return (
+    return offers.filter(
+      (offer) =>
         offer.name.toLowerCase().includes(query) ||
         (offer.category || "")
           .toLowerCase()
@@ -270,8 +336,7 @@ export default function SmartLinksPage() {
         (offer.country || "")
           .toLowerCase()
           .includes(query)
-      );
-    });
+    );
   }, [offers, search]);
 
   async function copyLink(
@@ -279,9 +344,7 @@ export default function SmartLinksPage() {
     id: string
   ) {
     if (!link) {
-      setError(
-        "Tracking link is unavailable."
-      );
+      setError("Tracking link is unavailable.");
       return;
     }
 
@@ -335,7 +398,6 @@ export default function SmartLinksPage() {
     <main
       className={`min-h-screen transition-colors duration-300 ${pageBg}`}
     >
-      {/* Header */}
       <header
         className={`sticky top-0 z-30 border-b backdrop-blur-xl ${
           dark
@@ -392,6 +454,7 @@ export default function SmartLinksPage() {
               type="button"
               onClick={() => void loadData(true)}
               disabled={refreshing}
+              aria-label="Refresh Smart Links"
               className="flex h-10 items-center gap-2 rounded-xl bg-cyan-500 px-3 text-sm font-bold text-slate-950 transition hover:bg-cyan-400 disabled:opacity-50"
             >
               <RefreshCw
@@ -409,7 +472,6 @@ export default function SmartLinksPage() {
       </header>
 
       <div className="mx-auto max-w-7xl px-4 py-7 sm:px-6">
-        {/* Welcome */}
         <section
           className={`relative mb-7 overflow-hidden rounded-3xl border p-6 sm:p-8 ${
             dark
@@ -450,9 +512,11 @@ export default function SmartLinksPage() {
           </div>
         </section>
 
-        {/* Error */}
         {error && (
-          <div className="mb-6 flex items-start gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400">
+          <div
+            role="alert"
+            className="mb-6 flex items-start gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400"
+          >
             <AlertCircle
               size={20}
               className="shrink-0"
@@ -461,7 +525,6 @@ export default function SmartLinksPage() {
           </div>
         )}
 
-        {/* Stats */}
         <div className="mb-7 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-5">
             <div className="mb-3 flex items-center justify-between">
@@ -518,7 +581,7 @@ export default function SmartLinksPage() {
           </div>
         </div>
 
-        {/* Default Smart Link */}
+        {/* Global Smart Link */}
         <section
           className={`mb-7 rounded-3xl border p-5 sm:p-7 ${cardBg}`}
         >
@@ -530,10 +593,11 @@ export default function SmartLinksPage() {
 
               <div>
                 <h3 className="text-lg font-black">
-                  Default Smart Link
+                  Global Smart Link
                 </h3>
                 <p className={`text-xs ${muted}`}>
-                  Your personal affiliate Smart Link
+                  Your affiliate link for
+                  admin-configured global destinations
                 </p>
               </div>
             </div>
@@ -545,7 +609,7 @@ export default function SmartLinksPage() {
 
           <p className={`mb-3 text-sm ${muted}`}>
             Copy this link to use the configured
-            default Smart Link destination.
+            Global Smart Link destinations.
           </p>
 
           <div
@@ -599,7 +663,7 @@ export default function SmartLinksPage() {
           </div>
 
           <p className={`mt-4 text-xs leading-5 ${muted}`}>
-            The default Smart Link works when an
+            The Global Smart Link works when an
             active destination is configured.
             Opening the link records a click.
             Only use it for permitted testing
@@ -607,7 +671,106 @@ export default function SmartLinksPage() {
           </p>
         </section>
 
-        {/* Offer Tracking Links */}
+        {/* Individual Smart Links */}
+        <section
+          className={`mb-7 rounded-3xl border p-5 sm:p-7 ${cardBg}`}
+        >
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-black">
+                Choose a Smart Link
+              </h3>
+              <p className={`mt-2 text-sm ${muted}`}>
+                Choose any available Smart Link and
+                copy your affiliate tracking URL.
+              </p>
+            </div>
+
+            <span className="rounded-xl bg-cyan-500/10 px-3 py-2 text-sm font-bold text-cyan-500">
+              {smartLinks.length} Available
+            </span>
+          </div>
+
+          {smartLinksError ? (
+            <p
+              role="alert"
+              className="rounded-xl bg-red-500/10 p-4 text-sm text-red-500"
+            >
+              {smartLinksError} Use Refresh to try again.
+            </p>
+          ) : smartLinks.length === 0 ? (
+            <p
+              className={`rounded-xl border border-dashed p-6 text-center text-sm ${muted}`}
+            >
+              No additional Smart Links are available yet.
+            </p>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {smartLinks.map((choice) => {
+                const link = getSmartLink(choice.slug);
+                const copyId = `smart-link:${choice.id}`;
+                const copied = copiedId === copyId;
+
+                return (
+                  <article
+                    key={choice.id}
+                    className={`rounded-2xl border p-5 ${cardBg}`}
+                  >
+                    <div className="mb-4 flex items-start justify-between gap-3">
+                      <h4 className="font-bold">
+                        {choice.name}
+                      </h4>
+                      <Link2
+                        size={20}
+                        className="shrink-0 text-cyan-500"
+                      />
+                    </div>
+
+                    <div
+                      className={`mb-4 break-all rounded-xl border p-3 font-mono text-xs leading-5 ${inputStyle}`}
+                    >
+                      {link || "Tracking link unavailable"}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={!link}
+                        onClick={() =>
+                          void copyLink(link, copyId)
+                        }
+                        className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2.5 text-xs font-bold text-slate-950 hover:bg-cyan-400 disabled:opacity-50"
+                      >
+                        {copied ? (
+                          <Check size={15} />
+                        ) : (
+                          <Copy size={15} />
+                        )}
+                        {copied ? "Copied!" : "Copy Link"}
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={!link}
+                        onClick={() => openLink(link)}
+                        className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-semibold disabled:opacity-50 ${
+                          dark
+                            ? "border-white/10 hover:bg-white/10"
+                            : "border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        <ExternalLink size={15} />
+                        Open Link
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* Approved Offer Tracking Links */}
         <section
           className={`rounded-3xl border p-5 sm:p-7 ${cardBg}`}
         >
@@ -619,18 +782,18 @@ export default function SmartLinksPage() {
                   className="text-purple-400"
                 />
                 <h3 className="text-lg font-black">
-                  Offer Tracking Links
+                  Approved Offer Tracking Links
                 </h3>
               </div>
 
               <p className={`text-sm ${muted}`}>
-                Copy the unique tracking link
-                for each available offer.
+                Copy the unique tracking link for
+                each offer approved for your account.
               </p>
             </div>
 
             <div className="rounded-xl border border-purple-500/20 bg-purple-500/10 px-4 py-2 text-sm font-bold text-purple-400">
-              {offers.length} Active Offers
+              {offers.length} Approved Offers
             </div>
           </div>
 
@@ -647,6 +810,7 @@ export default function SmartLinksPage() {
                 setSearch(event.target.value)
               }
               placeholder="Search offers by name, category or country..."
+              aria-label="Search approved offers"
               className={`w-full rounded-xl border py-3 pl-12 pr-4 text-sm outline-none transition focus:border-cyan-400 ${inputStyle}`}
             />
           </div>
@@ -663,24 +827,32 @@ export default function SmartLinksPage() {
                 size={34}
                 className="mx-auto mb-3 text-slate-500"
               />
+
               <h4 className="font-bold">
-                No offers found
+                No approved offers found
               </h4>
+
               <p className={`mt-2 text-sm ${muted}`}>
                 {search
                   ? "Try another search keyword."
-                  : "No active offers are available yet."}
+                  : "Request offer access from the Offers page. Tracking links appear after admin approval."}
               </p>
+
+              <button
+                type="button"
+                onClick={() =>
+                  router.push("/affiliate/offers")
+                }
+                className="mt-4 rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-bold text-slate-950 hover:bg-cyan-400"
+              >
+                Browse &amp; Request Offers
+              </button>
             </div>
           ) : (
             <div className="space-y-4">
               {filteredOffers.map((offer) => {
-                const link = getOfferLink(
-                  offer.id
-                );
-
-                const copied =
-                  copiedId === offer.id;
+                const link = getOfferLink(offer.id);
+                const copied = copiedId === offer.id;
 
                 return (
                   <article
@@ -713,11 +885,13 @@ export default function SmartLinksPage() {
                           )}
 
                           {offer.country && (
-                            <span className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs ${
-                              dark
-                                ? "border-white/10 text-slate-300"
-                                : "border-slate-200 text-slate-600"
-                            }`}>
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs ${
+                                dark
+                                  ? "border-white/10 text-slate-300"
+                                  : "border-slate-200 text-slate-600"
+                              }`}
+                            >
                               <Globe size={12} />
                               {offer.country}
                             </span>
@@ -765,16 +939,12 @@ export default function SmartLinksPage() {
                           <Copy size={15} />
                         )}
 
-                        {copied
-                          ? "Copied!"
-                          : "Copy Link"}
+                        {copied ? "Copied!" : "Copy Link"}
                       </button>
 
                       <button
                         type="button"
-                        onClick={() =>
-                          openLink(link)
-                        }
+                        onClick={() => openLink(link)}
                         disabled={!link}
                         className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-xs font-semibold disabled:opacity-50 ${
                           dark
@@ -793,7 +963,6 @@ export default function SmartLinksPage() {
           )}
         </section>
 
-        {/* Footer */}
         <div
           className={`mt-8 flex flex-wrap items-center justify-between gap-3 border-t pt-5 text-xs ${
             dark
