@@ -222,60 +222,84 @@ export default function AffiliatePage() {
       }
 
       const accessToken = sessionData.session.access_token;
-
-      // Browser timezone is only used if the affiliate has not saved one.
       const browserTimezone =
         Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
-      const dashboardResponse = await fetch(
-        "/api/affiliate/dashboard",
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "x-affiliate-timezone": browserTimezone,
-          },
-          cache: "no-store",
+      // Start both requests together, after session verification.
+      const [dashboardResult, settingsResult] = await Promise.allSettled([
+        (async () => {
+          const response = await fetch("/api/affiliate/dashboard", {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "x-affiliate-timezone": browserTimezone,
+            },
+            cache: "no-store",
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data?.error || "Unable to load dashboard.");
+          }
+
+          return data;
+        })(),
+        (async () => {
+          const response = await fetch("/api/affiliate/panel-settings", {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+            cache: "no-store",
+          });
+
+          if (!response.ok) return null;
+          return await response.json();
+        })(),
+      ]);
+
+      // Retain the existing panel-settings behavior.
+      if (settingsResult.status === "fulfilled") {
+        const settingsData = settingsResult.value;
+
+        if (Array.isArray(settingsData?.settings)) {
+          const nextSettings = { ...DEFAULT_PANEL_SETTINGS };
+
+          settingsData.settings.forEach(
+            (item: { feature_key?: string; enabled?: boolean }) => {
+              if (item.feature_key && typeof item.enabled === "boolean") {
+                nextSettings[item.feature_key] = item.enabled;
+              }
+            }
+          );
+
+          setPanelSettings(nextSettings);
         }
-      );
-
-      const dashboardData = await dashboardResponse.json();
-
-      if (!dashboardResponse.ok) {
-        throw new Error(
-          dashboardData?.error ||
-            "Unable to load dashboard."
+      } else {
+        console.error(
+          "Affiliate panel settings error:",
+          settingsResult.reason
         );
+        setPanelSettings(DEFAULT_PANEL_SETTINGS);
       }
 
-      setProfile(dashboardData.profile || null);
+      if (dashboardResult.status === "rejected") {
+        throw dashboardResult.reason;
+      }
 
+      const dashboardData = dashboardResult.value;
+
+      setProfile(dashboardData.profile || null);
       setClicks(
-        Array.isArray(dashboardData.clicks)
-          ? dashboardData.clicks
-          : []
+        Array.isArray(dashboardData.clicks) ? dashboardData.clicks : []
       );
 
       setStats({
-        totalClicks:
-          Number(
-            dashboardData?.stats?.totalClicks
-          ) || 0,
-
-        conversions:
-          Number(
-            dashboardData?.stats?.conversions
-          ) || 0,
-
-        earnings:
-          Number(
-            dashboardData?.stats?.earnings
-          ) || 0,
-
-        conversionRate:
-          Number(
-            dashboardData?.stats?.conversionRate
-          ) || 0,
+        totalClicks: Number(dashboardData?.stats?.totalClicks) || 0,
+        conversions: Number(dashboardData?.stats?.conversions) || 0,
+        earnings: Number(dashboardData?.stats?.earnings) || 0,
+        conversionRate: Number(dashboardData?.stats?.conversionRate) || 0,
       });
 
       setTodayStats({
@@ -284,74 +308,17 @@ export default function AffiliatePage() {
         earnings: Number(dashboardData?.todayStats?.earnings) || 0,
         conversionRate: Number(dashboardData?.todayStats?.conversionRate) || 0,
       });
+
       setDailyDate(String(dashboardData?.daily?.date || ""));
       setReportingTimezone(String(dashboardData?.daily?.timezone || "UTC"));
-
-      try {
-        const settingsResponse = await fetch(
-          "/api/affiliate/panel-settings",
-          {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-            },
-            cache: "no-store",
-          }
-        );
-
-        if (settingsResponse.ok) {
-          const settingsData =
-            await settingsResponse.json();
-
-          if (
-            Array.isArray(
-              settingsData?.settings
-            )
-          ) {
-            const nextSettings = {
-              ...DEFAULT_PANEL_SETTINGS,
-            };
-
-            settingsData.settings.forEach(
-              (item: {
-                feature_key?: string;
-                enabled?: boolean;
-              }) => {
-                if (
-                  item.feature_key &&
-                  typeof item.enabled ===
-                    "boolean"
-                ) {
-                  nextSettings[
-                    item.feature_key
-                  ] = item.enabled;
-                }
-              }
-            );
-
-            setPanelSettings(nextSettings);
-          }
-        }
-      } catch (settingsError) {
-        console.error(
-          "Affiliate panel settings error:",
-          settingsError
-        );
-
-        setPanelSettings(
-          DEFAULT_PANEL_SETTINGS
-        );
-      }
-    } catch (err: any) {
-      console.error(
-        "Affiliate dashboard error:",
-        err
-      );
+    } catch (err: unknown) {
+      console.error("Affiliate dashboard error:", err);
 
       if (showLoading) {
         setError(
-          err?.message ||
-            "Unable to load affiliate dashboard."
+          err instanceof Error
+            ? err.message
+            : "Unable to load affiliate dashboard."
         );
       }
     } finally {
