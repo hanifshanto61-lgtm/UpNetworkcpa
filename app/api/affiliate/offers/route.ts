@@ -13,6 +13,11 @@ export async function GET(request: NextRequest) {
   try {
     const auth = await approvedAffiliate(request);
 
+    const approvedOnly =
+      request.nextUrl.searchParams.get(
+        "approved_only"
+      ) === "true";
+
     const {
       data: offersData,
       error: offersError,
@@ -51,8 +56,8 @@ export async function GET(request: NextRequest) {
       ])
     );
 
-    const offers = (offersData ?? []).map(
-      (offer) => {
+    const offers = (offersData ?? [])
+      .map((offer) => {
         const access = byOffer.get(
           String(offer.id)
         );
@@ -77,13 +82,17 @@ export async function GET(request: NextRequest) {
 
           access_request: access ?? null,
 
-          // Advertiser destinations stay on the server.
+          // Advertiser URLs stay on the server.
           tracking_url: "",
           trackingUrl: "",
           offer_url: "",
         };
-      }
-    );
+      })
+      .filter(
+        (offer) =>
+          !approvedOnly ||
+          offer.access_status === "approved"
+      );
 
     return offerReply({
       success: true,
@@ -98,8 +107,7 @@ export async function GET(request: NextRequest) {
         full_name:
           auth.profile.full_name,
 
-        email:
-          auth.user.email,
+        email: auth.user.email,
 
         status:
           auth.profile.application_status,
