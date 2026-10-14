@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import { getSuperAdminSession } from "@/lib/admin-auth";
 
@@ -15,9 +14,7 @@ function respond(
     { success, message, ...extra },
     {
       status,
-      headers: {
-        "Cache-Control": "no-store",
-      },
+      headers: { "Cache-Control": "no-store" },
     }
   );
 }
@@ -30,11 +27,7 @@ function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-/* =========================================
-   GET - LIST ADMIN ACCOUNTS
-   MAIN ADMIN ONLY
-========================================= */
-
+// LIST ADMIN ACCOUNTS — MAIN ADMIN ONLY
 export async function GET(request: NextRequest) {
   try {
     const session = await getSuperAdminSession(request);
@@ -50,19 +43,13 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error("Admin list error:", error);
-      return respond(
-        false,
-        "Unable to load administrators.",
-        500
-      );
+      return respond(false, "Unable to load administrators.", 500);
     }
 
     const admins = await Promise.all(
       (data || []).map(async (row) => {
         const { data: userData, error: userError } =
-          await session.client.auth.admin.getUserById(
-            row.user_id
-          );
+          await session.client.auth.admin.getUserById(row.user_id);
 
         const user = userError ? null : userData?.user;
 
@@ -78,20 +65,14 @@ export async function GET(request: NextRequest) {
       })
     );
 
-    return respond(true, "Administrators loaded.", 200, {
-      admins,
-    });
+    return respond(true, "Administrators loaded.", 200, { admins });
   } catch (error) {
     console.error("Admin Management GET error:", error);
     return respond(false, "Internal server error.", 500);
   }
 }
 
-/* =========================================
-   POST - CREATE SUB ADMIN
-   MAIN ADMIN ONLY
-========================================= */
-
+// CREATE SUB ADMIN — MAIN ADMIN ONLY
 export async function POST(request: NextRequest) {
   try {
     const session = await getSuperAdminSession(request);
@@ -111,24 +92,14 @@ export async function POST(request: NextRequest) {
     const email = clean(body.email).toLowerCase();
     const name = clean(body.name);
     const password =
-      typeof body.password === "string"
-        ? body.password
-        : "";
+      typeof body.password === "string" ? body.password : "";
 
     if (!isValidEmail(email)) {
-      return respond(
-        false,
-        "Valid email address is required.",
-        400
-      );
+      return respond(false, "Valid email address is required.", 400);
     }
 
     if (name.length < 2 || name.length > 100) {
-      return respond(
-        false,
-        "Name must contain 2-100 characters.",
-        400
-      );
+      return respond(false, "Name must contain 2-100 characters.", 400);
     }
 
     if (password.length < 12) {
@@ -138,8 +109,6 @@ export async function POST(request: NextRequest) {
         400
       );
     }
-
-    /* CREATE NEW AUTH USER */
 
     const { data: created, error: createError } =
       await session.client.auth.admin.createUser({
@@ -158,15 +127,12 @@ export async function POST(request: NextRequest) {
 
       return respond(
         false,
-        createError?.message ||
-          "Unable to create administrator.",
+        createError?.message || "Unable to create administrator.",
         400
       );
     }
 
     const newUserId = created.user.id;
-
-    /* ASSIGN SUB ADMIN ROLE ONLY */
 
     const { error: roleError } = await session.client
       .from("admin_roles")
@@ -180,9 +146,7 @@ export async function POST(request: NextRequest) {
       console.error("Assign sub admin role error:", roleError);
 
       const { error: rollbackError } =
-        await session.client.auth.admin.deleteUser(
-          newUserId
-        );
+        await session.client.auth.admin.deleteUser(newUserId);
 
       if (rollbackError) {
         console.error(
@@ -204,31 +168,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return respond(
-      true,
-      "Sub Admin created successfully.",
-      201,
-      {
-        admin: {
-          user_id: newUserId,
-          email,
-          name,
-          role: "sub_admin",
-          is_active: true,
-        },
-      }
-    );
+    return respond(true, "Sub Admin created successfully.", 201, {
+      admin: {
+        user_id: newUserId,
+        email,
+        name,
+        role: "sub_admin",
+        is_active: true,
+      },
+    });
   } catch (error) {
     console.error("Admin Management POST error:", error);
     return respond(false, "Internal server error.", 500);
   }
 }
 
-/* =========================================
-   PATCH - ACTIVATE / SUSPEND SUB ADMIN
-   MAIN ADMIN ONLY
-========================================= */
-
+// EDIT / ACTIVATE / SUSPEND — MAIN ADMIN ONLY
 export async function PATCH(request: NextRequest) {
   try {
     const session = await getSuperAdminSession(request);
@@ -252,15 +207,41 @@ export async function PATCH(request: NextRequest) {
       return respond(false, "User ID is required.", 400);
     }
 
-    if (typeof isActive !== "boolean") {
+    const editing = ["name", "email", "password"].some((key) =>
+      Object.prototype.hasOwnProperty.call(body, key)
+    );
+
+    const name = clean(body.name);
+    const email = clean(body.email).toLowerCase();
+    const password =
+      typeof body.password === "string" ? body.password : "";
+
+    if (
+      editing &&
+      (
+        name.length < 2 ||
+        name.length > 100 ||
+        !isValidEmail(email) ||
+        (
+          body.password !== undefined &&
+          typeof body.password !== "string"
+        ) ||
+        (password.length > 0 && password.length < 12)
+      )
+    ) {
       return respond(
         false,
-        "is_active must be true or false.",
+        "Enter a name of 2-100 characters, a valid email, and a password of at least 12 characters or leave it blank.",
         400
       );
     }
 
-    /* NEVER CHANGE MAIN ADMIN */
+    if (
+      (editing && isActive !== undefined) ||
+      (!editing && typeof isActive !== "boolean")
+    ) {
+      return respond(false, "is_active must be true or false.", 400);
+    }
 
     if (userId === session.userId) {
       return respond(
@@ -270,27 +251,18 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const { data: target, error: lookupError } =
-      await session.client
-        .from("admin_roles")
-        .select("user_id,role,is_active")
-        .eq("user_id", userId)
-        .maybeSingle();
+    const { data: target, error: lookupError } = await session.client
+      .from("admin_roles")
+      .select("user_id,role,is_active")
+      .eq("user_id", userId)
+      .maybeSingle();
 
     if (lookupError) {
-      return respond(
-        false,
-        "Unable to verify administrator.",
-        500
-      );
+      return respond(false, "Unable to verify administrator.", 500);
     }
 
     if (!target) {
-      return respond(
-        false,
-        "Administrator not found.",
-        404
-      );
+      return respond(false, "Administrator not found.", 404);
     }
 
     if (target.role !== "sub_admin") {
@@ -301,26 +273,55 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const { data: updated, error: updateError } =
-      await session.client
-        .from("admin_roles")
-        .update({
-          is_active: isActive,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("user_id", userId)
-        .eq("role", "sub_admin")
-        .select("user_id,role,is_active")
-        .single();
+    if (editing) {
+      const { data: existing, error: userError } =
+        await session.client.auth.admin.getUserById(userId);
+
+      if (userError || !existing.user) {
+        return respond(false, "Unable to load Sub Admin account.", 500);
+      }
+
+      const { data: changed, error: editError } =
+        await session.client.auth.admin.updateUserById(userId, {
+          email,
+          user_metadata: {
+            ...existing.user.user_metadata,
+            full_name: name,
+          },
+          ...(password ? { password } : {}),
+        });
+
+      if (editError || !changed.user) {
+        return respond(
+          false,
+          editError?.message || "Unable to edit Sub Admin.",
+          400
+        );
+      }
+
+      return respond(true, "Sub Admin updated successfully.", 200, {
+        admin: {
+          ...target,
+          name: changed.user.user_metadata?.full_name || "",
+          email: changed.user.email || "",
+        },
+      });
+    }
+
+    const { data: updated, error: updateError } = await session.client
+      .from("admin_roles")
+      .update({
+        is_active: isActive,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", userId)
+      .eq("role", "sub_admin")
+      .select("user_id,role,is_active")
+      .single();
 
     if (updateError || !updated) {
       console.error("Update sub admin error:", updateError);
-
-      return respond(
-        false,
-        "Unable to update Sub Admin.",
-        500
-      );
+      return respond(false, "Unable to update Sub Admin.", 500);
     }
 
     return respond(
@@ -329,12 +330,69 @@ export async function PATCH(request: NextRequest) {
         ? "Sub Admin activated successfully."
         : "Sub Admin suspended successfully.",
       200,
-      {
-        admin: updated,
-      }
+      { admin: updated }
     );
   } catch (error) {
     console.error("Admin Management PATCH error:", error);
+    return respond(false, "Internal server error.", 500);
+  }
+}
+
+// REMOVE ADMIN ACCESS — RETAIN ACCOUNT AND DATA
+export async function DELETE(request: NextRequest) {
+  try {
+    const session = await getSuperAdminSession(request);
+
+    if (!session) {
+      return respond(false, "Forbidden.", 403);
+    }
+
+    let body: Record<string, unknown>;
+
+    try {
+      body = await request.json();
+    } catch {
+      return respond(false, "Invalid JSON body.", 400);
+    }
+
+    const userId = clean(body.user_id);
+
+    if (!userId) {
+      return respond(false, "User ID is required.", 400);
+    }
+
+    if (userId === session.userId) {
+      return respond(
+        false,
+        "You cannot remove your own Main Admin account.",
+        403
+      );
+    }
+
+    const { data: removed, error } = await session.client
+      .from("admin_roles")
+      .delete()
+      .eq("user_id", userId)
+      .eq("role", "sub_admin")
+      .select("user_id")
+      .maybeSingle();
+
+    if (error) {
+      console.error("Remove sub admin error:", error);
+      return respond(false, "Unable to remove Sub Admin.", 500);
+    }
+
+    if (!removed) {
+      return respond(
+        false,
+        "Sub Admin not found or account is protected.",
+        404
+      );
+    }
+
+    return respond(true, "Sub Admin access removed successfully.");
+  } catch (error) {
+    console.error("Admin Management DELETE error:", error);
     return respond(false, "Internal server error.", 500);
   }
 }
