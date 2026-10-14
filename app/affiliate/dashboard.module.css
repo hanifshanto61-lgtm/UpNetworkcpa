@@ -1,0 +1,548 @@
+.dashboard {
+  --dash-ink: #eaf0fb;
+  --dash-muted: #9aaac1;
+  --dash-surface: #101d31;
+  --dash-line: rgba(148, 163, 184, .15);
+  color: var(--dash-ink);
+  background: radial-gradient(ellipse at 90% 0%, rgba(8, 145, 178, .1), transparent 38%), #081220;
+  min-height: 100vh;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  transition: background-color 240ms ease, color 240ms ease;
+}
+
+.dashboard[data-dashboard-theme="light"] {
+  --dash-ink: #14243a;
+  --dash-muted: #586b84;
+  --dash-surface: #fff;
+  --dash-line: #e2e8f0;
+  background: radial-gradient(ellipse at 90% 0%, rgba(14, 165, 233, .06), transparent 38%), #f4f7fb;
+}
+
+.dashboard button,
+.dashboard a,
+.dashboard summary {
+  touch-action: manipulation;
+  transition: background-color 180ms ease, color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.dashboard button:active:not(:disabled),
+.dashboard summary:active {
+  transform: scale(.97);
+}
+
+.dashboard button:focus-visible,
+.dashboard a:focus-visible,
+.dashboard summary:focus-visible {
+  outline: 2px solid #22d3ee;
+  outline-offset: 4px;
+}
+
+.topbar {
+  box-shadow: 0 1px 0 var(--dash-line);
+}
+
+.topbar button svg {
+  transition: transform 180ms ease;
+}
+
+.topbar button:hover svg {
+  transform: rotate(-6deg);
+}
+
+.content {
+  padding-top: 30px;
+  padding-bottom: 20px;
+}
+
+.dashboard h1,
+.dashboard h2,
+.dashboard h3 {
+  letter-spacing: -.025em;
+}
+
+.dashboard .hero {
+  background: linear-gradient(115deg, #10223e 0%, #123451 66%, #0e5362 100%);
+  border-color: rgba(125, 211, 252, .2);
+  box-shadow: 0 18px 45px -30px rgba(0, 0, 0, .7);
+  animation: heroReveal 480ms cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.heroName {
+  color: #a5f3fc;
+}
+
+.heroDescription {
+  color: #cfdded;
+}
+
+.heroBadge {
+  color: #a5f3fc;
+  background: rgba(165, 243, 252, .08);
+}
+
+.hero .heroAccount {
+  background: rgba(255, 255, 255, .06);
+  border-color: rgba(255, 255, 255, .15);
+}
+
+.heroAccountNote {
+  color: #c5d7e7;
+}
+
+.section {
+  animation: sectionReveal 500ms ease-out both;
+}
+
+.daily {
+  animation-delay: 55ms;
+}
+
+.earningsSection {
+  animation-delay: 100ms;
+}
+
+.smartLink {
+  animation-delay: 145ms;
+}
+
+.actionsSection {
+  animation-delay: 190ms;
+}
+
+.activity {
+  animation-delay: 235ms;
+}
+
+.dashboard .panel {
+  background: var(--dash-surface);
+  border-color: var(--dash-line);
+  box-shadow: 0 12px 36px -28px rgba(0, 0, 0, .55);
+}
+
+.liveBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.liveBadge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  background: currentColor;
+  border-radius: 50%;
+}
+
+.metricNumber {
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard .metricCard {
+  --metric-color: #38bdf8;
+  position: relative;
+  background: linear-gradient(145deg, rgba(56, 189, 248, .07), transparent 70%), var(--dash-surface);
+  color: var(--dash-ink);
+  border-color: var(--dash-line);
+  box-shadow: 0 12px 30px -24px rgba(0, 0, 0, .55);
+  animation: cardReveal 480ms ease-out backwards;
+}
+
+.metricCard[data-accent="emerald"] {
+  --metric-color: #34d399;
+  animation-delay: 50ms;
+}
+
+.metricCard[data-accent="purple"] {
+  --metric-color: #b399ff;
+  animation-delay: 100ms;
+}
+
+.metricCard[data-accent="amber"] {
+  --metric-color: #fbbf24;
+  animation-delay: 150ms;
+}
+
+.metricCard::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 22px;
+  bottom: 22px;
+  width: 3px;
+  border-radius: 0 5px 5px 0;
+  background: var(--metric-color);
+}
+
+.metricCard .metricTitle,
+.metricCard .metricSubtitle {
+  color: var(--dash-muted);
+}
+
+.metricCard .metricValue {
+  color: var(--dash-ink);
+  text-shadow: none;
+}
+
+.metricCard .metricIcon {
+  background: color-mix(in srgb, var(--metric-color) 13%, transparent);
+  color: var(--metric-color);
+  box-shadow: none;
+}
+
+.metricCard .metricFooter {
+  border-color: var(--dash-line);
+}
+
+.metricCard .metricDot {
+  background: var(--metric-color);
+}
+
+.metricCard .metricGlow {
+  opacity: .12;
+}
+
+.dashboard .metricCard.metricUpdated {
+  border-color: var(--metric-color, #34d399);
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, .13);
+}
+
+.dashboard .earnings {
+  background: linear-gradient(115deg, #0d3536, #14554b 65%, #147366);
+  border-color: rgba(110, 231, 183, .3);
+  box-shadow: 0 18px 40px -30px rgba(16, 185, 129, .45);
+}
+
+.lifetimeMetrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 22px;
+  border-top: 1px solid rgba(255, 255, 255, .15);
+  padding-top: 18px;
+}
+
+.lifetimeMetrics dt {
+  color: #b9dfd4;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.lifetimeMetrics dd {
+  color: #fff;
+  margin: 7px 0 0;
+  font-size: 20px;
+  font-weight: 750;
+}
+
+.dashboard .quickAction {
+  background: var(--dash-surface);
+  border-color: var(--dash-line);
+  color: var(--dash-ink);
+  box-shadow: 0 12px 30px -24px rgba(0, 0, 0, .55);
+  animation: cardReveal 400ms ease-out backwards;
+}
+
+.quickAction[data-accent="cyan"] {
+  animation-delay: 45ms;
+}
+
+.quickAction[data-accent="purple"] {
+  animation-delay: 90ms;
+}
+
+.quickAction[data-accent="green"] {
+  animation-delay: 135ms;
+}
+
+.quickAction .actionTitle {
+  color: var(--dash-ink);
+}
+
+.quickAction .actionSubtitle {
+  color: var(--dash-muted);
+}
+
+.quickAction .actionIcon {
+  background: rgba(56, 189, 248, .1);
+  color: #38bdf8;
+  box-shadow: none;
+  transition: transform 200ms ease;
+}
+
+.quickAction[data-accent="purple"] .actionIcon {
+  background: rgba(167, 139, 250, .12);
+  color: #a78bfa;
+}
+
+.quickAction[data-accent="green"] .actionIcon {
+  background: rgba(52, 211, 153, .12);
+  color: #34d399;
+}
+
+.quickAction .actionArrow {
+  color: var(--dash-muted);
+}
+
+.quickAction > div:first-child {
+  opacity: .13;
+}
+
+.quickAction:hover .actionIcon {
+  transform: rotate(-5deg);
+}
+
+.copied {
+  animation: copyConfirm 280ms ease-out both;
+}
+
+.overlay {
+  animation: overlayReveal 180ms ease-out both;
+}
+
+.sidebar {
+  animation: sidebarReveal 250ms cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.sidebar nav button {
+  animation: menuReveal 250ms ease-out both;
+}
+
+.sidebar nav button:nth-child(2) {
+  animation-delay: 20ms;
+}
+
+.sidebar nav button:nth-child(3) {
+  animation-delay: 40ms;
+}
+
+.sidebar nav button:nth-child(4) {
+  animation-delay: 60ms;
+}
+
+.sidebar nav button:nth-child(5) {
+  animation-delay: 80ms;
+}
+
+.sidebar nav button:nth-child(6) {
+  animation-delay: 100ms;
+}
+
+.sidebar nav button:nth-child(7) {
+  animation-delay: 120ms;
+}
+
+.popover {
+  transform-origin: top right;
+  animation: popoverReveal 180ms ease-out both;
+}
+
+.modal {
+  animation: modalReveal 220ms cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.chat {
+  transform-origin: bottom right;
+  animation: chatReveal 230ms ease-out both;
+}
+
+.message {
+  animation: messageReveal 180ms ease-out both;
+}
+
+.row {
+  animation: rowReveal 200ms ease-out both;
+}
+
+.row:hover {
+  background: rgba(56, 189, 248, .05);
+}
+
+.notifications details[open] > div {
+  animation: popoverReveal 180ms ease-out both;
+  transform-origin: top right;
+}
+
+.notifications summary {
+  background: var(--dash-surface);
+  border-color: var(--dash-line);
+  color: var(--dash-ink);
+}
+
+.dashboard[data-dashboard-theme="dark"] .notifications details > div {
+  background: #111f34;
+  border-color: var(--dash-line);
+  color: var(--dash-ink);
+}
+
+.dashboard[data-dashboard-theme="dark"] .notifications :global(.text-gray-900),
+.dashboard[data-dashboard-theme="dark"] .notifications :global(.text-gray-700) {
+  color: #eaf0fb;
+}
+
+.dashboard[data-dashboard-theme="dark"] .notifications :global(.text-gray-500),
+.dashboard[data-dashboard-theme="dark"] .notifications :global(.text-gray-400) {
+  color: #9aaac1;
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 20px;
+}
+
+.skeletonWrap {
+  width: 100%;
+  max-width: 1180px;
+}
+
+.loadingLabel {
+  color: var(--dash-muted);
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+
+.skeletonBlock {
+  height: 180px;
+  border: 1px solid var(--dash-line);
+  border-radius: 24px;
+  background: var(--dash-surface);
+  position: relative;
+  overflow: hidden;
+}
+
+.skeletonBlock::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(148, 163, 184, .1), transparent);
+  animation: shimmer 1400ms ease-in-out infinite;
+}
+
+.skeletonHero {
+  height: 215px;
+  margin-bottom: 24px;
+}
+
+.skeletonGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.skeletonTable {
+  height: 210px;
+}
+
+@keyframes heroReveal {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes sectionReveal {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes cardReveal {
+  from { opacity: 0; transform: translateY(12px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes sidebarReveal {
+  from { opacity: .4; transform: translateX(-30px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes menuReveal {
+  from { opacity: 0; transform: translateX(-6px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes overlayReveal {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes popoverReveal {
+  from { opacity: 0; transform: translateY(-5px) scale(.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes modalReveal {
+  from { opacity: 0; transform: translateY(10px) scale(.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes chatReveal {
+  from { opacity: 0; transform: translateY(14px) scale(.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes messageReveal {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes rowReveal {
+  from { opacity: .5; }
+  to { opacity: 1; }
+}
+
+@keyframes copyConfirm {
+  from { transform: scale(.96); }
+  to { transform: scale(1); }
+}
+
+@keyframes shimmer {
+  to { transform: translateX(100%); }
+}
+
+@media (hover: hover) {
+  .metricCard:hover,
+  .quickAction:hover {
+    transform: translateY(-3px);
+    border-color: rgba(56, 189, 248, .32);
+  }
+}
+
+@media (max-width: 640px) {
+  .content {
+    padding-top: 20px;
+  }
+
+  .skeletonGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .lifetimeMetrics {
+    gap: 10px;
+  }
+
+  .lifetimeMetrics dd {
+    font-size: 17px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard *,
+  .dashboard *::before,
+  .dashboard *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+
+  .dashboard button:active:not(:disabled),
+  .dashboard summary:active,
+  .metricCard:hover,
+  .quickAction:hover,
+  .topbar button:hover svg,
+  .quickAction:hover .actionIcon {
+    transform: none;
+  }
+}
