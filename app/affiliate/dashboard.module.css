@@ -546,3 +546,144 @@
     transform: none;
   }
 }
+/* Colorful dashboard background */
+.dashboard {
+  background:
+    radial-gradient(
+      ellipse at 5% 15%,
+      #123d66,
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse at 95% 60%,
+      #35215a,
+      transparent 55%
+    ),
+    #071424;
+}
+
+.dashboard[data-dashboard-theme="light"] {
+  background:
+    radial-gradient(
+      ellipse at 5% 15%,
+      #c7eaff,
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse at 95% 60%,
+      #e3d7ff,
+      transparent 55%
+    ),
+    #edf5ff;
+}
+
+/* Keep the background colors visible */
+.dashboard > div[aria-hidden="true"] > div:nth-child(3) {
+  opacity: 0.25;
+}
+
+/* Colored metric cards and quick actions */
+.dashboard .metricCard,
+.dashboard .quickAction {
+  --card-from: #1746b6;
+  --card-to: #087fa2;
+  --card-shadow: rgba(14, 116, 204, 0.28);
+
+  background: linear-gradient(
+    125deg,
+    var(--card-from),
+    var(--card-to)
+  );
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.24);
+  box-shadow: 0 12px 28px -12px var(--card-shadow);
+}
+
+.dashboard .metricCard[data-accent="emerald"],
+.dashboard .quickAction[data-accent="green"] {
+  --card-from: #08674f;
+  --card-to: #0b826e;
+  --card-shadow: rgba(5, 150, 105, 0.3);
+}
+
+.dashboard .metricCard[data-accent="purple"],
+.dashboard .quickAction[data-accent="purple"] {
+  --card-from: #6326ad;
+  --card-to: #a51d91;
+  --card-shadow: rgba(147, 51, 234, 0.3);
+}
+
+.dashboard .metricCard[data-accent="amber"] {
+  --card-from: #a83e0e;
+  --card-to: #af6108;
+  --card-shadow: rgba(234, 88, 12, 0.3);
+}
+
+.dashboard .quickAction[data-accent="cyan"] {
+  --card-from: #086780;
+  --card-to: #087fa2;
+}
+
+/* Readable text on colored cards */
+.dashboard .metricCard .metricTitle,
+.dashboard .metricCard .metricValue,
+.dashboard .quickAction .actionTitle {
+  color: #fff;
+}
+
+.dashboard .metricCard .metricSubtitle,
+.dashboard .quickAction .actionSubtitle {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.dashboard .metricCard .metricIcon,
+.dashboard .quickAction .actionIcon {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+.dashboard .metricCard .metricFooter {
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.dashboard .metricCard .metricDot {
+  background: #fff;
+}
+
+.dashboard .metricCard::before {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.dashboard .metricCard .metricGlow {
+  opacity: 0.35;
+}
+
+.dashboard .quickAction .actionArrow {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.dashboard .quickAction > div:first-child {
+  opacity: 0.5;
+}
+
+/* Smart Link and Recent Activity */
+.dashboard .smartLink {
+  background: linear-gradient(120deg, #102d47, #103d4d);
+  border-color: rgba(34, 211, 238, 0.3);
+}
+
+.dashboard .activity {
+  background: linear-gradient(120deg, #241e32, #182c43);
+  border-color: rgba(167, 139, 250, 0.2);
+}
+
+.dashboard[data-dashboard-theme="light"] .smartLink {
+  background: linear-gradient(120deg, #d6f5ff, #e8f5ff);
+  border-color: #9eddeb;
+}
+
+.dashboard[data-dashboard-theme="light"] .activity {
+  background: linear-gradient(120deg, #fff1df, #f5edff);
+  border-color: #ebd4be;
+}
