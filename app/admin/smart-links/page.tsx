@@ -29,12 +29,14 @@ type SmartLink = {
   destination_url: string | null;
   status: string | null;
   is_global: boolean;
+  smartlink_group: "global_pool" | "individual";
   affiliate_id: string | null;
   network_share_percent: number | string;
   created_at: string;
 };
 
 type SmartLinkForm = {
+  smartlink_group: "global_pool" | "individual";
   name: string;
   slug: string;
   destination_url: string;
@@ -49,6 +51,7 @@ type PostbackSetting = {
 };
 
 const emptyForm: SmartLinkForm = {
+  smartlink_group: "individual",
   name: "",
   slug: "",
   destination_url: "",
@@ -91,13 +94,22 @@ function validUrl(value: string) {
 }
 
 async function getAccessToken() {
-  const { data, error } = await supabase.auth.getSession();
+  if (!supabase) {
+    throw new Error("Supabase client is not configured.");
+  }
+
+  const { data, error } =
+    await supabase.auth.getSession();
 
   if (error || !data.session?.access_token) {
     throw new Error("Please login again.");
   }
 
-  if (!(await verifyAdminAccess(data.session.access_token))) {
+  if (
+    !(await verifyAdminAccess(
+      data.session.access_token
+    ))
+  ) {
     throw new Error("Admin access required.");
   }
 
@@ -115,9 +127,13 @@ async function api(
     method,
     headers: {
       Authorization: `Bearer ${token}`,
-      ...(body ? { "Content-Type": "application/json" } : {}),
+      ...(body
+        ? { "Content-Type": "application/json" }
+        : {}),
     },
-    ...(body ? { body: JSON.stringify(body) } : {}),
+    ...(body
+      ? { body: JSON.stringify(body) }
+      : {}),
     cache: "no-store",
   });
 
@@ -125,7 +141,9 @@ async function api(
 
   if (!response.ok || !result.success) {
     throw new Error(
-      result.message || result.error || "Request failed."
+      result.message ||
+        result.error ||
+        "Request failed."
     );
   }
 
@@ -138,22 +156,29 @@ function errorText(error: unknown) {
     : "Unable to complete the request.";
 }
 
-function PostbackPanel({ link }: { link: SmartLink }) {
+function PostbackPanel({
+  link,
+}: {
+  link: SmartLink;
+}) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [parameter, setParameter] = useState("sub1");
+
   const [setting, setSetting] =
     useState<PostbackSetting | null>(null);
+
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
   const dirty =
     setting !== null &&
     (enabled !== setting.enabled ||
-      parameter.trim() !== setting.click_id_parameter);
+      parameter.trim() !==
+        setting.click_id_parameter);
 
   async function openSettings() {
     if (open) {
@@ -179,7 +204,9 @@ function PostbackPanel({ link }: { link: SmartLink }) {
 
       setSetting(next);
       setEnabled(next?.enabled ?? false);
-      setParameter(next?.click_id_parameter || "sub1");
+      setParameter(
+        next?.click_id_parameter || "sub1"
+      );
       setLoaded(true);
     } catch (err) {
       setError(errorText(err));
@@ -195,7 +222,9 @@ function PostbackPanel({ link }: { link: SmartLink }) {
 
     if (
       !/^[a-zA-Z][a-zA-Z0-9_]{0,49}$/.test(value) ||
-      ["sub2", "offer_id"].includes(value.toLowerCase())
+      ["sub2", "offer_id"].includes(
+        value.toLowerCase()
+      )
     ) {
       setError(
         "Enter a valid Click ID parameter. sub2 and offer_id are reserved."
@@ -218,7 +247,8 @@ function PostbackPanel({ link }: { link: SmartLink }) {
         }
       );
 
-      const next = result.setting as PostbackSetting;
+      const next =
+        result.setting as PostbackSetting;
 
       setSetting(next);
       setEnabled(next.enabled);
@@ -232,7 +262,13 @@ function PostbackPanel({ link }: { link: SmartLink }) {
   }
 
   async function copyUrl() {
-    if (!setting?.postback_url || dirty || saving) return;
+    if (
+      !setting?.postback_url ||
+      dirty ||
+      saving
+    ) {
+      return;
+    }
 
     setError("");
     setMessage("");
@@ -259,7 +295,9 @@ function PostbackPanel({ link }: { link: SmartLink }) {
         aria-expanded={open}
       >
         <Settings size={16} />
-        {open ? "Close Postback Setup" : "Postback Setup"}
+        {open
+          ? "Close Postback Setup"
+          : "Postback Setup"}
       </button>
 
       {open && (
@@ -270,7 +308,10 @@ function PostbackPanel({ link }: { link: SmartLink }) {
 
           {loading && (
             <p className="mt-4 flex items-center gap-2 text-sm text-slate-400">
-              <Loader2 size={16} className="animate-spin" />
+              <Loader2
+                size={16}
+                className="animate-spin"
+              />
               Loading settings...
             </p>
           )}
@@ -304,7 +345,9 @@ function PostbackPanel({ link }: { link: SmartLink }) {
                   checked={enabled}
                   disabled={saving}
                   onChange={(event) => {
-                    setEnabled(event.target.checked);
+                    setEnabled(
+                      event.target.checked
+                    );
                     setMessage("");
                   }}
                   className="h-5 w-5 accent-cyan-500"
@@ -327,7 +370,9 @@ function PostbackPanel({ link }: { link: SmartLink }) {
                   maxLength={50}
                   required
                   onChange={(event) => {
-                    setParameter(event.target.value);
+                    setParameter(
+                      event.target.value
+                    );
                     setMessage("");
                   }}
                   className={inputClass}
@@ -335,9 +380,10 @@ function PostbackPanel({ link }: { link: SmartLink }) {
                 />
 
                 <p className="mt-2 text-xs leading-5 text-slate-400">
-                  Use the parameter your CPA network accepts
-                  for your Click ID, such as sub1, aff_sub,
-                  or aff_click_id. Confirm it with the network.
+                  Use the parameter your CPA network
+                  accepts for your Click ID, such as
+                  sub1, aff_sub, or aff_click_id.
+                  Confirm it with the network.
                 </p>
               </div>
 
@@ -347,7 +393,10 @@ function PostbackPanel({ link }: { link: SmartLink }) {
                 className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-3 text-sm font-bold text-slate-950 disabled:opacity-50"
               >
                 {saving ? (
-                  <Loader2 size={16} className="animate-spin" />
+                  <Loader2
+                    size={16}
+                    className="animate-spin"
+                  />
                 ) : (
                   <Save size={16} />
                 )}
@@ -365,7 +414,9 @@ function PostbackPanel({ link }: { link: SmartLink }) {
                           : "text-amber-400"
                       }
                     >
-                      {setting.enabled ? "Enabled" : "Disabled"}
+                      {setting.enabled
+                        ? "Enabled"
+                        : "Disabled"}
                     </span>
                   </p>
 
@@ -399,21 +450,25 @@ function PostbackPanel({ link }: { link: SmartLink }) {
 
                   {dirty && (
                     <p className="text-xs text-amber-300">
-                      Save your changes before copying the URL.
+                      Save your changes before
+                      copying the URL.
                     </p>
                   )}
 
                   <p className="text-xs leading-5 text-slate-400">
-                    Replace {"{CLICK_ID}"} and {"{PAYOUT}"} with
-                    your network&apos;s actual macros before
-                    saving this URL in its postback settings.
-                    Payout must be gross revenue in USD.
-                    Use approved conversions only.
+                    Replace {"{CLICK_ID}"} and{" "}
+                    {"{PAYOUT}"} with your
+                    network&apos;s actual macros
+                    before saving this URL in its
+                    postback settings. Payout must
+                    be gross revenue in USD. Use
+                    approved conversions only.
                   </p>
 
                   <p className="text-xs leading-5 text-amber-300">
-                    Keep this token URL private. Share it only
-                    with the CPA network sending conversions.
+                    Keep this token URL private.
+                    Share it only with the CPA
+                    network sending conversions.
                   </p>
                 </div>
               )}
@@ -428,18 +483,27 @@ function PostbackPanel({ link }: { link: SmartLink }) {
 export default function AdminSmartLinksPage() {
   const router = useRouter();
 
-  const [links, setLinks] = useState<SmartLink[]>([]);
+  const [links, setLinks] = useState<
+    SmartLink[]
+  >([]);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [updatingId, setUpdatingId] = useState<string | null>(
-    null
-  );
+
+  const [updatingId, setUpdatingId] =
+    useState<string | null>(null);
+
   const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(
-    null
-  );
-  const [form, setForm] = useState<SmartLinkForm>(emptyForm);
-  const [exampleRevenue, setExampleRevenue] = useState("100");
+
+  const [editingId, setEditingId] =
+    useState<string | null>(null);
+
+  const [form, setForm] =
+    useState<SmartLinkForm>(emptyForm);
+
+  const [exampleRevenue, setExampleRevenue] =
+    useState("100");
+
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -447,7 +511,9 @@ export default function AdminSmartLinksPage() {
     setLoading(true);
 
     try {
-      const result = await api("/api/admin/smart-links");
+      const result = await api(
+        "/api/admin/smart-links"
+      );
 
       setLinks(
         Array.isArray(result.smartLinks)
@@ -478,9 +544,11 @@ export default function AdminSmartLinksPage() {
     void loadLinks();
   }, [loadLinks]);
 
-  function updateForm(
-    field: keyof SmartLinkForm,
-    value: string
+  function updateForm<
+    K extends keyof SmartLinkForm
+  >(
+    field: K,
+    value: SmartLinkForm[K]
   ) {
     setForm((current) => ({
       ...current,
@@ -494,29 +562,50 @@ export default function AdminSmartLinksPage() {
     setForm(emptyForm);
   }
 
-  function startCreate() {
+  function startCreate(
+    group: "global_pool" | "individual" =
+      "individual"
+  ) {
     setError("");
     setMessage("");
     setEditingId(null);
-    setForm(emptyForm);
+    setForm({
+      ...emptyForm,
+      smartlink_group: group,
+    });
     setShowForm(true);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
   }
 
   function startEdit(link: SmartLink) {
     setError("");
     setMessage("");
     setEditingId(link.id);
+
     setForm({
+      smartlink_group:
+        link.smartlink_group || "global_pool",
       name: link.name || "",
       slug: link.slug,
-      destination_url: link.destination_url || "",
+      destination_url:
+        link.destination_url || "",
       network_share_percent: String(
-        normalizeShare(link.network_share_percent)
+        normalizeShare(
+          link.network_share_percent
+        )
       ),
     });
+
     setShowForm(true);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
   }
 
   async function handleSave(event: FormEvent) {
@@ -524,8 +613,10 @@ export default function AdminSmartLinksPage() {
 
     const name = form.name.trim();
     const slug = form.slug.trim();
-    const destination = form.destination_url.trim();
-    const shareText = form.network_share_percent.trim();
+    const destination =
+      form.destination_url.trim();
+    const shareText =
+      form.network_share_percent.trim();
     const share = Number(shareText);
 
     if (!name || name.length > 150) {
@@ -546,8 +637,20 @@ export default function AdminSmartLinksPage() {
       return;
     }
 
+    if (
+      form.smartlink_group === "individual" &&
+      slug === "default-smartlink"
+    ) {
+      setError(
+        "default-smartlink is reserved for the Global Smart Link."
+      );
+      return;
+    }
+
     if (!validUrl(destination)) {
-      setError("Enter a valid HTTP or HTTPS destination URL.");
+      setError(
+        "Enter a valid HTTP or HTTPS destination URL."
+      );
       return;
     }
 
@@ -556,8 +659,10 @@ export default function AdminSmartLinksPage() {
       !Number.isFinite(share) ||
       share < 0 ||
       share > 100 ||
-      Math.abs(share * 100 - Math.round(share * 100)) >
-        0.000001
+      Math.abs(
+        share * 100 -
+          Math.round(share * 100)
+      ) > 0.000001
     ) {
       setError(
         "Commission must be 0–100 with up to two decimal places."
@@ -570,8 +675,13 @@ export default function AdminSmartLinksPage() {
     setMessage("");
 
     try {
-      const payload: Record<string, unknown> = {
+      const payload: Record<
+        string,
+        unknown
+      > = {
         name,
+        smartlink_group:
+          form.smartlink_group,
         destination_url: destination,
         network_share_percent: share,
       };
@@ -604,21 +714,29 @@ export default function AdminSmartLinksPage() {
     }
   }
 
-  async function toggleStatus(link: SmartLink) {
+  async function toggleStatus(
+    link: SmartLink
+  ) {
     if (updatingId) return;
 
     const status =
-      link.status === "active" ? "paused" : "active";
+      link.status === "active"
+        ? "paused"
+        : "active";
 
     setUpdatingId(link.id);
     setError("");
     setMessage("");
 
     try {
-      await api("/api/admin/smart-links", "PATCH", {
-        id: link.id,
-        status,
-      });
+      await api(
+        "/api/admin/smart-links",
+        "PATCH",
+        {
+          id: link.id,
+          status,
+        }
+      );
 
       await loadLinks();
 
@@ -634,20 +752,32 @@ export default function AdminSmartLinksPage() {
     }
   }
 
-  const globalLinks = links.filter((link) => link.is_global);
+  const globalLinks = links.filter(
+    (link) => link.is_global
+  );
+
   const personalCount = links.filter(
     (link) => !link.is_global
   ).length;
+
   const activeCount = globalLinks.filter(
     (link) => link.status === "active"
   ).length;
 
-  const share = normalizeShare(form.network_share_percent);
+  const share = normalizeShare(
+    form.network_share_percent
+  );
+
   const rawRevenue = Number(exampleRevenue);
+
   const revenue = Number.isFinite(rawRevenue)
     ? Math.max(0, rawRevenue)
     : 0;
-  const grossCents = Math.round(revenue * 100);
+
+  const grossCents = Math.round(
+    revenue * 100
+  );
+
   const networkCents = Math.round(
     (grossCents * share) / 100
   );
@@ -657,7 +787,10 @@ export default function AdminSmartLinksPage() {
       <header className="border-b border-slate-800 bg-slate-900/70">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-5 py-6">
           <div className="flex items-center gap-3">
-            <Link2 size={28} className="text-cyan-400" />
+            <Link2
+              size={28}
+              className="text-cyan-400"
+            />
 
             <div>
               <h1 className="text-xl font-bold sm:text-2xl">
@@ -671,7 +804,9 @@ export default function AdminSmartLinksPage() {
 
           <button
             type="button"
-            onClick={() => router.push("/admin")}
+            onClick={() =>
+              router.push("/admin")
+            }
             className={buttonClass}
           >
             <ArrowLeft size={16} />
@@ -684,7 +819,7 @@ export default function AdminSmartLinksPage() {
         <div className="grid gap-4 sm:grid-cols-3">
           {[
             {
-              title: "Global Smart Links",
+              title: "Admin Smart Links",
               count: globalLinks.length,
               color: "text-cyan-400",
             },
@@ -719,10 +854,12 @@ export default function AdminSmartLinksPage() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-bold">
-              Global Smart Links
+              Global Pool &amp; Individual Smart Links
             </h2>
             <p className="mt-1 text-sm text-slate-400">
-              Manage destinations, commissions and postbacks.
+              Global destinations feed the Global
+              Smart Link. Individual links are
+              separate affiliate choices.
             </p>
           </div>
 
@@ -730,7 +867,9 @@ export default function AdminSmartLinksPage() {
             <button
               type="button"
               disabled={
-                loading || saving || updatingId !== null
+                loading ||
+                saving ||
+                updatingId !== null
               }
               onClick={() => {
                 setError("");
@@ -745,7 +884,21 @@ export default function AdminSmartLinksPage() {
             <button
               type="button"
               disabled={saving}
-              onClick={startCreate}
+              onClick={() =>
+                startCreate("global_pool")
+              }
+              className={buttonClass}
+            >
+              <Plus size={17} />
+              Add Global Destination
+            </button>
+
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() =>
+                startCreate("individual")
+              }
               className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-3 text-sm font-bold text-slate-950 disabled:opacity-50"
             >
               <Plus size={17} />
@@ -779,7 +932,10 @@ export default function AdminSmartLinksPage() {
               <h3 className="text-xl font-bold">
                 {editingId
                   ? "Edit Smart Link"
-                  : "Create Global Smart Link"}
+                  : form.smartlink_group ===
+                      "global_pool"
+                    ? "Add Global Destination"
+                    : "Add Individual Smart Link"}
               </h3>
 
               <button
@@ -797,6 +953,41 @@ export default function AdminSmartLinksPage() {
               onSubmit={handleSave}
               className="grid gap-5 md:grid-cols-2"
             >
+              <div className="md:col-span-2">
+                <label
+                  htmlFor="link-group"
+                  className="mb-2 block text-sm"
+                >
+                  Link Type
+                </label>
+
+                <select
+                  id="link-group"
+                  value={form.smartlink_group}
+                  disabled={saving}
+                  onChange={(event) =>
+                    updateForm(
+                      "smartlink_group",
+                      event.target.value as
+                        SmartLinkForm["smartlink_group"]
+                    )
+                  }
+                  className={inputClass}
+                >
+                  <option value="global_pool">
+                    Global Smart Link Destination
+                  </option>
+                  <option value="individual">
+                    Individual Smart Link (1, 2, 3...)
+                  </option>
+                </select>
+
+                <p className="mt-2 text-xs text-slate-400">
+                  Individual Smart Links never
+                  enter the Global destination pool.
+                </p>
+              </div>
+
               <div>
                 <label
                   htmlFor="link-name"
@@ -812,10 +1003,13 @@ export default function AdminSmartLinksPage() {
                   disabled={saving}
                   value={form.name}
                   onChange={(event) =>
-                    updateForm("name", event.target.value)
+                    updateForm(
+                      "name",
+                      event.target.value
+                    )
                   }
                   className={inputClass}
-                  placeholder="My Smart Link"
+                  placeholder="Smart Link 1"
                 />
               </div>
 
@@ -831,17 +1025,24 @@ export default function AdminSmartLinksPage() {
                   id="link-slug"
                   required
                   maxLength={100}
-                  disabled={Boolean(editingId) || saving}
+                  disabled={
+                    Boolean(editingId) ||
+                    saving
+                  }
                   value={form.slug}
                   onChange={(event) =>
-                    updateForm("slug", event.target.value)
+                    updateForm(
+                      "slug",
+                      event.target.value
+                    )
                   }
                   className={inputClass}
-                  placeholder="my-smartlink"
+                  placeholder="smart-link-1"
                 />
 
                 <p className="mt-2 text-xs text-slate-400">
-                  Existing tracking slugs stay unchanged.
+                  Existing tracking slugs stay
+                  unchanged.
                 </p>
               </div>
 
@@ -886,7 +1087,9 @@ export default function AdminSmartLinksPage() {
                   max="100"
                   step="0.01"
                   disabled={saving}
-                  value={form.network_share_percent}
+                  value={
+                    form.network_share_percent
+                  }
                   onChange={(event) =>
                     updateForm(
                       "network_share_percent",
@@ -925,7 +1128,9 @@ export default function AdminSmartLinksPage() {
                   step="0.01"
                   value={exampleRevenue}
                   onChange={(event) =>
-                    setExampleRevenue(event.target.value)
+                    setExampleRevenue(
+                      event.target.value
+                    )
                   }
                   className={inputClass}
                 />
@@ -936,7 +1141,9 @@ export default function AdminSmartLinksPage() {
                       Network Profit
                     </p>
                     <p className="mt-2 text-2xl font-bold">
-                      {money(networkCents / 100)}
+                      {money(
+                        networkCents / 100
+                      )}
                     </p>
                   </div>
 
@@ -946,7 +1153,9 @@ export default function AdminSmartLinksPage() {
                     </p>
                     <p className="mt-2 text-2xl font-bold">
                       {money(
-                        (grossCents - networkCents) / 100
+                        (grossCents -
+                          networkCents) /
+                          100
                       )}
                     </p>
                   </div>
@@ -995,13 +1204,16 @@ export default function AdminSmartLinksPage() {
           </div>
         ) : globalLinks.length === 0 ? (
           <div className="rounded-2xl bg-slate-900 p-10 text-center text-slate-400">
-            No Global Smart Links. Add your first Smart Link.
+            No Smart Links yet. Add your first
+            Global destination or Individual
+            Smart Link.
           </div>
         ) : (
           globalLinks.map((link) => {
-            const networkShare = normalizeShare(
-              link.network_share_percent
-            );
+            const networkShare =
+              normalizeShare(
+                link.network_share_percent
+              );
 
             return (
               <section
@@ -1028,6 +1240,13 @@ export default function AdminSmartLinksPage() {
                       </span>
                     </div>
 
+                    <p className="mt-2 text-sm font-semibold text-cyan-400">
+                      {link.smartlink_group ===
+                      "individual"
+                        ? "Individual Smart Link"
+                        : "Global Smart Link Destination"}
+                    </p>
+
                     <p className="mt-2 text-xs text-slate-500">
                       Slug: {link.slug}
                     </p>
@@ -1038,15 +1257,21 @@ export default function AdminSmartLinksPage() {
                     </p>
 
                     {link.destination_url &&
-                      validUrl(link.destination_url) && (
+                      validUrl(
+                        link.destination_url
+                      ) && (
                         <a
-                          href={link.destination_url}
+                          href={
+                            link.destination_url
+                          }
                           target="_blank"
                           rel="noopener noreferrer"
                           className="mt-2 inline-flex items-center gap-1 text-xs text-cyan-400"
                         >
                           Open Destination
-                          <ExternalLink size={13} />
+                          <ExternalLink
+                            size={13}
+                          />
                         </a>
                       )}
                   </div>
@@ -1055,7 +1280,9 @@ export default function AdminSmartLinksPage() {
                     <button
                       type="button"
                       disabled={saving}
-                      onClick={() => startEdit(link)}
+                      onClick={() =>
+                        startEdit(link)
+                      }
                       className={buttonClass}
                     >
                       <Edit3 size={16} />
@@ -1064,8 +1291,12 @@ export default function AdminSmartLinksPage() {
 
                     <button
                       type="button"
-                      disabled={updatingId !== null}
-                      onClick={() => void toggleStatus(link)}
+                      disabled={
+                        updatingId !== null
+                      }
+                      onClick={() =>
+                        void toggleStatus(link)
+                      }
                       className={buttonClass}
                     >
                       {updatingId === link.id ? (
@@ -1073,11 +1304,15 @@ export default function AdminSmartLinksPage() {
                           size={16}
                           className="animate-spin"
                         />
-                      ) : link.status === "active" ? (
-                        <PauseCircle size={16} />
+                      ) : link.status ===
+                        "active" ? (
+                        <PauseCircle
+                          size={16}
+                        />
                       ) : (
                         <PlayCircle size={16} />
                       )}
+
                       {link.status === "active"
                         ? "Pause"
                         : "Activate"}
@@ -1100,7 +1335,10 @@ export default function AdminSmartLinksPage() {
                       Affiliate Share
                     </p>
                     <p className="mt-1 text-2xl font-bold">
-                      {(100 - networkShare).toFixed(2)}%
+                      {(
+                        100 - networkShare
+                      ).toFixed(2)}
+                      %
                     </p>
                   </div>
                 </div>
@@ -1109,6 +1347,7 @@ export default function AdminSmartLinksPage() {
                   <p className="mb-2 text-xs text-slate-500">
                     Example Affiliate Tracking Link
                   </p>
+
                   <code className="block break-all text-xs text-cyan-300">
                     {`https://upnetworkcpa.com/api/track?aid=YOUR_AFFILIATE_ID&sl=${encodeURIComponent(
                       link.slug
