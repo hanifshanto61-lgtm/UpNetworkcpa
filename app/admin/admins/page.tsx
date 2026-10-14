@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
@@ -47,16 +46,14 @@ export default function AdminManagementPage() {
   const [currentUserId, setCurrentUserId] = useState("");
 
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-
-  const [updatingId, setUpdatingId] = useState<string | null>(
-    null
-  );
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   const getToken = async () => {
     const { data, error } = await supabase.auth.getSession();
@@ -74,7 +71,6 @@ export default function AdminManagementPage() {
 
     try {
       const { data } = await supabase.auth.getSession();
-
       const token = data.session?.access_token;
 
       if (!token) {
@@ -122,7 +118,6 @@ export default function AdminManagementPage() {
     async function verifyMainAdmin() {
       try {
         const { data } = await supabase.auth.getSession();
-
         const session = data.session;
 
         if (!session) {
@@ -188,7 +183,7 @@ export default function AdminManagementPage() {
   ) {
     event.preventDefault();
 
-    if (saving) return;
+    if (saving || updatingId) return;
 
     setError("");
     setSuccess("");
@@ -198,7 +193,10 @@ export default function AdminManagementPage() {
       return;
     }
 
-    if (password.length < 12) {
+    if (
+      (!editingId || password.length > 0) &&
+      password.length < 12
+    ) {
       setError("Password must contain at least 12 characters.");
       return;
     }
@@ -209,12 +207,13 @@ export default function AdminManagementPage() {
       const token = await getToken();
 
       const response = await fetch("/api/admin/admins", {
-        method: "POST",
+        method: editingId ? "PATCH" : "POST",
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          ...(editingId ? { user_id: editingId } : {}),
           name: name.trim(),
           email: email.trim().toLowerCase(),
           password,
@@ -225,11 +224,14 @@ export default function AdminManagementPage() {
 
       if (!response.ok || !result.success) {
         throw new Error(
-          result.message || "Unable to create Sub Admin."
+          result.message || "Unable to save Sub Admin."
         );
       }
 
-      setSuccess("Sub Admin created successfully.");
+      setSuccess(
+        result.message || "Sub Admin saved successfully."
+      );
+      setEditingId(null);
       setName("");
       setEmail("");
       setPassword("");
@@ -240,7 +242,7 @@ export default function AdminManagementPage() {
       setError(
         err instanceof Error
           ? err.message
-          : "Unable to create Sub Admin."
+          : "Unable to save Sub Admin."
       );
     } finally {
       setSaving(false);
@@ -251,7 +253,7 @@ export default function AdminManagementPage() {
     admin: AdminAccount,
     newStatus: boolean
   ) {
-    if (updatingId) return;
+    if (updatingId || saving) return;
 
     if (admin.role !== "sub_admin") {
       setError("Main Admin accounts cannot be changed.");
@@ -305,6 +307,93 @@ export default function AdminManagementPage() {
         err instanceof Error
           ? err.message
           : "Unable to update Sub Admin."
+      );
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
+  function editAdmin(admin: AdminAccount) {
+    if (
+      saving ||
+      updatingId ||
+      admin.role !== "sub_admin" ||
+      admin.user_id === currentUserId
+    ) {
+      return;
+    }
+
+    setEditingId(admin.user_id);
+    setName(admin.name);
+    setEmail(admin.email);
+    setPassword("");
+    setShowForm(true);
+    setError("");
+    setSuccess("");
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function removeAdmin(admin: AdminAccount) {
+    if (
+      saving ||
+      updatingId ||
+      admin.role !== "sub_admin" ||
+      admin.user_id === currentUserId
+    ) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Remove Sub Admin access for ${admin.email}? They will no longer be able to use the Admin panel. Their account and data will be retained.`
+    );
+
+    if (!confirmed) return;
+
+    setUpdatingId(admin.user_id);
+    setError("");
+    setSuccess("");
+
+    try {
+      const token = await getToken();
+
+      const response = await fetch("/api/admin/admins", {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          user_id: admin.user_id,
+        }),
+      });
+
+      const result: ApiResult = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(
+          result.message || "Unable to remove Sub Admin."
+        );
+      }
+
+      if (editingId === admin.user_id) {
+        setShowForm(false);
+        setEditingId(null);
+        setName("");
+        setEmail("");
+        setPassword("");
+      }
+
+      setSuccess(
+        result.message || "Sub Admin access removed."
+      );
+
+      await loadAdmins();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to remove Sub Admin."
       );
     } finally {
       setUpdatingId(null);
@@ -391,12 +480,21 @@ export default function AdminManagementPage() {
           <button
             onClick={() => {
               setShowForm(!showForm);
+              setEditingId(null);
+              setName("");
+              setEmail("");
+              setPassword("");
               setError("");
               setSuccess("");
             }}
-            className="flex items-center gap-2 rounded-xl bg-cyan-500 px-5 py-3 font-bold text-slate-950 hover:bg-cyan-400"
+            disabled={saving || updatingId !== null}
+            className="flex items-center gap-2 rounded-xl bg-cyan-500 px-5 py-3 font-bold text-slate-950 hover:bg-cyan-400 disabled:opacity-50"
           >
-            {showForm ? <XCircle size={18} /> : <Plus size={18} />}
+            {showForm ? (
+              <XCircle size={18} />
+            ) : (
+              <Plus size={18} />
+            )}
             {showForm ? "Close Form" : "Add Sub Admin"}
           </button>
         </div>
@@ -462,12 +560,17 @@ export default function AdminManagementPage() {
           <section className="mb-8 rounded-2xl border border-cyan-500/20 bg-slate-900 p-5 sm:p-7">
             <div className="mb-6 flex items-center gap-3">
               <UserPlus className="text-cyan-400" />
+
               <div>
                 <h2 className="text-lg font-bold">
-                  Create New Sub Admin
+                  {editingId
+                    ? "Edit Sub Admin"
+                    : "Create New Sub Admin"}
                 </h2>
                 <p className="text-sm text-slate-400">
-                  New accounts receive Sub Admin permissions only.
+                  {editingId
+                    ? "Update the name, email or password."
+                    : "New accounts receive Sub Admin permissions only."}
                 </p>
               </div>
             </div>
@@ -527,13 +630,15 @@ export default function AdminManagementPage() {
                   htmlFor="admin-password"
                   className="mb-2 block text-sm text-slate-300"
                 >
-                  Temporary Password
+                  {editingId
+                    ? "New Password (optional)"
+                    : "Temporary Password"}
                 </label>
 
                 <input
                   id="admin-password"
                   type="password"
-                  required
+                  required={!editingId}
                   minLength={12}
                   value={password}
                   onChange={(event) =>
@@ -545,15 +650,16 @@ export default function AdminManagementPage() {
                 />
 
                 <p className="mt-2 text-xs text-slate-500">
-                  Use a unique temporary password and share it
-                  securely. Do not reuse your Main Admin password.
+                  {editingId
+                    ? "Leave blank to keep the current password."
+                    : "Use a unique temporary password and share it securely."}
                 </p>
               </div>
 
               <div className="sm:col-span-2">
                 <button
                   type="submit"
-                  disabled={saving}
+                  disabled={saving || updatingId !== null}
                   className="flex items-center gap-2 rounded-xl bg-cyan-500 px-6 py-3 font-bold text-slate-950 hover:bg-cyan-400 disabled:opacity-50"
                 >
                   {saving ? (
@@ -564,9 +670,12 @@ export default function AdminManagementPage() {
                   ) : (
                     <UserPlus size={18} />
                   )}
+
                   {saving
-                    ? "Creating Sub Admin..."
-                    : "Create Sub Admin"}
+                    ? "Saving..."
+                    : editingId
+                      ? "Save Changes"
+                      : "Create Sub Admin"}
                 </button>
               </div>
             </form>
@@ -641,9 +750,7 @@ export default function AdminManagementPage() {
                               : "bg-cyan-500/10 text-cyan-300"
                           }`}
                         >
-                          {isMain
-                            ? "Main Admin"
-                            : "Sub Admin"}
+                          {isMain ? "Main Admin" : "Sub Admin"}
                         </span>
                       </td>
 
@@ -675,26 +782,50 @@ export default function AdminManagementPage() {
                             Protected
                           </span>
                         ) : (
-                          <button
-                            disabled={updatingId !== null}
-                            onClick={() =>
-                              updateAdmin(
-                                admin,
-                                !admin.is_active
-                              )
-                            }
-                            className={`rounded-lg px-4 py-2 text-xs font-bold disabled:opacity-50 ${
-                              admin.is_active
-                                ? "bg-red-500/10 text-red-300 hover:bg-red-500/20"
-                                : "bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
-                            }`}
-                          >
-                            {updatingId === admin.user_id
-                              ? "Updating..."
-                              : admin.is_active
-                                ? "Suspend"
-                                : "Activate"}
-                          </button>
+                          <div className="flex justify-end gap-2">
+                            <button
+                              disabled={
+                                updatingId !== null || saving
+                              }
+                              onClick={() => editAdmin(admin)}
+                              className="rounded-lg bg-cyan-500/10 px-4 py-2 text-xs font-bold text-cyan-300 hover:bg-cyan-500/20 disabled:opacity-50"
+                            >
+                              Edit
+                            </button>
+
+                            <button
+                              disabled={
+                                updatingId !== null || saving
+                              }
+                              onClick={() =>
+                                updateAdmin(
+                                  admin,
+                                  !admin.is_active
+                                )
+                              }
+                              className={`rounded-lg px-4 py-2 text-xs font-bold disabled:opacity-50 ${
+                                admin.is_active
+                                  ? "bg-red-500/10 text-red-300 hover:bg-red-500/20"
+                                  : "bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
+                              }`}
+                            >
+                              {updatingId === admin.user_id
+                                ? "Updating..."
+                                : admin.is_active
+                                  ? "Suspend"
+                                  : "Activate"}
+                            </button>
+
+                            <button
+                              disabled={
+                                updatingId !== null || saving
+                              }
+                              onClick={() => removeAdmin(admin)}
+                              className="rounded-lg bg-red-500/10 px-4 py-2 text-xs font-bold text-red-300 hover:bg-red-500/20 disabled:opacity-50"
+                            >
+                              Remove
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
