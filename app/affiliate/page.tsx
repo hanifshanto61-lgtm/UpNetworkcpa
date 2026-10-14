@@ -36,6 +36,9 @@ import ManagerEmailContacts from "@/components/manager-email-contacts";
 import NotificationBell from "./notification-bell";
 import { useAffiliateTheme } from "./theme-context";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
+import styles from "./dashboard.module.css";
+import { AnimatedMetric, DashboardSkeleton, useMetricChanged } from "./dashboard-motion";
+import type { MetricFormat } from "./dashboard-motion";
 
 type ClickRow = {
   click_id?: string;
@@ -512,32 +515,13 @@ export default function AffiliatePage() {
     : "text-slate-400";
 
   if (loading) {
-    return (
-      <main
-        className={`flex min-h-screen items-center justify-center ${pageBg}`}
-      >
-        <div className="text-center">
-          <div
-            className={`mx-auto mb-4 h-11 w-11 animate-spin rounded-full border-4 ${
-              dark
-                ? "border-slate-700 border-t-cyan-400"
-                : "border-slate-200 border-t-cyan-500"
-            }`}
-          />
-
-          <p
-            className={`text-sm ${muted}`}
-          >
-            Loading affiliate dashboard...
-          </p>
-        </div>
-      </main>
-    );
+    return <DashboardSkeleton dark={dark} />;
   }
 
   return (
     <main
-      className={`relative min-h-screen overflow-x-hidden transition-colors duration-300 ${pageBg}`}
+      className={`${styles.dashboard} relative min-h-screen overflow-x-hidden transition-colors duration-300 ${pageBg}`}
+      data-dashboard-theme={dark ? "dark" : "light"}
     >
       {/* Background */}
       <div
@@ -573,7 +557,7 @@ export default function AffiliatePage() {
       <div className="relative z-10">
         {/* Header */}
         <header
-          className={`sticky top-0 z-40 border-b backdrop-blur-2xl ${
+          className={`${styles.topbar} sticky top-0 z-40 border-b backdrop-blur-2xl ${
             dark
               ? "border-white/10 bg-[#05070c]/90"
               : "border-slate-200 bg-white/90"
@@ -632,7 +616,7 @@ export default function AffiliatePage() {
                 </p>
               </div>
 
-              <NotificationBell />
+              <div className={styles.notifications}><NotificationBell /></div>
 
               {/* Theme */}
               <button
@@ -723,7 +707,7 @@ export default function AffiliatePage() {
               "profile"
             ) && (
               <div
-                className={`absolute right-4 top-[70px] z-50 w-64 rounded-2xl border p-4 shadow-2xl sm:right-6 ${panelBg} ${border}`}
+                className={`${styles.popover} absolute right-4 top-[70px] z-50 w-64 rounded-2xl border p-4 shadow-2xl sm:right-6 ${panelBg} ${border}`}
               >
                 <div className="mb-4 flex items-center gap-3">
                   <div className="flex h-11 w-11 items-center justify-center rounded-full bg-cyan-400/10 text-cyan-500">
@@ -796,7 +780,7 @@ export default function AffiliatePage() {
               "settings"
             ) && (
               <div
-                className={`absolute right-4 top-[70px] z-50 w-64 rounded-2xl border p-4 shadow-2xl sm:right-6 ${panelBg} ${border}`}
+                className={`${styles.popover} absolute right-4 top-[70px] z-50 w-64 rounded-2xl border p-4 shadow-2xl sm:right-6 ${panelBg} ${border}`}
               >
                 <div className="mb-3">
                   <p className="text-sm font-bold">
@@ -827,7 +811,7 @@ export default function AffiliatePage() {
         </header>
 
         {/* Main */}
-        <div className="mx-auto max-w-7xl px-4 py-7 sm:px-6 sm:py-9">
+        <div className={`${styles.content} mx-auto max-w-7xl px-4 py-7 sm:px-6 sm:py-9`}>
           {error && (
             <div className="mb-6 rounded-2xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-400">
               {error}
@@ -862,7 +846,7 @@ export default function AffiliatePage() {
               {/* Welcome Hero */}
               
             <section
-              className="relative overflow-hidden rounded-3xl border border-white/20 bg-gradient-to-r from-blue-800 via-violet-700 to-fuchsia-600 p-6 text-white shadow-2xl shadow-purple-500/20 sm:p-8"
+              className={`${styles.hero} relative overflow-hidden rounded-3xl border border-white/20 p-6 text-white sm:p-8`}
               >
                 <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-cyan-400/10 blur-3xl" />
 
@@ -870,21 +854,21 @@ export default function AffiliatePage() {
 
                 <div className="relative z-10 flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
                   <div className="max-w-2xl">
-                    <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-500">
+                    <div className={`${styles.heroBadge} mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-400/20 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em]`}>
                       <Zap size={12} />
                       Affiliate Dashboard
                     </div>
 
                     <h1 className="text-2xl font-black tracking-tight sm:text-3xl lg:text-4xl">
                       Welcome back,{" "}
-                      <span className="bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">
+                      <span className={styles.heroName}>
                         {profile?.name ||
                           "Affiliate"}
                       </span>
                     </h1>
 
                     <p
-                      className={`mt-3 max-w-xl text-sm leading-6 ${muted}`}
+                      className={`${styles.heroDescription} mt-3 max-w-xl text-sm leading-6`}
                     >
                       Manage your offers, smart links,
                       traffic, conversions, earnings and
@@ -893,7 +877,7 @@ export default function AffiliatePage() {
                   </div>
 
                   <div
-                    className={`hidden rounded-2xl border p-4 lg:block ${
+                    className={`${styles.heroAccount} hidden rounded-2xl border p-4 lg:block ${
                       dark
                         ? "border-white/10 bg-black/10"
                         : "border-slate-200 bg-white/70"
@@ -912,7 +896,7 @@ export default function AffiliatePage() {
                         </p>
 
                         <p
-                          className={`mt-1 text-[10px] ${faint}`}
+                          className={`${styles.heroAccountNote} mt-1 text-[10px]`}
                         >
                           Ready to generate traffic
                         </p>
@@ -923,7 +907,7 @@ export default function AffiliatePage() {
               </section>
 
               {/* Daily performance: affiliate's saved reporting timezone */}
-              <section className="mt-6">
+              <section className={`${styles.section} ${styles.daily} mt-6`}>
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h2 className="text-lg font-black">Today's Performance</h2>
@@ -931,23 +915,23 @@ export default function AffiliatePage() {
                       {dailyDate || "Today"} • {reportingTimezone}
                     </p>
                   </div>
-                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                  <span className={`${styles.liveBadge} rounded-full px-3 py-1 text-xs font-semibold ${
                     dark ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-50 text-emerald-700"
                   }`}>
                     Auto Refresh • 10s
                   </span>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                  <StatCard title="Today Clicks" value={todayStats.totalClicks.toLocaleString()}
+                  <StatCard title="Today Clicks" value={todayStats.totalClicks.toLocaleString()} numericValue={todayStats.totalClicks}
                     subtitle="Clicks recorded today" icon={<MousePointerClick size={21} />}
                     accent="cyan" dark={dark} />
-                  <StatCard title="Today Conversions" value={todayStats.conversions.toLocaleString()}
+                  <StatCard title="Today Conversions" value={todayStats.conversions.toLocaleString()} numericValue={todayStats.conversions}
                     subtitle="Conversions recorded today" icon={<TrendingUp size={21} />}
                     accent="emerald" dark={dark} />
-                  <StatCard title="Today Conversion Rate" value={`${todayStats.conversionRate.toFixed(2)}%`}
+                  <StatCard title="Today Conversion Rate" value={`${todayStats.conversionRate.toFixed(2)}%`} numericValue={todayStats.conversionRate} metricFormat="percent"
                     subtitle="Today's conversion rate" icon={<Activity size={21} />}
                     accent="purple" dark={dark} />
-                  <StatCard title="Today Earnings" value={`$${todayStats.earnings.toFixed(2)}`}
+                  <StatCard title="Today Earnings" value={`$${todayStats.earnings.toFixed(2)}`} numericValue={todayStats.earnings} metricFormat="currency"
                     subtitle="Earnings recorded today" icon={<DollarSign size={21} />}
                     accent="amber" dark={dark} />
                 </div>
@@ -956,7 +940,7 @@ export default function AffiliatePage() {
               {/* Lifetime totals are preserved independently of daily reset */}
               
               {/* Total Affiliate Earnings */}
-              <section className="mt-8">
+              <section className={`${styles.section} ${styles.earningsSection} mt-8`}>
             <div className="mb-4">
     <h2 className="text-lg font-black">
       Total Earnings
@@ -966,7 +950,7 @@ export default function AffiliatePage() {
     </p>
   </div>
 
-  <div className="relative overflow-hidden rounded-3xl border border-emerald-400/30 bg-gradient-to-r from-emerald-800 via-green-700 to-teal-500 p-6 text-white shadow-2xl shadow-emerald-500/20 sm:p-8">
+  <div className={`${styles.earnings} relative overflow-hidden rounded-3xl border p-6 text-white sm:p-8`}>
     <div className="pointer-events-none absolute -right-12 -top-12 h-44 w-44 rounded-full bg-white/10 blur-3xl" />
 
     <div className="relative z-10 flex items-center justify-between gap-4">
@@ -976,7 +960,7 @@ export default function AffiliatePage() {
         </p>
 
         <h3 className="mt-4 text-4xl font-black tracking-tight text-white sm:text-5xl">
-          ${earnings.toFixed(2)}
+          <AnimatedMetric value={earnings} format="currency" />
         </h3>
 
         <p className="mt-3 text-sm text-emerald-100">
@@ -989,6 +973,11 @@ export default function AffiliatePage() {
          </div>
        </div>
 
+     <dl className={`${styles.lifetimeMetrics} relative z-10`}>
+       <div><dt>Lifetime clicks</dt><dd><AnimatedMetric value={totalClicks} /></dd></div>
+       <div><dt>Lifetime conversions</dt><dd><AnimatedMetric value={conversions} /></dd></div>
+       <div><dt>Conversion rate</dt><dd><AnimatedMetric value={Number(conversionRate)} format="percent" /></dd></div>
+     </dl>
      <div className="relative z-10 mt-6 border-t border-white/20 pt-4">
        <p className="text-xs font-medium text-emerald-100">
         Earnings are updated from your affiliate statistics.
@@ -1002,7 +991,7 @@ export default function AffiliatePage() {
                 "smart_links"
               ) && (
                 <section
-                  className={`relative mt-6 overflow-hidden rounded-2xl border p-5 sm:p-6 ${
+                  className={`${styles.section} ${styles.smartLink} ${styles.panel} relative mt-6 overflow-hidden rounded-2xl border p-5 sm:p-6 ${
                     dark
                       ? "border-cyan-400/15 bg-gradient-to-br from-cyan-500/[0.09] via-cyan-500/[0.03] to-transparent"
                       : "border-cyan-100 bg-gradient-to-br from-cyan-50 via-white to-white"
@@ -1051,7 +1040,7 @@ export default function AffiliatePage() {
                       <button
                         type="button"
                         onClick={copySmartLink}
-                        className={`flex shrink-0 items-center justify-center gap-2 rounded-lg px-5 py-3 text-xs font-bold transition ${
+                        className={`${copied ? styles.copied : ""} flex shrink-0 items-center justify-center gap-2 rounded-lg px-5 py-3 text-xs font-bold transition ${
                           copied
                             ? "bg-emerald-500 text-white"
                             : "bg-cyan-500 text-white shadow-lg shadow-cyan-500/20 hover:bg-cyan-400"
@@ -1075,7 +1064,7 @@ export default function AffiliatePage() {
               )}
 
               {/* Quick Actions */}
-              <section className="mt-6">
+              <section className={`${styles.section} ${styles.actionsSection} mt-6`}>
                 <div className="mb-4 flex items-end justify-between">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-500">
@@ -1173,7 +1162,7 @@ export default function AffiliatePage() {
 
               {/* Recent Activity */}
               <section
-                className={`relative mt-6 overflow-hidden rounded-2xl border p-5 sm:p-6 ${
+                className={`${styles.section} ${styles.activity} ${styles.panel} relative mt-6 overflow-hidden rounded-2xl border p-5 sm:p-6 ${
                   dark
                     ? "border-orange-400/10 bg-gradient-to-br from-orange-500/[0.05] to-transparent"
                     : "border-orange-100 bg-gradient-to-br from-orange-50/70 to-white"
@@ -1311,7 +1300,7 @@ export default function AffiliatePage() {
                                     row.click_id ||
                                     `${row.created_at}-${index}`
                                   }
-                                  className={`border-b last:border-0 ${
+                                  className={`${styles.row} border-b last:border-0 ${
                                     dark
                                       ? "border-white/5 hover:bg-white/[0.02]"
                                       : "border-slate-100 hover:bg-orange-50/30"
@@ -1404,13 +1393,13 @@ export default function AffiliatePage() {
         {/* Sidebar */}
         {menuOpen && (
           <div
-            className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm"
+            className={`${styles.overlay} fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm`}
             onClick={() =>
               setMenuOpen(false)
             }
           >
             <aside
-              className={`absolute left-0 top-0 flex h-full w-[290px] flex-col border-r shadow-2xl ${
+              className={`${styles.sidebar} absolute left-0 top-0 flex h-full w-[290px] flex-col border-r shadow-2xl ${
                 dark
                   ? "border-white/10 bg-[#080b12]"
                   : "border-slate-200 bg-white"
@@ -1604,14 +1593,14 @@ export default function AffiliatePage() {
         {managerOpen &&
           featureEnabled("manager_contact") && (
             <div
-              className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm"
+              className={`${styles.overlay} fixed inset-0 z-[80] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm`}
               onClick={() => setManagerOpen(false)}
             >
               <div
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="contact-manager-title"
-                className={`max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl border p-5 shadow-2xl ${panelBg} ${border}`}
+                className={`${styles.modal} max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl border p-5 shadow-2xl ${panelBg} ${border}`}
                 onClick={(event) =>
                   event.stopPropagation()
                 }
@@ -1959,7 +1948,7 @@ function SupportChatBot({
 
       {open && (
         <div
-          className={`fixed bottom-4 right-4 z-[90] flex h-[min(680px,calc(100vh-32px))] w-[calc(100vw-32px)] max-w-[390px] flex-col overflow-hidden rounded-3xl border shadow-2xl ${
+          className={`${styles.chat} fixed bottom-4 right-4 z-[90] flex h-[min(680px,calc(100vh-32px))] w-[calc(100vw-32px)] max-w-[390px] flex-col overflow-hidden rounded-3xl border shadow-2xl ${
             dark
               ? "border-white/10 bg-[#090d17]"
               : "border-slate-200 bg-white"
@@ -2009,7 +1998,7 @@ function SupportChatBot({
             {messages.map((message) => (
               <div
                 key={message.id}
-                className={`flex ${
+                className={`${styles.message} flex ${
                   message.sender === "user"
                     ? "justify-end"
                     : "justify-start"
@@ -2169,6 +2158,8 @@ function SupportChatBot({
 
 
 function StatCard({
+  numericValue,
+  metricFormat = "integer",
   title,
   value,
   subtitle,
@@ -2176,6 +2167,8 @@ function StatCard({
   accent,
   dark,
 }: {
+  numericValue?: number;
+  metricFormat?: MetricFormat;
   title: string;
   value: string;
   subtitle: string;
@@ -2183,7 +2176,8 @@ function StatCard({
   accent: "cyan" | "emerald" | "purple" | "amber";
   dark: boolean;
 }) {
-  const styles = {
+  const changed = useMetricChanged(numericValue ?? value);
+  const variants = {
     cyan: {
       background:
         "from-blue-700 via-blue-600 to-cyan-500",
@@ -2218,41 +2212,42 @@ function StatCard({
     },
   };
 
-  const style = styles[accent];
+  const style = variants[accent];
 
   return (
     <div
-      className={`group relative overflow-hidden rounded-2xl border border-white/20 bg-gradient-to-br ${style.background} p-5 text-white shadow-xl ${style.shadow} transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02] hover:shadow-2xl`}
+      data-accent={accent}
+      className={`${styles.metricCard} ${changed ? styles.metricUpdated : ""} group relative overflow-hidden rounded-2xl border border-white/20 bg-gradient-to-br ${style.background} p-5 text-white shadow-xl ${style.shadow} transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02] hover:shadow-2xl`}
     >
       <div
-        className={`pointer-events-none absolute -right-12 -top-12 h-36 w-36 rounded-full blur-3xl ${style.glow}`}
+        className={`${styles.metricGlow} pointer-events-none absolute -right-12 -top-12 h-36 w-36 rounded-full blur-3xl ${style.glow}`}
       />
 
       <div className="pointer-events-none absolute -bottom-14 -left-10 h-28 w-28 rounded-full bg-white/10 blur-2xl" />
 
       <div className="relative z-10">
         <div className="flex items-start justify-between gap-3">
-          <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/90">
+          <span className={`${styles.metricTitle} text-[11px] font-bold uppercase tracking-[0.12em] text-white/90`}>
             {title}
           </span>
 
           <div
-            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${style.icon} text-white shadow-inner`}
+            className={`${styles.metricIcon} flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${style.icon} text-white shadow-inner`}
           >
             {icon}
           </div>
         </div>
 
-        <p className="mt-5 break-words text-3xl font-black tracking-tight text-white drop-shadow-sm sm:text-4xl">
-          {value}
+        <p className={`${styles.metricValue} mt-5 break-words text-3xl font-black tracking-tight sm:text-4xl`}>
+          {numericValue === undefined ? value : <AnimatedMetric value={numericValue} format={metricFormat} />}
         </p>
 
-        <div className="mt-5 flex items-center gap-2 border-t border-white/20 pt-3">
+        <div className={`${styles.metricFooter} mt-5 flex items-center gap-2 border-t pt-3`}>
           <span
-            className={`h-2 w-2 shrink-0 rounded-full ${style.line}`}
+            className={`${styles.metricDot} h-2 w-2 shrink-0 rounded-full ${style.line}`}
           />
 
-          <p className="text-xs font-medium text-white/90">
+          <p className={`${styles.metricSubtitle} text-xs font-medium`}>
             {subtitle}
           </p>
         </div>
@@ -2281,7 +2276,7 @@ function QuickAction({
   onClick: () => void;
   dark: boolean;
 }) {
-  const styles = {
+  const variants = {
     blue: {
       gradient: "from-blue-700 via-blue-600 to-indigo-500",
       shadow: "hover:shadow-blue-500/30",
@@ -2300,34 +2295,35 @@ function QuickAction({
     },
   };
 
-  const style = styles[accent];
+  const style = variants[accent];
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`group relative w-full overflow-hidden rounded-2xl border border-white/20 bg-gradient-to-br ${style.gradient} p-5 text-left text-white shadow-lg transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02] hover:shadow-2xl ${style.shadow}`}
+      data-accent={accent}
+      className={`${styles.quickAction} group relative w-full overflow-hidden rounded-2xl border border-white/20 bg-gradient-to-br ${style.gradient} p-5 text-left text-white shadow-lg transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02] hover:shadow-2xl ${style.shadow}`}
     >
       <div className="pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full bg-white/15 blur-2xl" />
 
       <div className="relative z-10 flex items-center gap-4">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/20 text-white shadow-inner">
+        <div className={`${styles.actionIcon} flex h-12 w-12 shrink-0 items-center justify-center rounded-xl`}>
           {icon}
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="font-bold text-white">
+          <p className={`${styles.actionTitle} font-bold`}>
             {title}
           </p>
 
-          <p className="mt-1 text-xs text-white/85">
+          <p className={`${styles.actionSubtitle} mt-1 text-xs`}>
             {subtitle}
           </p>
         </div>
 
         <ChevronRight
           size={20}
-          className="shrink-0 text-white/90 transition-transform duration-300 group-hover:translate-x-1"
+          className={`${styles.actionArrow} shrink-0 transition-transform duration-300 group-hover:translate-x-1`}
         />
       </div>
     </button>
@@ -2356,4 +2352,4 @@ function formatDate(value?: string) {
     hour: "numeric",
     minute: "2-digit",
   });
-            }
+   }
