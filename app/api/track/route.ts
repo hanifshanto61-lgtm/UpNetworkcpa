@@ -163,7 +163,8 @@ function getTrafficSource(
 
   if (source) return source;
 
-  const referrer = request.headers.get("referer");
+  const referrer =
+    request.headers.get("referer");
 
   if (!referrer) return "Direct / Unknown";
 
@@ -180,7 +181,8 @@ function getTrafficSource(
 function getSafeReferrer(
   request: NextRequest
 ): string | null {
-  const value = request.headers.get("referer");
+  const value =
+    request.headers.get("referer");
 
   if (!value) return null;
 
@@ -548,6 +550,7 @@ export async function GET(request: NextRequest) {
           .from("smart_links")
           .select(SMARTLINK_COLUMNS)
           .eq("is_global", true)
+          .eq("smartlink_group", "global_pool")
           .eq("status", "active")
           .order("slug", {
             ascending: true,
@@ -596,7 +599,11 @@ export async function GET(request: NextRequest) {
               count: "exact",
               head: true,
             })
-            .eq("is_global", true);
+            .eq("is_global", true)
+            .eq(
+              "smartlink_group",
+              "global_pool"
+            );
 
           if (countError) {
             return errorResponse(
