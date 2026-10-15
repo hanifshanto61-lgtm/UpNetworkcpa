@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
     let query = supabaseAdmin
       .from("clicks")
       .select(
-        "id, click_id, affiliate_id, offer_id, smartlink_id, status, payout, converted_at, created_at"
+        "id, click_id, affiliate_id, offer_id, smartlink_id, status, payout, converted_at, created_at, traffic_source, referer, country, device, browser, operating_system, user_agent, ip_address"
       )
       .order("created_at", {
         ascending: false,
@@ -121,7 +121,24 @@ export async function GET(request: NextRequest) {
         );
     }
 
-    const { data, error } = await query;
+    let { data, error } = await query;
+
+    // Keep history accessible while the user_agent migration is being applied.
+    if (
+      error &&
+      ["42703", "PGRST204"].includes(error.code) &&
+      /user_agent|ip_address/.test(error.message)
+    ) {
+      const fallback = await query.select(
+        "id, click_id, affiliate_id, offer_id, smartlink_id, status, payout, converted_at, created_at, traffic_source, referer, country, device, browser, operating_system"
+      );
+      data = fallback.data?.map((click) => ({
+        ...click,
+        user_agent: null,
+        ip_address: null,
+      })) ?? null;
+      error = fallback.error;
+    }
 
     if (error) {
       console.error("Admin conversions GET error:", error);
