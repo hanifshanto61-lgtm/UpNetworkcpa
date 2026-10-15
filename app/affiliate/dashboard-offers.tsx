@@ -36,8 +36,7 @@ export default function DashboardOffers({
 
   const [paused, setPaused] = useState(false);
   const [hovered, setHovered] = useState(false);
-  const [focused, setFocused] = useState(false);
-  const [reducedMotion, setReducedMotion] = useState(true);
+  const [keyboardFocused, setKeyboardFocused] = useState(false);
 
   const requestRef = useRef<AbortController | null>(null);
   const newestRef = useRef("");
@@ -84,7 +83,7 @@ export default function DashboardOffers({
 
       if (controller.signal.aborted) return;
 
-      // Existing API returns active offers newest first.
+      // The API returns active offers newest first.
       const next: Offer[] = result.offers;
       const newestId = next[0]?.id || "";
       const hasNewFirst = newestId !== newestRef.current;
@@ -93,12 +92,16 @@ export default function DashboardOffers({
 
       setOffers(next);
 
-      setActiveId((current) =>
-        hasNewFirst ||
-        !next.some((offer) => offer.id === current)
-          ? newestId
-          : current
-      );
+      setActiveId((current) => {
+        if (
+          hasNewFirst ||
+          !next.some((offer) => offer.id === current)
+        ) {
+          return newestId;
+        }
+
+        return current;
+      });
 
       setError("");
     } catch (err) {
@@ -122,29 +125,16 @@ export default function DashboardOffers({
     return () => requestRef.current?.abort();
   }, []);
 
-  // Check for newly added or updated offers every 15 seconds.
+  // Refresh offer data without reloading the dashboard.
   useAutoRefresh(loadOffers, 15000);
 
-  useEffect(() => {
-    const media = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    );
-
-    const update = () => setReducedMotion(media.matches);
-
-    update();
-    media.addEventListener("change", update);
-
-    return () => media.removeEventListener("change", update);
-  }, []);
-
+  // Automatically show the next offer every five seconds.
   useEffect(() => {
     if (
       offers.length < 2 ||
       paused ||
       hovered ||
-      focused ||
-      reducedMotion
+      keyboardFocused
     ) {
       return;
     }
@@ -153,11 +143,14 @@ export default function DashboardOffers({
       if (document.visibilityState !== "visible") return;
 
       setActiveId((current) => {
-        const index = offers.findIndex(
+        const currentIndex = offers.findIndex(
           (offer) => offer.id === current
         );
 
-        return offers[(index + 1) % offers.length].id;
+        const nextIndex =
+          (currentIndex + 1) % offers.length;
+
+        return offers[nextIndex].id;
       });
     }, 5000);
 
@@ -166,8 +159,7 @@ export default function DashboardOffers({
     offers,
     paused,
     hovered,
-    focused,
-    reducedMotion,
+    keyboardFocused,
   ]);
 
   const index = Math.max(
@@ -181,38 +173,62 @@ export default function DashboardOffers({
     ? "text-slate-400"
     : "text-slate-500";
 
-  const control = `rounded-lg border p-2 ${
+  const control = `flex h-10 w-10 items-center justify-center rounded-xl border transition ${
     dark
-      ? "border-white/10 hover:bg-white/10"
-      : "border-slate-200 hover:bg-slate-100"
+      ? "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
+      : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
   }`;
 
   function move(direction: number) {
-    if (!offers.length) return;
+    if (offers.length < 2) return;
 
+    // Keep a manually selected offer visible until Play is pressed.
     setPaused(true);
 
-    setActiveId(
-      offers[
-        (index + direction + offers.length) % offers.length
-      ].id
-    );
+    setActiveId((current) => {
+      const currentIndex = Math.max(
+        0,
+        offers.findIndex((item) => item.id === current)
+      );
+
+      const nextIndex =
+        (currentIndex + direction + offers.length) %
+        offers.length;
+
+      return offers[nextIndex].id;
+    });
+  }
+
+  function togglePlayback() {
+    setPaused((current) => !current);
   }
 
   return (
     <section
       aria-label="Latest offers"
       aria-roledescription="carousel"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onFocusCapture={() => setFocused(true)}
+      onPointerEnter={(event) => {
+        // Touch interaction must not create a sticky hover pause.
+        if (event.pointerType === "mouse") {
+          setHovered(true);
+        }
+      }}
+      onPointerLeave={() => setHovered(false)}
+      onPointerCancel={() => setHovered(false)}
+      onFocusCapture={(event) => {
+        const target = event.target as HTMLElement;
+
+        if (target.matches(":focus-visible")) {
+          setKeyboardFocused(true);
+        }
+      }}
       onBlurCapture={(event) => {
         if (
           !event.currentTarget.contains(
             event.relatedTarget as Node | null
           )
         ) {
-          setFocused(false);
+          setKeyboardFocused(false);
         }
       }}
       className={`overflow-hidden rounded-2xl border p-5 sm:p-6 ${
@@ -249,7 +265,9 @@ export default function DashboardOffers({
       {error && (
         <div
           role="alert"
-          className="mb-4 rounded-xl bg-amber-500/10 p-3 text-sm text-amber-600"
+          className={`mb-4 rounded-xl bg-amber-500/10 p-3 text-sm ${
+            dark ? "text-amber-300" : "text-amber-700"
+          }`}
         >
           {offers.length
             ? "Could not refresh offers. Showing the last loaded offers."
@@ -258,7 +276,7 @@ export default function DashboardOffers({
           <button
             type="button"
             onClick={() => void loadOffers()}
-            className="ml-3 underline"
+            className="ml-3 font-semibold underline"
           >
             Retry
           </button>
@@ -315,7 +333,9 @@ export default function DashboardOffers({
 
                 <span
                   className={`rounded-full px-3 py-1 ${
-                    dark ? "bg-white/5" : "bg-slate-100"
+                    dark
+                      ? "bg-white/5"
+                      : "bg-slate-100"
                   }`}
                 >
                   {offer.country || "Worldwide"}
@@ -364,10 +384,28 @@ export default function DashboardOffers({
             </div>
           </article>
 
-          <div className="mt-5 flex items-center justify-between gap-3 border-t border-current/10 pt-4">
-            <span className={`text-xs ${muted}`}>
-              Offer {index + 1} of {offers.length}
-            </span>
+          <div
+            className={`mt-5 flex flex-wrap items-center justify-between gap-3 border-t pt-4 ${
+              dark
+                ? "border-white/10"
+                : "border-slate-200"
+            }`}
+          >
+            <div>
+              <p className={`text-xs ${muted}`}>
+                Offer {index + 1} of {offers.length}
+              </p>
+
+              {offers.length > 1 && (
+                <p className={`mt-1 text-[10px] ${muted}`}>
+                  {paused
+                    ? "Paused · Press Play to continue"
+                    : hovered || keyboardFocused
+                      ? "Paused while interacting"
+                      : "Auto change every 5 seconds"}
+                </p>
+              )}
+            </div>
 
             {offers.length > 1 && (
               <div className="flex items-center gap-2">
@@ -380,26 +418,22 @@ export default function DashboardOffers({
                   <ChevronLeft size={17} />
                 </button>
 
-                {!reducedMotion && (
-                  <button
-                    type="button"
-                    aria-label={
-                      paused
-                        ? "Start automatic offers"
-                        : "Pause automatic offers"
-                    }
-                    onClick={() =>
-                      setPaused((value) => !value)
-                    }
-                    className={control}
-                  >
-                    {paused ? (
-                      <Play size={17} />
-                    ) : (
-                      <Pause size={17} />
-                    )}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  aria-label={
+                    paused
+                      ? "Start automatic offers"
+                      : "Pause automatic offers"
+                  }
+                  onClick={togglePlayback}
+                  className={control}
+                >
+                  {paused ? (
+                    <Play size={17} />
+                  ) : (
+                    <Pause size={17} />
+                  )}
+                </button>
 
                 <button
                   type="button"
