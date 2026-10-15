@@ -36,7 +36,7 @@ function groupPoints(daily: Point[], group: Group) {
     item.revenue += point.revenue;
     map.set(date, item);
   }
-  return [...map.values()].map(item => ({ ...item, revenue: Number(item.revenue.toFixed(2)) }));
+  return Array.from(map.values()).map(item => ({ ...item, revenue: Number(item.revenue.toFixed(2)) }));
 }
 function dateLabel(value: string) {
   return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`));
@@ -104,7 +104,7 @@ export default function TrafficDynamic({ dark }: { dark: boolean }) {
   const line = points.map((point, i) => `${x(i)},${y(point[metric])}`).join(" ");
   const selectedIndex = selected === null ? null : Math.min(selected, points.length - 1);
   const active = selectedIndex === null ? null : points[selectedIndex];
-  const tickIndexes = [...new Set([0, Math.floor((points.length - 1) / 2), points.length - 1])].filter(index => index >= 0);
+  const tickIndexes = Array.from(new Set([0, Math.floor((points.length - 1) / 2), points.length - 1])).filter(index => index >= 0);
   const ink = dark ? "#cbd5e1" : "#475569";
   const grid = dark ? "#334155" : "#e2e8f0";
   const muted = dark ? "text-slate-400" : "text-slate-500";
