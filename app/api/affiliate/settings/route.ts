@@ -28,9 +28,6 @@ type Profile = {
   affiliate_id: string;
   full_name?: string | null;
   email?: string | null;
-  status?: string | null;
-  referral_code?: string | null;
-  referral_rate?: number | null;
 };
 
 type AffiliateSettings = {
@@ -95,49 +92,41 @@ async function authenticate(request: NextRequest) {
   };
 }
 
-/**
- * Get affiliate profile from the current database structure.
- *
- * IMPORTANT:
- * We use affiliate_profiles instead of the old profiles table.
- */
-async function getProfile(userId: string) {
-  const {
-    data,
-    error,
-  } = await supabaseAdmin
-    .from("affiliate_profiles")
-    .select(
-      "id, affiliate_id, full_name, email, status, referral_code, referral_rate"
-    )
+// Use the same server-controlled profile as the dashboard and payments APIs.
+async function getProfile(userId: string): Promise<Profile | null> {
+  const { data, error } = await supabaseAdmin
+    .from("profiles")
+    .select("id, affiliate_id, full_name, email")
     .eq("id", userId)
     .maybeSingle();
 
   if (error) {
-    console.error(
-      "Affiliate profile lookup error:",
-      error
-    );
-
-    return null;
+    console.error("Affiliate profile lookup error:", error);
+    throw new Error("Unable to verify the affiliate profile.");
   }
 
   return data as Profile | null;
 }
 
-function getAffiliateId(
-  profile: Profile | null,
-  userId: string
-) {
-  if (profile?.affiliate_id) {
-    return String(profile.affiliate_id);
+function getAffiliateId(profile: Profile | null) {
+  const affiliateId = profile?.affiliate_id?.trim();
+
+  if (!affiliateId) {
+    throw new Error("A valid affiliate profile is required.");
   }
 
-  if (profile?.referral_code) {
-    return String(profile.referral_code);
-  }
+  return affiliateId;
+}
 
-  return `AFF-${userId.slice(0, 8).toUpperCase()}`;
+function profileUnavailableResponse() {
+  return NextResponse.json(
+    {
+      success: false,
+      error: "Your affiliate profile or Affiliate ID could not be found. Please contact support.",
+      code: "AFFILIATE_PROFILE_NOT_FOUND",
+    },
+    { status: 403, headers: { "Cache-Control": "no-store" } }
+  );
 }
 
 function cleanString(
@@ -173,9 +162,7 @@ function mapSettings(
   userId: string,
   profile: Profile | null
 ) {
-  const affiliateId =
-    row?.affiliate_id ||
-    getAffiliateId(profile, userId);
+  const affiliateId = getAffiliateId(profile);
 
   return {
     userId,
@@ -256,6 +243,10 @@ export async function GET(
 
     const profile =
       await getProfile(user.id);
+
+    if (!profile?.affiliate_id?.trim()) {
+      return profileUnavailableResponse();
+    }
 
     const {
       data,
@@ -355,11 +346,11 @@ export async function PUT(
     const profile =
       await getProfile(user.id);
 
-    const affiliateId =
-      getAffiliateId(
-        profile,
-        user.id
-      );
+    if (!profile?.affiliate_id?.trim()) {
+      return profileUnavailableResponse();
+    }
+
+    const affiliateId = getAffiliateId(profile);
 
     const timezone =
       cleanString(
