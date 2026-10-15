@@ -19,10 +19,29 @@ type Click = {
   click_id: string | null;
   affiliate_id: string | null;
   offer_id: string | null;
+  traffic_source?: string | null;
+  referer?: string | null;
+  country?: string | null;
+  device?: string | null;
+  browser?: string | null;
+  operating_system?: string | null;
+  user_agent?: string | null;
+  ip_address?: string | null;
   status: string | null;
   payout: number | string | null;
   converted_at: string | null;
   created_at: string | null;
+};
+
+type IpCheck = {
+  ip: string;
+  risk: number | null;
+  proxy: boolean | null;
+  vpn: boolean | null;
+  tor: boolean | null;
+  hosting: boolean | null;
+  anonymous: boolean | null;
+  checked_at: string;
 };
 
 type ApiResponse = {
@@ -68,6 +87,10 @@ export default function AdminConversionsPage() {
   const [payouts, setPayouts] = useState<
     Record<string, string>
   >({});
+
+  const [ipChecks, setIpChecks] = useState<Record<string, IpCheck>>({});
+  const [checkingIps, setCheckingIps] = useState<Record<string, boolean>>({});
+  const [ipErrors, setIpErrors] = useState<Record<string, string>>({});
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -167,6 +190,39 @@ export default function AdminConversionsPage() {
       active = false;
     };
   }, [getToken, loadClicks, router]);
+
+  async function checkIp(click: Click) {
+    const clickId = click.click_id;
+    if (!clickId || !click.ip_address || checkingIps[clickId]) return;
+
+    setCheckingIps((previous) => ({ ...previous, [clickId]: true }));
+    setIpErrors((previous) => ({ ...previous, [clickId]: "" }));
+
+    try {
+      const token = await getToken();
+      const response = await fetch("/api/admin/ip-check", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ click_id: clickId }),
+        cache: "no-store",
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success || !result.check) {
+        throw new Error(result.error || "IP check unavailable.");
+      }
+      setIpChecks((previous) => ({ ...previous, [clickId]: result.check }));
+    } catch (err) {
+      setIpErrors((previous) => ({
+        ...previous,
+        [clickId]: err instanceof Error ? err.message : "IP check unavailable.",
+      }));
+    } finally {
+      setCheckingIps((previous) => ({ ...previous, [clickId]: false }));
+    }
+  }
 
   async function approveConversion(click: Click) {
     if (!click.click_id || savingId) return;
@@ -436,11 +492,15 @@ export default function AdminConversionsPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[950px] text-left text-sm">
+              <table className="w-full min-w-[1850px] text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase text-slate-500">
                   <tr>
                     <th className="px-5 py-4">Click ID</th>
                     <th className="px-5 py-4">Affiliate</th>
+                    <th className="px-5 py-4">IP Address / Check IP</th>
+                    <th className="px-5 py-4">Traffic</th>
+                    <th className="px-5 py-4">Device / Browser</th>
+                    <th className="px-5 py-4">User Agent</th>
                     <th className="px-5 py-4">Status</th>
                     <th className="px-5 py-4">Click Date</th>
                     <th className="px-5 py-4">Converted</th>
@@ -453,6 +513,8 @@ export default function AdminConversionsPage() {
                   {clicks.map((click, index) => {
                     const converted = isConverted(click);
                     const clickId = click.click_id || "";
+                    const ipCheck = ipChecks[clickId];
+                    const flag = (value: boolean | null) => value === null ? "Unknown" : String(value);
                     const status = (
                       click.status || ""
                     ).toLowerCase();
@@ -474,6 +536,71 @@ export default function AdminConversionsPage() {
 
                         <td className="px-5 py-4 font-semibold">
                           {click.affiliate_id || "—"}
+                        </td>
+
+                        <td className="min-w-[250px] max-w-[300px] px-5 py-4 text-xs">
+                          <p className="break-all font-mono font-semibold">
+                            {click.ip_address || "Not recorded"}
+                          </p>
+                          {click.ip_address && clickId && (
+                            <button
+                              onClick={() => void checkIp(click)}
+                              disabled={checkingIps[clickId]}
+                              className="mt-2 rounded-lg bg-blue-50 px-3 py-2 font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                            >
+                              {checkingIps[clickId] ? "Checking..." : "Check IP"}
+                            </button>
+                          )}
+                          {ipErrors[clickId] && (
+                            <p role="alert" className="mt-2 text-red-600">{ipErrors[clickId]}</p>
+                          )}
+                          {ipCheck && (
+                            <div className="mt-3 space-y-1 text-slate-600" role="status">
+                              <p className="font-semibold">Risk score: {ipCheck.risk === null ? "Unknown" : `${ipCheck.risk}/100`}</p>
+                              <p>Proxy: {flag(ipCheck.proxy)} · VPN: {flag(ipCheck.vpn)}</p>
+                              <p>Tor: {flag(ipCheck.tor)} · Hosting: {flag(ipCheck.hosting)}</p>
+                              <p>Anonymous: {flag(ipCheck.anonymous)}</p>
+                              <p className="text-slate-400">Checked: {dateTime(ipCheck.checked_at)}</p>
+                              <p className="text-slate-400">proxycheck.io · Current reputation; not proof of fraud or a genuine visitor.</p>
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="min-w-[200px] max-w-[260px] px-5 py-4 text-xs">
+                          <p className="break-words font-semibold">
+                            {click.traffic_source || "Unknown"}
+                          </p>
+                          <p className="mt-1 text-slate-500">
+                            Country: {click.country || "Unknown"}
+                          </p>
+                          <details className="mt-2 text-slate-500">
+                            <summary className="cursor-pointer">Referrer</summary>
+                            <p className="mt-1 break-all">
+                              {click.referer || "Not recorded"}
+                            </p>
+                          </details>
+                        </td>
+
+                        <td className="min-w-[150px] px-5 py-4 text-xs">
+                          <p className="font-semibold">{click.device || "Unknown"}</p>
+                          <p className="mt-1 text-slate-500">
+                            {click.browser || "Unknown"} / {click.operating_system || "Unknown"}
+                          </p>
+                        </td>
+
+                        <td className="min-w-[240px] max-w-[320px] px-5 py-4 text-xs">
+                          {click.user_agent ? (
+                            <details>
+                              <summary className="cursor-pointer font-semibold text-blue-600">
+                                View User Agent
+                              </summary>
+                              <p className="mt-2 break-all font-mono text-slate-600">
+                                {click.user_agent}
+                              </p>
+                            </details>
+                          ) : (
+                            <span className="text-slate-400">Not recorded</span>
+                          )}
                         </td>
 
                         <td className="px-5 py-4">
