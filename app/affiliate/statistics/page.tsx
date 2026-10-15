@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -46,6 +45,7 @@ type ClickRow = {
 };
 
 type ReportItem = {
+  uniqueClicks?: number;
   clicks: number;
   conversions: number;
   earnings: number;
@@ -104,9 +104,12 @@ function today() {
 
 function monthStart() {
   const date = new Date();
+
   return new Date(
     Date.UTC(date.getFullYear(), date.getMonth(), 1)
-  ).toISOString().slice(0, 10);
+  )
+    .toISOString()
+    .slice(0, 10);
 }
 
 function money(value: number) {
@@ -123,9 +126,8 @@ function converted(row: ClickRow) {
 
 function csvCell(value: unknown) {
   const text = String(value ?? "");
-  const safe = /^[=+\-@\t\r]/.test(text)
-    ? `'${text}`
-    : text;
+  const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+
   return `"${safe.replace(/"/g, '""')}"`;
 }
 
@@ -172,9 +174,11 @@ function exportCSV(rows: ClickRow[]) {
 
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
+
   anchor.href = url;
   anchor.download = `upnetwork-traffic-${today()}.csv`;
   anchor.click();
+
   URL.revokeObjectURL(url);
 }
 
@@ -196,10 +200,13 @@ function Metric({
       <div className={`mb-4 inline-flex rounded-xl p-3 ${color}`}>
         {icon}
       </div>
+
       <p className="text-sm text-slate-400">{title}</p>
+
       <p className="mt-1 text-2xl font-bold text-white">
         {value}
       </p>
+
       <p className="mt-2 text-xs text-slate-500">
         {description}
       </p>
@@ -220,10 +227,17 @@ function ReportTable({
     <section className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900/70">
       <div className="border-b border-white/10 p-5">
         <h2 className="font-semibold text-white">{title}</h2>
+
         <p className="mt-1 text-xs text-slate-500">
-          Clicks, conversions and affiliate earnings
+          Clicks, unique clicks, conversions and affiliate earnings
         </p>
       </div>
+
+      <p className="px-5 pt-3 text-xs text-slate-500">
+        Unique clicks count known visitors once per row in the selected
+        date range. Older clicks without visitor identifiers are excluded
+        from unique counts.
+      </p>
 
       {rows.length === 0 ? (
         <p className="p-6 text-sm text-slate-500">
@@ -231,15 +245,29 @@ function ReportTable({
         </p>
       ) : (
         <div className="max-h-80 overflow-auto">
-          <table className="w-full text-left text-sm">
+          <table className="w-full min-w-[440px] text-left text-sm">
             <thead className="sticky top-0 bg-slate-900 text-xs text-slate-400">
               <tr>
                 <th className="px-4 py-3">{title}</th>
-                <th className="px-3 py-3 text-right">Clicks</th>
-                <th className="px-3 py-3 text-right">Leads</th>
-                <th className="px-4 py-3 text-right">Earned</th>
+
+                <th className="px-3 py-3 text-right">
+                  Clicks
+                </th>
+
+                <th className="whitespace-nowrap px-3 py-3 text-right">
+                  Unique Clicks
+                </th>
+
+                <th className="px-3 py-3 text-right">
+                  Leads
+                </th>
+
+                <th className="px-4 py-3 text-right">
+                  Earned
+                </th>
               </tr>
             </thead>
+
             <tbody>
               {rows.map((item, index) => (
                 <tr
@@ -249,12 +277,19 @@ function ReportTable({
                   <td className="max-w-[190px] break-all px-4 py-3 text-slate-200">
                     {String(item[field] || "Unknown")}
                   </td>
+
                   <td className="px-3 py-3 text-right text-cyan-300">
                     {item.clicks}
                   </td>
+
+                  <td className="px-3 py-3 text-right text-blue-300">
+                    {item.uniqueClicks ?? "—"}
+                  </td>
+
                   <td className="px-3 py-3 text-right text-violet-300">
                     {item.conversions}
                   </td>
+
                   <td className="px-4 py-3 text-right text-emerald-400">
                     {money(item.earnings)}
                   </td>
@@ -269,14 +304,14 @@ function ReportTable({
 }
 
 function TrendChart({ rows }: { rows: ReportItem[] }) {
-  const max = Math.max(
-    1,
-    ...rows.map((item) => item.clicks)
-  );
+  const max = Math.max(1, ...rows.map((item) => item.clicks));
 
   return (
     <section className="rounded-2xl border border-white/10 bg-slate-900/70 p-5">
-      <h2 className="mb-1 font-semibold">Daily Traffic Trend</h2>
+      <h2 className="mb-1 font-semibold">
+        Daily Traffic Trend
+      </h2>
+
       <p className="mb-5 text-xs text-slate-500">
         Clicks by day for the selected period
       </p>
@@ -295,6 +330,7 @@ function TrendChart({ rows }: { rows: ReportItem[] }) {
               <span className="text-xs text-cyan-300">
                 {item.clicks}
               </span>
+
               <div className="flex h-36 w-full items-end rounded-md bg-white/5">
                 <div
                   className="w-full rounded-t-md bg-gradient-to-t from-cyan-600 to-blue-400"
@@ -307,6 +343,7 @@ function TrendChart({ rows }: { rows: ReportItem[] }) {
                   title={`${String(item.date)}: ${item.clicks} clicks`}
                 />
               </div>
+
               <span className="text-[10px] text-slate-500">
                 {String(item.date || "").slice(5)}
               </span>
@@ -335,7 +372,11 @@ export default function AffiliateStatisticsPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [tab, setTab] = useState("geography");
 
-  async function load(from: string, to: string, showLoading = true) {
+  async function load(
+    from: string,
+    to: string,
+    showLoading = true
+  ) {
     if (showLoading) {
       setLoading(true);
       setError("");
@@ -393,8 +434,6 @@ export default function AffiliateStatisticsPage() {
     void load(monthStart(), today());
   }, []);
 
-  // Refresh the selected report every 15 seconds.
-  // Keep existing UI and filters unchanged.
   useAutoRefresh(
     () => load(appliedFrom, appliedTo, false),
     15000
@@ -432,17 +471,11 @@ export default function AffiliateStatisticsPage() {
         return false;
       }
 
-      if (
-        countryFilter &&
-        row.country !== countryFilter
-      ) {
+      if (countryFilter && row.country !== countryFilter) {
         return false;
       }
 
-      if (
-        deviceFilter &&
-        row.device !== deviceFilter
-      ) {
+      if (deviceFilter && row.device !== deviceFilter) {
         return false;
       }
 
@@ -480,6 +513,7 @@ export default function AffiliateStatisticsPage() {
 
     setAppliedFrom(fromDate);
     setAppliedTo(toDate);
+
     void load(fromDate, toDate);
   }
 
@@ -491,6 +525,7 @@ export default function AffiliateStatisticsPage() {
     setToDate(to);
     setAppliedFrom(from);
     setAppliedTo(to);
+
     void load(from, to);
   }
 
@@ -516,11 +551,16 @@ export default function AffiliateStatisticsPage() {
 
             <div>
               <div className="flex items-center gap-2">
-                <Activity className="text-cyan-400" size={25} />
+                <Activity
+                  className="text-cyan-400"
+                  size={25}
+                />
+
                 <h1 className="text-xl font-bold sm:text-2xl">
                   Traffic Intelligence
                 </h1>
               </div>
+
               <p className="mt-1 text-sm text-slate-400">
                 UpNetwork CPA • Advanced Affiliate Analytics
               </p>
@@ -558,8 +598,14 @@ export default function AffiliateStatisticsPage() {
 
         <section className="mb-6 rounded-2xl border border-white/10 bg-slate-900/70 p-5">
           <div className="mb-4 flex items-center gap-2">
-            <CalendarDays size={19} className="text-cyan-400" />
-            <h2 className="font-semibold">Date Range</h2>
+            <CalendarDays
+              size={19}
+              className="text-cyan-400"
+            />
+
+            <h2 className="font-semibold">
+              Date Range
+            </h2>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto_auto]">
@@ -603,25 +649,40 @@ export default function AffiliateStatisticsPage() {
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Metric
             title="Total Clicks"
-            value={loading ? "..." : stats.totalClicks.toLocaleString()}
+            value={
+              loading
+                ? "..."
+                : stats.totalClicks.toLocaleString()
+            }
             icon={<MousePointerClick size={22} />}
             color="bg-cyan-500/15 text-cyan-400"
             description="All recorded traffic"
           />
+
           <Metric
             title="Unique Visitors"
-            value={loading ? "..." : stats.uniqueVisitors.toLocaleString()}
+            value={
+              loading
+                ? "..."
+                : stats.uniqueVisitors.toLocaleString()
+            }
             icon={<Users size={22} />}
             color="bg-blue-500/15 text-blue-400"
             description={`${stats.identifiableClicks} clicks with visitor identifiers`}
           />
+
           <Metric
             title="Conversions"
-            value={loading ? "..." : stats.conversions.toLocaleString()}
+            value={
+              loading
+                ? "..."
+                : stats.conversions.toLocaleString()
+            }
             icon={<Target size={22} />}
             color="bg-violet-500/15 text-violet-400"
             description="Confirmed conversion events"
           />
+
           <Metric
             title="Affiliate Earnings"
             value={loading ? "..." : money(stats.earnings)}
@@ -629,6 +690,7 @@ export default function AffiliateStatisticsPage() {
             color="bg-emerald-500/15 text-emerald-400"
             description="Converted click payouts"
           />
+
           <Metric
             title="Conversion Rate"
             value={`${stats.conversionRate.toFixed(2)}%`}
@@ -636,6 +698,7 @@ export default function AffiliateStatisticsPage() {
             color="bg-amber-500/15 text-amber-400"
             description="Conversions / total clicks"
           />
+
           <Metric
             title="Clean Clicks"
             value={stats.cleanClicks.toLocaleString()}
@@ -643,6 +706,7 @@ export default function AffiliateStatisticsPage() {
             color="bg-teal-500/15 text-teal-400"
             description="Clicks not flagged as suspicious"
           />
+
           <Metric
             title="Suspicious Traffic"
             value={stats.suspiciousClicks.toLocaleString()}
@@ -650,6 +714,7 @@ export default function AffiliateStatisticsPage() {
             color="bg-rose-500/15 text-rose-400"
             description="Heuristic flags, not confirmed fraud"
           />
+
           <Metric
             title="Countries"
             value={String((data.countryReport || []).length)}
@@ -687,11 +752,13 @@ export default function AffiliateStatisticsPage() {
                 rows={data.countryReport || []}
                 field="country"
               />
+
               <ReportTable
                 title="Region / State"
                 rows={data.regionReport || []}
                 field="region"
               />
+
               <ReportTable
                 title="City"
                 rows={data.cityReport || []}
@@ -707,11 +774,13 @@ export default function AffiliateStatisticsPage() {
                 rows={data.deviceReport || []}
                 field="device"
               />
+
               <ReportTable
                 title="Browser"
                 rows={data.browserReport || []}
                 field="browser"
               />
+
               <ReportTable
                 title="Operating System"
                 rows={data.osReport || []}
@@ -727,6 +796,7 @@ export default function AffiliateStatisticsPage() {
                 rows={data.sourceReport || []}
                 field="source"
               />
+
               <ReportTable
                 title="Campaign"
                 rows={data.campaignReport || []}
@@ -748,11 +818,16 @@ export default function AffiliateStatisticsPage() {
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 p-5">
             <div>
               <div className="flex items-center gap-2">
-                <BarChart3 size={20} className="text-cyan-400" />
+                <BarChart3
+                  size={20}
+                  className="text-cyan-400"
+                />
+
                 <h2 className="font-semibold">
                   Detailed Traffic History
                 </h2>
               </div>
+
               <p className="mt-1 text-xs text-slate-500">
                 Latest 100 clicks returned by the report API
               </p>
@@ -774,6 +849,7 @@ export default function AffiliateStatisticsPage() {
                 size={16}
                 className="absolute left-3 top-3.5 text-slate-500"
               />
+
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -788,6 +864,7 @@ export default function AffiliateStatisticsPage() {
               className="rounded-xl border border-white/10 bg-slate-950 p-3 text-sm"
             >
               <option value="">All Countries</option>
+
               {countries.map((country) => (
                 <option key={country} value={country}>
                   {country}
@@ -801,6 +878,7 @@ export default function AffiliateStatisticsPage() {
               className="rounded-xl border border-white/10 bg-slate-950 p-3 text-sm"
             >
               <option value="">All Devices</option>
+
               {devices.map((device) => (
                 <option key={device} value={device}>
                   {device}
@@ -862,6 +940,7 @@ export default function AffiliateStatisticsPage() {
                         ? new Date(row.created_at).toLocaleString()
                         : "—"}
                     </td>
+
                     <td
                       className="max-w-[140px] truncate px-4 py-3 font-mono text-xs text-cyan-300"
                       title={row.click_id || ""}
@@ -870,17 +949,35 @@ export default function AffiliateStatisticsPage() {
                         ? row.click_id.slice(0, 12)
                         : "—"}
                     </td>
-                    <td className="px-4 py-3">{row.country || "—"}</td>
-                    <td className="px-4 py-3">{row.region || "—"}</td>
-                    <td className="px-4 py-3">{row.city || "—"}</td>
-                    <td className="px-4 py-3">{row.device || "—"}</td>
-                    <td className="px-4 py-3">{row.browser || "—"}</td>
+
+                    <td className="px-4 py-3">
+                      {row.country || "—"}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      {row.region || "—"}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      {row.city || "—"}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      {row.device || "—"}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      {row.browser || "—"}
+                    </td>
+
                     <td className="px-4 py-3">
                       {row.operating_system || "—"}
                     </td>
+
                     <td className="px-4 py-3">
                       {row.traffic_source || "—"}
                     </td>
+
                     <td className="px-4 py-3">
                       <span
                         className={`rounded-full px-2.5 py-1 text-xs font-medium ${
@@ -894,6 +991,7 @@ export default function AffiliateStatisticsPage() {
                           : row.status || "Click"}
                       </span>
                     </td>
+
                     <td className="px-4 py-3 font-semibold text-emerald-400">
                       {money(
                         converted(row)
