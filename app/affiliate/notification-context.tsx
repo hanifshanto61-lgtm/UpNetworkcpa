@@ -45,6 +45,10 @@ type NotificationContextValue = {
   setSoundEnabled: (enabled: boolean) => void;
   toggleSound: () => void;
   syncError: string;
+  leadSyncError: string;
+  soundReady: boolean;
+  soundError: string;
+  testSound: () => Promise<void>;
 };
 
 const NotificationContext =
@@ -58,6 +62,22 @@ function isPayment(id: string) {
   return /^payment-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
     id
   );
+}
+
+function isLead(id: string) {
+  return id.startsWith("lead-");
+}
+
+function mergeLeads(current: AffiliateNotification[], incoming: AffiliateNotification[], dismissed: Set<string>) {
+  const items = new Map(current.map(item => [item.id, item]));
+  for (const item of incoming) {
+    if (dismissed.has(item.id)) continue;
+    const existing = items.get(item.id);
+    items.set(item.id, { ...item, read: existing?.read ?? item.read });
+  }
+  return Array.from(items.values())
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .slice(0, MAX_NOTIFICATIONS);
 }
 
 function validNotification(
@@ -134,6 +154,11 @@ export function AffiliateNotificationProvider({
   });
 
   const [syncError, setSyncError] = useState("");
+  const [leadSyncError, setLeadSyncError] = useState("");
+  const [soundReady, setSoundReady] = useState(false);
+  const [soundError, setSoundError] = useState("");
+  const dismissedLeadsRef = useRef(new Set<string>());
+  const pendingSoundRef = useRef(false);
 
   const ownerRef = useRef<string | null>(null);
   const revisionRef = useRef(0);
@@ -193,6 +218,10 @@ export function AffiliateNotificationProvider({
 
       ownerRef.current = next;
       revisionRef.current++;
+      dismissedLeadsRef.current = new Set<string>();
+      pendingSoundRef.current = false;
+      setLeadSyncError("");
+      setSoundError("");
 
       let items: AffiliateNotification[] = [];
       let enabled = true;
@@ -212,6 +241,12 @@ export function AffiliateNotificationProvider({
                 (item) => !isPayment(item.id)
               )
               .slice(0, MAX_NOTIFICATIONS);
+          }
+
+          const dismissed: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY + ":dismissed-leads:" + next) || "[]");
+          if (Array.isArray(dismissed)) {
+            dismissedLeadsRef.current = new Set(dismissed.filter((id): id is string => typeof id === "string" && isLead(id)));
+            items = items.filter(item => !dismissedLeadsRef.current.has(item.id));
           }
 
           enabled =
@@ -322,84 +357,58 @@ export function AffiliateNotificationProvider({
     return audioRef.current;
   }, []);
 
-  const playSound = useCallback(() => {
-    if (!soundRef.current) return;
-
+  const playSound = useCallback(async (): Promise<boolean> => {
+    if (!soundRef.current) return false;
+    const owner = ownerRef.current;
     try {
       const audio = getAudio();
-
-      if (!audio) return;
-
-      const beep = () => {
-        if (
-          !soundRef.current ||
-          audio.state !== "running"
-        ) {
-          return;
-        }
-
-        const oscillator =
-          audio.createOscillator();
-
-        const gain = audio.createGain();
-
-        oscillator.type = "sine";
-
-        oscillator.frequency.setValueAtTime(
-          880,
-          audio.currentTime
-        );
-
-        oscillator.frequency.exponentialRampToValueAtTime(
-          1320,
-          audio.currentTime + 0.12
-        );
-
-        gain.gain.setValueAtTime(
-          0.0001,
-          audio.currentTime
-        );
-
-        gain.gain.exponentialRampToValueAtTime(
-          0.12,
-          audio.currentTime + 0.02
-        );
-
-        gain.gain.exponentialRampToValueAtTime(
-          0.0001,
-          audio.currentTime + 0.35
-        );
-
-        oscillator.connect(gain);
-        gain.connect(audio.destination);
-
-        oscillator.start();
-
-        oscillator.stop(
-          audio.currentTime + 0.35
-        );
-      };
-
-      if (audio.state === "suspended") {
-        void audio
-          .resume()
-          .then(beep)
-          .catch(() => {});
-      } else {
-        beep();
+      if (!audio) {
+        setSoundReady(false);
+        setSoundError("This browser does not support notification sound.");
+        return false;
       }
-    } catch {}
+      if (audio.state !== "running") await audio.resume();
+      if (ownerRef.current !== owner || !soundRef.current) return false;
+      if (audio.state !== "running") throw new Error("Tap Enable & Test Sound to allow audio.");
+      const oscillator = audio.createOscillator();
+      const gain = audio.createGain();
+      const now = audio.currentTime;
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(880, now);
+      oscillator.frequency.exponentialRampToValueAtTime(1320, now + 0.12);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.12, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+      oscillator.connect(gain);
+      gain.connect(audio.destination);
+      oscillator.start(now);
+      oscillator.stop(now + 0.35);
+      oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
+      pendingSoundRef.current = false;
+      setSoundReady(true);
+      setSoundError("");
+      return true;
+    } catch {
+      if (ownerRef.current === owner) {
+        pendingSoundRef.current = true;
+        setSoundReady(false);
+        setSoundError("Tap Enable & Test Sound. Also check your device volume.");
+      }
+      return false;
+    }
   }, [getAudio]);
 
   // A browser interaction allows notification audio.
   useEffect(() => {
     const unlock = () => {
       if (!soundRef.current) return;
-
       try {
-        void getAudio()
-          ?.resume()
-          .catch(() => {});
+        const audio = getAudio();
+        if (!audio) return;
+        void audio.resume().then(() => {
+          setSoundReady(audio.state === "running");
+          if (pendingSoundRef.current && audio.state === "running") void playSound();
+        }).catch(() => {});
       } catch {}
     };
 
@@ -430,7 +439,7 @@ export function AffiliateNotificationProvider({
 
       audioRef.current = null;
     };
-  }, [getAudio]);
+  }, [getAudio, playSound]);
 
   // Load persistent payment notifications from the server.
   useEffect(() => {
@@ -648,6 +657,68 @@ export function AffiliateNotificationProvider({
       );
     };
   }, [userId, updateItems, playSound]);
+
+  // Lead sync is separate so payment notification handling stays intact.
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    let busy = false;
+    let initialized = false;
+    const seen = new Set<string>();
+    const controller = new AbortController();
+
+    async function syncLeads() {
+      if (busy || cancelled || document.visibilityState === "hidden") return;
+      busy = true;
+      try {
+        const { data } = await supabase.auth.getSession();
+        const session = data.session;
+        if (!session?.access_token || session.user.id !== userId || ownerRef.current !== userId || cancelled) return;
+        const response = await fetch("/api/affiliate/lead-notifications", {
+          headers: { Authorization: "Bearer " + session.access_token },
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.error || "Unable to sync lead notifications.");
+        if (cancelled || ownerRef.current !== userId) return;
+        const incoming: AffiliateNotification[] = Array.isArray(result.notifications)
+          ? result.notifications.filter(validNotification).filter((item: AffiliateNotification) => isLead(item.id) && item.type === "lead")
+          : [];
+        const shouldSound = initialized && incoming.some(item => !seen.has(item.id) && !dismissedLeadsRef.current.has(item.id) && !item.read && item.sound !== false);
+        incoming.forEach(item => seen.add(item.id));
+        initialized = true;
+        updateItems(userId!, items => mergeLeads(items, incoming, dismissedLeadsRef.current));
+        setLeadSyncError("");
+        if (shouldSound) void playSound();
+      } catch (error) {
+        if (!cancelled && ownerRef.current === userId) {
+          setLeadSyncError(error instanceof Error ? error.message : "Lead notification sync failed.");
+        }
+      } finally { busy = false; }
+    }
+    const wake = () => { void syncLeads(); };
+    void syncLeads();
+    const timer = window.setInterval(wake, 10000);
+    window.addEventListener("focus", wake);
+    document.addEventListener("visibilitychange", wake);
+    return () => {
+      cancelled = true;
+      controller.abort();
+      window.clearInterval(timer);
+      window.removeEventListener("focus", wake);
+      document.removeEventListener("visibilitychange", wake);
+    };
+  }, [userId, updateItems, playSound]);
+
+  const dismissLeads = useCallback((owner: string, ids: string[]) => {
+    if (ownerRef.current !== owner) return;
+    const next = new Set(dismissedLeadsRef.current);
+    ids.filter(isLead).forEach(id => next.add(id));
+    const kept = Array.from(next).slice(-2000);
+    dismissedLeadsRef.current = new Set(kept);
+    try { localStorage.setItem(STORAGE_KEY + ":dismissed-leads:" + owner, JSON.stringify(kept)); } catch {}
+  }, []);
 
   const saveRemote = useCallback(
     async (
@@ -872,19 +943,22 @@ export function AffiliateNotificationProvider({
         return;
       }
 
+      if (isLead(id)) dismissLeads(owner, [id]);
       updateItems(owner, (items) =>
         items.filter(
           (item) => item.id !== id
         )
       );
     },
-    [updateItems, saveRemote]
+    [updateItems, saveRemote, dismissLeads]
   );
 
   const clearAll = useCallback(() => {
     const owner = ownerRef.current;
 
     if (!owner) return;
+
+    dismissLeads(owner, notifications.filter(item => isLead(item.id)).map(item => item.id));
 
     const ids = notifications
       .filter((item) =>
@@ -907,6 +981,7 @@ export function AffiliateNotificationProvider({
     notifications,
     updateItems,
     saveRemote,
+    dismissLeads,
   ]);
 
   const setSoundEnabled = useCallback(
@@ -916,6 +991,7 @@ export function AffiliateNotificationProvider({
       if (!owner) return;
 
       soundRef.current = enabled;
+      if (!enabled) pendingSoundRef.current = false;
 
       setSoundPreference({
         userId: owner,
@@ -924,6 +1000,11 @@ export function AffiliateNotificationProvider({
     },
     []
   );
+
+  const testSound = useCallback(async () => {
+    setSoundEnabled(true);
+    await playSound();
+  }, [setSoundEnabled, playSound]);
 
   const toggleSound = useCallback(
     () =>
@@ -952,6 +1033,10 @@ export function AffiliateNotificationProvider({
         setSoundEnabled,
         toggleSound,
         syncError,
+        leadSyncError,
+        soundReady,
+        soundError,
+        testSound,
       }),
       [
         notifications,
@@ -965,6 +1050,10 @@ export function AffiliateNotificationProvider({
         setSoundEnabled,
         toggleSound,
         syncError,
+        leadSyncError,
+        soundReady,
+        soundError,
+        testSound,
       ]
     );
 
