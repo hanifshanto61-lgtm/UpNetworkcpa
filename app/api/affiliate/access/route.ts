@@ -14,6 +14,8 @@ function normalizeStatus(value: unknown): ApplicationStatus {
     .trim()
     .toLowerCase();
 
+  if (status === "active") return "approved";
+
   if (
     status === "approved" ||
     status === "rejected" ||
@@ -103,41 +105,39 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    /*
-     * Only affiliate accounts are allowed
-     * inside /affiliate.
-     */
-    const accountType = String(
-      user.user_metadata?.account_type || ""
-    )
-      .trim()
-      .toLowerCase();
+    // Authorization must use the server-controlled profile, never user metadata.
+    const { data: profile, error: profileError } =
+      await supabaseAdmin
+        .from("profiles")
+        .select("id, application_status")
+        .eq("id", user.id)
+        .maybeSingle();
 
-    if (
-      accountType &&
-      accountType !== "affiliate"
-    ) {
+    if (profileError) {
+      console.error("Affiliate profile lookup failed:", profileError);
       return NextResponse.json(
         {
           allowed: false,
-          status: "rejected",
-          code: "NOT_AFFILIATE",
-          error:
-            "This account is not an affiliate account.",
+          code: "AFFILIATE_STATUS_UNAVAILABLE",
+          error: "Unable to verify affiliate account status. Please try again.",
         },
-        { status: 403 }
+        { status: 503, headers: { "Cache-Control": "no-store" } }
       );
     }
 
-    /*
-     * Affiliate approval status is controlled
-     * through Supabase Auth user metadata.
-     *
-     * Default status = pending.
-     */
-    const status = normalizeStatus(
-      user.user_metadata?.application_status
-    );
+    if (!profile) {
+      return NextResponse.json(
+        {
+          allowed: false,
+          status: "pending",
+          code: "AFFILIATE_PROFILE_NOT_FOUND",
+          error: "Your affiliate profile could not be found. Please contact support.",
+        },
+        { status: 403, headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
+    const status = normalizeStatus(profile.application_status);
 
     /*
      * APPROVED
