@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -35,6 +34,7 @@ type ClickRow = {
 };
 
 type ReportValue = {
+  visitorHashes: Set<string>;
   clicks: number;
   conversions: number;
   earnings: number;
@@ -84,15 +84,23 @@ function updateReport(
   map: Map<string, ReportValue>,
   key: string,
   isConversion: boolean,
-  payout: number
+  payout: number,
+  visitorHash?: string | null
 ) {
   const item = map.get(key) || {
+    visitorHashes: new Set<string>(),
     clicks: 0,
     conversions: 0,
     earnings: 0,
   };
 
   item.clicks++;
+
+  // Count known visitors once per group in the selected date range.
+  // Clicks without visitor hashes still contribute to total clicks.
+  if (visitorHash) {
+    item.visitorHashes.add(visitorHash);
+  }
 
   if (isConversion) {
     item.conversions++;
@@ -111,21 +119,17 @@ function buildReport(
     .map(([key, value]) => ({
       [field]: key,
       clicks: value.clicks,
+      uniqueClicks: value.visitorHashes.size,
       conversions: value.conversions,
       earnings: Number(value.earnings.toFixed(2)),
       percentage:
         totalClicks > 0
-          ? Number(
-              ((value.clicks / totalClicks) * 100).toFixed(2)
-            )
+          ? Number(((value.clicks / totalClicks) * 100).toFixed(2))
           : 0,
       conversionRate:
         value.clicks > 0
           ? Number(
-              (
-                (value.conversions / value.clicks) *
-                100
-              ).toFixed(2)
+              ((value.conversions / value.clicks) * 100).toFixed(2)
             )
           : 0,
     }))
@@ -141,11 +145,8 @@ function responseError(message: string, status: number) {
 
 export async function GET(request: NextRequest) {
   try {
-    const supabaseUrl =
-      process.env.NEXT_PUBLIC_SUPABASE_URL;
-
-    const serviceRoleKey =
-      process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !serviceRoleKey) {
       return responseError(
@@ -154,8 +155,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const authorization =
-      request.headers.get("authorization");
+    const authorization = request.headers.get("authorization");
 
     if (!authorization?.startsWith("Bearer ")) {
       return responseError("Authentication required.", 401);
@@ -164,22 +164,15 @@ export async function GET(request: NextRequest) {
     const accessToken = authorization.slice(7).trim();
 
     if (!accessToken) {
-      return responseError(
-        "Authentication token is missing.",
-        401
-      );
+      return responseError("Authentication token is missing.", 401);
     }
 
-    const supabase = createClient(
-      supabaseUrl,
-      serviceRoleKey,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        },
-      }
-    );
+    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
 
     const {
       data: authData,
@@ -200,9 +193,7 @@ export async function GET(request: NextRequest) {
       error: profileError,
     } = await supabase
       .from("profiles")
-      .select(
-        "id, affiliate_id, full_name, email, application_status"
-      )
+      .select("id, affiliate_id, full_name, email, application_status")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -218,9 +209,7 @@ export async function GET(request: NextRequest) {
       return responseError("Affiliate profile not found.", 404);
     }
 
-    const affiliateId = String(
-      profile.affiliate_id ?? ""
-    ).trim();
+    const affiliateId = String(profile.affiliate_id ?? "").trim();
 
     if (!affiliateId) {
       return responseError(
@@ -229,9 +218,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const applicationStatus = normalize(
-      profile.application_status
-    );
+    const applicationStatus = normalize(profile.application_status);
 
     if (
       applicationStatus !== "approved" &&
@@ -292,7 +279,6 @@ export async function GET(request: NextRequest) {
       }
 
       const rows = (data ?? []) as ClickRow[];
-
       allClicks.push(...rows);
 
       if (rows.length < pageSize) break;
@@ -323,10 +309,7 @@ export async function GET(request: NextRequest) {
 
     for (const click of allClicks) {
       const isConversion = converted(click);
-
-      const payout = isConversion
-        ? amount(click.payout)
-        : 0;
+      const payout = isConversion ? amount(click.payout) : 0;
 
       if (isConversion) {
         conversions++;
@@ -363,106 +346,156 @@ export async function GET(request: NextRequest) {
         : "Unknown";
 
       updateReport(
-        countryMap, country, isConversion, payout
+        countryMap,
+        country,
+        isConversion,
+        payout,
+        click.visitor_hash
       );
 
       updateReport(
         cityMap,
         `${city}, ${country}`,
         isConversion,
-        payout
+        payout,
+        click.visitor_hash
       );
 
       updateReport(
         regionMap,
         `${region}, ${country}`,
         isConversion,
-        payout
+        payout,
+        click.visitor_hash
       );
 
       updateReport(
-        deviceMap, device, isConversion, payout
+        deviceMap,
+        device,
+        isConversion,
+        payout,
+        click.visitor_hash
       );
 
       updateReport(
-        browserMap, browser, isConversion, payout
+        browserMap,
+        browser,
+        isConversion,
+        payout,
+        click.visitor_hash
       );
 
       updateReport(
-        osMap, os, isConversion, payout
+        osMap,
+        os,
+        isConversion,
+        payout,
+        click.visitor_hash
       );
 
       updateReport(
-        sourceMap, source, isConversion, payout
+        sourceMap,
+        source,
+        isConversion,
+        payout,
+        click.visitor_hash
       );
 
       updateReport(
-        campaignMap, campaign, isConversion, payout
+        campaignMap,
+        campaign,
+        isConversion,
+        payout,
+        click.visitor_hash
       );
 
       updateReport(
-        smartlinkMap, smartlink, isConversion, payout
+        smartlinkMap,
+        smartlink,
+        isConversion,
+        payout,
+        click.visitor_hash
       );
 
       updateReport(
-        dailyMap, date, isConversion, payout
+        dailyMap,
+        date,
+        isConversion,
+        payout,
+        click.visitor_hash
       );
     }
 
     const conversionRate =
       totalClicks > 0
-        ? Number(
-            ((conversions / totalClicks) * 100).toFixed(2)
-          )
+        ? Number(((conversions / totalClicks) * 100).toFixed(2))
         : 0;
 
     const uniqueVisitors = uniqueHashes.size;
 
-    // Unique visitors are counted only where a visitor
-    // hash exists. Old records without hashes are not
-    // incorrectly counted as unique visitors.
+    // Do not treat old clicks without hashes as unique visitors.
     const identifiableClicks = allClicks.filter(
       (click) => Boolean(click.visitor_hash)
     ).length;
 
     const countryReport = buildReport(
-      countryMap, "country", totalClicks
+      countryMap,
+      "country",
+      totalClicks
     );
 
     const deviceReport = buildReport(
-      deviceMap, "device", totalClicks
+      deviceMap,
+      "device",
+      totalClicks
     );
 
     const cityReport = buildReport(
-      cityMap, "city", totalClicks
+      cityMap,
+      "city",
+      totalClicks
     );
 
     const regionReport = buildReport(
-      regionMap, "region", totalClicks
+      regionMap,
+      "region",
+      totalClicks
     );
 
     const browserReport = buildReport(
-      browserMap, "browser", totalClicks
+      browserMap,
+      "browser",
+      totalClicks
     );
 
     const osReport = buildReport(
-      osMap, "operatingSystem", totalClicks
+      osMap,
+      "operatingSystem",
+      totalClicks
     );
 
     const sourceReport = buildReport(
-      sourceMap, "source", totalClicks
+      sourceMap,
+      "source",
+      totalClicks
     );
 
     const campaignReport = buildReport(
-      campaignMap, "campaign", totalClicks
+      campaignMap,
+      "campaign",
+      totalClicks
     );
 
     const smartlinkReport = buildReport(
-      smartlinkMap, "smartlinkId", totalClicks
+      smartlinkMap,
+      "smartlinkId",
+      totalClicks
     );
 
     const dailyReport = buildReport(
-      dailyMap, "date", totalClicks
+      dailyMap,
+      "date",
+      totalClicks
     ).sort((a, b) =>
       String(a.date).localeCompare(String(b.date))
     );
@@ -510,15 +543,12 @@ export async function GET(request: NextRequest) {
         smartlinkReport,
         dailyReport,
 
-        // Preserve compatibility with the existing
-        // Statistics page, which reads "clicks".
         clicks: allClicks.slice(0, 100),
       },
       {
         status: 200,
         headers: {
-          "Cache-Control":
-            "no-store, no-cache, must-revalidate",
+          "Cache-Control": "no-store, no-cache, must-revalidate",
           Pragma: "no-cache",
         },
       }
