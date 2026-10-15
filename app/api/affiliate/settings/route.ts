@@ -28,6 +28,8 @@ type Profile = {
   affiliate_id: string;
   full_name?: string | null;
   email?: string | null;
+  username?: string | null;
+  phone?: string | null;
 };
 
 type AffiliateSettings = {
@@ -96,7 +98,7 @@ async function authenticate(request: NextRequest) {
 async function getProfile(userId: string): Promise<Profile | null> {
   const { data, error } = await supabaseAdmin
     .from("profiles")
-    .select("id, affiliate_id, full_name, email")
+    .select("id, affiliate_id, full_name, email, username, phone")
     .eq("id", userId)
     .maybeSingle();
 
@@ -160,7 +162,11 @@ function cleanBoolean(
 function mapSettings(
   row: AffiliateSettings | null,
   userId: string,
-  profile: Profile | null
+  profile: Profile | null,
+  user: {
+    email?: string;
+    user_metadata?: Record<string, unknown>;
+  }
 ) {
   const affiliateId = getAffiliateId(profile);
 
@@ -169,11 +175,14 @@ function mapSettings(
     affiliateId,
 
     fullName:
-      row?.full_name ??
-      profile?.full_name ??
+      cleanString(row?.full_name, 150) ||
+      cleanString(profile?.full_name, 150) ||
+      cleanString(profile?.username, 150) ||
+      cleanString(user.user_metadata?.full_name, 150) ||
+      cleanString(user.user_metadata?.name, 150) ||
       "",
 
-    phone: row?.phone ?? "",
+    phone: row?.phone ?? profile?.phone ?? "",
     company: row?.company ?? "",
 
     timezone:
@@ -209,7 +218,8 @@ function mapSettings(
       true,
 
     email:
-      profile?.email ??
+      user.email ||
+      profile?.email ||
       null,
 
     updatedAt:
@@ -281,7 +291,8 @@ export async function GET(
       settings: mapSettings(
         data as AffiliateSettings | null,
         user.id,
-        profile
+        profile,
+        user
       ),
     });
   } catch (error) {
@@ -526,7 +537,8 @@ export async function PUT(
       settings: mapSettings(
         data as AffiliateSettings,
         user.id,
-        profile
+        profile,
+        user
       ),
     });
   } catch (error) {
