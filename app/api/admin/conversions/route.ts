@@ -260,7 +260,7 @@ export async function POST(request: NextRequest) {
       !Number.isFinite(payout) ||
       payout < 0 ||
       payout > 1000000 ||
-      !Number.isInteger(payout * 100)
+      payout !== Number(payout.toFixed(2))
     ) {
       return respond(
         {
