@@ -1,4 +1,5 @@
 import { createHmac, randomUUID } from "crypto";
+import { isIP } from "net";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { hasOfferApproval } from "@/lib/offer-access";
@@ -742,7 +743,15 @@ export async function GET(request: NextRequest) {
       request.headers.get("user-agent") ||
       "";
 
+    // Vercel sets these headers at the edge; do not trust caller-supplied IP params.
+    const forwardedIp = process.env.VERCEL === "1"
+      ? (request.headers.get("x-vercel-forwarded-for") ||
+         request.headers.get("x-forwarded-for") || "").split(",")[0].trim()
+      : "";
+    const ipAddress = isIP(forwardedIp) ? forwardedIp : null;
+
     const clickData: Record<string, unknown> = {
+      ip_address: ipAddress,
       click_id: clickId,
       affiliate_id: affiliateId,
       smartlink_id: smartlinkId,
@@ -777,6 +786,7 @@ export async function GET(request: NextRequest) {
         "x-vercel-ip-timezone"
       ),
 
+      user_agent: limited(ua, 2048),
       device: detectDevice(ua),
       browser: detectBrowser(ua),
       operating_system: detectOS(ua),
@@ -832,10 +842,22 @@ export async function GET(request: NextRequest) {
       clickData.network_profit = 0;
     }
 
-    const { error: clickError } =
+    let { error: clickError } =
       await supabase
         .from("clicks")
         .insert(clickData);
+
+    // Preserve redirects before the new column is available.
+    if (
+      clickError &&
+      ["42703", "PGRST204"].includes(clickError.code) &&
+      /user_agent|ip_address/.test(clickError.message)
+    ) {
+      delete clickData.user_agent;
+      delete clickData.ip_address;
+      const retry = await supabase.from("clicks").insert(clickData);
+      clickError = retry.error;
+    }
 
     if (clickError) {
       console.error(
