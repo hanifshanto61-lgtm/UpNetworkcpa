@@ -1569,6 +1569,7 @@ type ChatMessage = {
   id: number;
   sender: "bot" | "user";
   text: string;
+  contactManager?: boolean;
 };
 function UpNetworkLogo({ size = 32 }: { size?: number }) {
   return (
@@ -1614,7 +1615,7 @@ function SupportChatBot({
       id: 1,
       sender: "bot",
       text:
-        "Hello! 👋 I am the UpNetwork CPA AI support assistant. Ask me in English or বাংলা. For account-specific help, choose Talk to Manager.",
+        "Hello! 👋 I am the UpNetwork CPA AI support assistant. Ask me in English or বাংলা. For account-specific help, click Contact Manager below.",
     },
   ]);
 
@@ -1641,12 +1642,13 @@ function SupportChatBot({
     { label: "Statistics", action: "statistics" },
     { label: "Payments", action: "payments" },
     { label: "Verification", action: "verification" },
-    { label: "Talk to Manager", action: "manager" },
+    { label: "Contact Manager", action: "manager" },
   ];
 
   function addMessage(
     sender: "bot" | "user",
-    text: string
+    text: string,
+    contactManager = false
   ) {
     setMessages((current) => [
       ...current,
@@ -1654,14 +1656,31 @@ function SupportChatBot({
         id: Date.now() + Math.random(),
         sender,
         text,
+        contactManager,
       },
     ]);
+  }
+
+  function managerReply(question: string) {
+    if (/[\u0980-\u09FF]/.test(question)) {
+      return "ম্যানেজারের সঙ্গে যোগাযোগ করতে নিচের Contact Manager বাটনে চাপুন।";
+    }
+    if (/[^\u0000-\u007F]/.test(question)) return "Contact Manager";
+    return "Please click Contact Manager below to open the panel's manager contact options.";
   }
 
   async function askAI(value: string) {
     const question = value.trim();
 
     if (!question || pendingRef.current) {
+      return;
+    }
+
+    if (/\b(manager|telegram|contact|support agent|human support)\b|ম্যানেজার|ম‍্যানেজার|টেলিগ্রাম|যোগাযোগ/i.test(question)) {
+      setInput("");
+      setChatError("");
+      addMessage("user", question);
+      addMessage("bot", managerReply(question), true);
       return;
     }
 
@@ -1768,7 +1787,12 @@ function SupportChatBot({
         );
       }
 
-      addMessage("bot", result.reply);
+      const directContact = /telegram|(?:t|telegram)\.me\s*\/|@[a-z0-9_]{5,32}\b/i.test(result.reply);
+      addMessage(
+        "bot",
+        directContact ? managerReply(question) : result.reply,
+        directContact || result.contact_manager === true
+      );
     } catch (error) {
       setMessages((current) =>
         current.filter(
@@ -1924,6 +1948,16 @@ function SupportChatBot({
                   }`}
                 >
                   {message.text}
+                  {message.sender === "bot" && message.contactManager && (
+                    <button
+                      type="button"
+                      onClick={() => handleQuickAction("manager")}
+                      className="mt-3 flex items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-xs font-bold text-white hover:bg-cyan-400"
+                    >
+                      <MessageCircle size={15} />
+                      Contact Manager
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -1946,6 +1980,18 @@ function SupportChatBot({
               {chatError}
             </div>
           )}
+
+          {/* Keep manager access visible without horizontal scrolling. */}
+          <div className="px-4 pb-3">
+            <button
+              type="button"
+              onClick={() => handleQuickAction("manager")}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-2.5 text-xs font-bold text-white hover:opacity-90"
+            >
+              <MessageCircle size={16} />
+              Contact Manager
+            </button>
+          </div>
 
           {/* Quick buttons */}
           <div
