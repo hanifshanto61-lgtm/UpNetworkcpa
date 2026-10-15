@@ -35,6 +35,7 @@ import { supabase } from "@/lib/supabase";
 import ManagerEmailContacts from "@/components/manager-email-contacts";
 import NotificationBell from "./notification-bell";
 import DashboardOffers from "./dashboard-offers";
+import TrafficDynamic from "./traffic-dynamic";
 import { useAffiliateTheme } from "./theme-context";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import styles from "./dashboard.module.css";
@@ -953,6 +954,11 @@ export default function AffiliatePage() {
                </div>
            </div>
            </section>
+
+              {/* Traffic Dynamic */}
+              <div className={`${styles.section} mt-6`}>
+                <TrafficDynamic dark={dark} />
+              </div>
 
               {/* Latest Offers */}
 {featureEnabled("offers") && (
