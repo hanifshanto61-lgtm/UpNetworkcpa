@@ -53,10 +53,10 @@ function aggregate(rows: Click[], from: string, to: string, source: string) {
       }
     }
   }
-  const daily = [...points.values()].map(point => ({ ...point, revenue: Number(point.revenue.toFixed(2)) }));
+  const daily = Array.from(points.values()).map(point => ({ ...point, revenue: Number(point.revenue.toFixed(2)) }));
   const totals = daily.reduce((sum, point) => ({ clicks: sum.clicks + point.clicks, conversions: sum.conversions + point.conversions, revenue: sum.revenue + point.revenue }), { clicks: 0, conversions: 0, revenue: 0 });
   totals.revenue = Number(totals.revenue.toFixed(2));
-  return { daily, totals, sourceKeys: [...sources] };
+  return { daily, totals, sourceKeys: Array.from(sources) };
 }
 
 export async function GET(request: NextRequest) {
