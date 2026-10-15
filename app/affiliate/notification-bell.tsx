@@ -1,11 +1,13 @@
 "use client";
 
 import { Bell, CheckCheck, X } from "lucide-react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAffiliateNotifications } from "./notification-context";
 
 export default function NotificationBell() {
   const router = useRouter();
+  const [testingSound, setTestingSound] = useState(false);
 
   const {
     notifications,
@@ -14,6 +16,12 @@ export default function NotificationBell() {
     markAllAsRead,
     removeNotification,
     syncError,
+    leadSyncError,
+    soundEnabled,
+    setSoundEnabled,
+    soundReady,
+    soundError,
+    testSound,
   } = useAffiliateNotifications();
 
   const recentNotifications = notifications.slice(0, 8);
@@ -61,6 +69,32 @@ export default function NotificationBell() {
               </button>
             )}
           </div>
+
+          <div className="border-b border-gray-200 px-4 py-3 dark:border-white/10">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-gray-600 dark:text-gray-300">
+                Sound: {soundEnabled ? (soundReady ? "On · Ready" : "On · Tap to enable audio") : "Off"}
+              </p>
+              <button type="button" onClick={() => {
+                if (soundEnabled) setSoundEnabled(false);
+                else void testSound();
+              }} className="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 dark:bg-white/10 dark:text-gray-200">
+                {soundEnabled ? "Mute" : "Enable Sound"}
+              </button>
+            </div>
+            <button type="button" disabled={testingSound} onClick={async () => {
+              setTestingSound(true);
+              try { await testSound(); } finally { setTestingSound(false); }
+            }} className="mt-2 w-full rounded-lg bg-cyan-500 px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-50">
+              {testingSound ? "Testing..." : "Enable & Test Sound"}
+            </button>
+            <p className="mt-2 text-[10px] leading-4 text-gray-500 dark:text-gray-400">
+              Leads sync every 10 seconds while the panel is visible. Keep your device volume on.
+            </p>
+            {soundError && <p role="status" className="mt-2 text-xs text-amber-600 dark:text-amber-300">{soundError}</p>}
+          </div>
+
+          {leadSyncError && <div role="alert" className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">Lead sync: {leadSyncError}</div>}
 
           {syncError && (
             <div
@@ -136,6 +170,8 @@ export default function NotificationBell() {
 
                         if (payment) {
                           router.push("/affiliate/payments");
+                        } else if (notification.type === "lead") {
+                          router.push("/affiliate/statistics");
                         }
                       }}
                       className="w-full pr-5 text-left"
