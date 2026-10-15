@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -238,22 +237,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const accountType = normalizeStatus(
-      user.user_metadata?.account_type
-    );
-
-    if (
-      accountType &&
-      accountType !== "affiliate" &&
-      accountType !== "admin"
-    ) {
-      return errorResponse(
-        "This account is not an affiliate account.",
-        403,
-        "NOT_AFFILIATE"
-      );
-    }
-
     let {
       data: profile,
       error: profileError,
@@ -275,74 +258,19 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const metadataStatus = normalizeStatus(
-      user.user_metadata?.application_status
-    );
-
-    // Preserve approved-profile recovery.
+    // Approval is controlled by the server-managed profile.
+    // Missing profiles require support; user metadata cannot approve an account.
     if (!profile) {
-      if (metadataStatus !== "approved") {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "Your affiliate application is waiting for admin approval.",
-            code: "AFFILIATE_PENDING",
-            status: "pending",
-          },
-          { status: 403 }
-        );
-      }
-
-      const fullName =
-        user.user_metadata?.full_name ||
-        user.user_metadata?.name ||
-        user.email?.split("@")[0] ||
-        "Affiliate";
-
-      const {
-        data: createdProfile,
-        error: createError,
-      } = await supabaseAdmin
-        .from("profiles")
-        .insert({
-          id: user.id,
-          affiliate_id: makeAffiliateId(user.id),
-          full_name: fullName,
-          email: user.email || null,
-          application_status: "approved",
-          updated_at: new Date().toISOString(),
-        })
-        .select("*")
-        .maybeSingle();
-
-      if (createError || !createdProfile) {
-        console.error(
-          "Dashboard profile creation error:",
-          createError
-        );
-
-        return errorResponse(
-          "Unable to read or create the affiliate profile.",
-          500,
-          "AFFILIATE_PROFILE_NOT_FOUND"
-        );
-      }
-
-      profile = createdProfile;
+      return errorResponse(
+        "Your affiliate profile could not be found. Please contact support.",
+        403,
+        "AFFILIATE_PROFILE_NOT_FOUND"
+      );
     }
 
-    let applicationStatus = normalizeAffiliateStatus(
+    const applicationStatus = normalizeAffiliateStatus(
       profile.application_status
     );
-
-    if (
-      ["approved", "rejected", "suspended"].includes(
-        metadataStatus
-      )
-    ) {
-      applicationStatus = metadataStatus;
-    }
 
     if (applicationStatus !== "approved") {
       const rejected =
