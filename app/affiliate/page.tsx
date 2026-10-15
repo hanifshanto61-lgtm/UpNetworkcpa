@@ -34,6 +34,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import ManagerEmailContacts from "@/components/manager-email-contacts";
 import NotificationBell from "./notification-bell";
+import DashboardOffers from "./dashboard-offers";
 import { useAffiliateTheme } from "./theme-context";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import styles from "./dashboard.module.css";
@@ -953,82 +954,12 @@ export default function AffiliatePage() {
            </div>
            </section>
 
-              {/* Smart Link */}
-              {featureEnabled(
-                "smart_links"
-              ) && (
-                <section
-                  className={`${styles.section} ${styles.smartLink} ${styles.panel} relative mt-6 overflow-hidden rounded-2xl border p-5 sm:p-6 ${
-                    dark
-                      ? "border-cyan-400/15 bg-gradient-to-br from-cyan-500/[0.09] via-cyan-500/[0.03] to-transparent"
-                      : "border-cyan-100 bg-gradient-to-br from-cyan-50 via-white to-white"
-                  }`}
-                >
-                  <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-cyan-400/10 blur-3xl" />
-                  <div className="relative z-10">
-                    <div className="mb-4 flex items-center gap-3">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-500">
-                        <Link2 size={21} />
-                      </div>
-
-                      <div>
-                        <h2 className="font-bold">
-                          Your Smart Link
-                        </h2>
-
-                        <p
-                          className={`mt-1 text-xs ${faint}`}
-                        >
-                          Use this link to track your traffic
-                          and conversions.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div
-                      className={`flex flex-col gap-3 rounded-xl border p-3 sm:flex-row ${
-                        dark
-                          ? "border-cyan-400/10 bg-black/10"
-                          : "border-cyan-100 bg-white"
-                      }`}
-                    >
-                      <div
-                        className={`min-w-0 flex-1 overflow-hidden rounded-lg px-3 py-3 font-mono text-xs ${
-                          dark
-                            ? "bg-white/[0.04] text-cyan-300"
-                            : "bg-slate-50 text-cyan-700"
-                        }`}
-                      >
-                        <div className="truncate">
-                          {smartLink}
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={copySmartLink}
-                        className={`${copied ? styles.copied : ""} flex shrink-0 items-center justify-center gap-2 rounded-lg px-5 py-3 text-xs font-bold transition ${
-                          copied
-                            ? "bg-emerald-500 text-white"
-                            : "bg-cyan-500 text-white shadow-lg shadow-cyan-500/20 hover:bg-cyan-400"
-                        }`}
-                      >
-                        {copied ? (
-                          <>
-                            <Check size={16} />
-                            Copied
-                          </>
-                        ) : (
-                          <>
-                            <Copy size={16} />
-                            Copy Link
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                </section>
-              )}
+              {/* Latest Offers */}
+{featureEnabled("offers") && (
+  <div className={`${styles.section} mt-6`}>
+    <DashboardOffers dark={dark} />
+  </div>
+)}
 
               {/* Quick Actions */}
               <section className={`${styles.section} ${styles.actionsSection} mt-6`}>
