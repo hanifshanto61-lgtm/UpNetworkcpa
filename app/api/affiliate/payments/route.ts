@@ -308,6 +308,7 @@ export async function GET(request: NextRequest) {
           totalEarnings: roundMoney(totalEarnings),
           conversions,
           eligibleConversions,
+          firstWithdrawalCompleted: payments.some((payment) => String(payment.status).trim().toLowerCase() === "paid"),
           reservedFees: roundMoney(reservedFees),
           pendingAmount: roundMoney(pendingAmount),
           approvedAmount: roundMoney(approvedAmount),
