@@ -248,6 +248,8 @@ export async function GET(
         {
           status: 401,
         }
+
+
       );
     }
 
@@ -559,3 +561,54 @@ export async function PUT(
     );
   }
         }
+
+// Save payment defaults without changing profile or notification preferences.
+export async function PATCH(request: NextRequest) {
+  try {
+    const { user, error: authError } = await authenticate(request);
+    if (authError || !user) {
+      return NextResponse.json({ success: false, error: "Unauthorized." }, { status: 401 });
+    }
+    let body: Record<string, unknown>;
+    try {
+      const parsed: unknown = await request.json();
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Invalid body");
+      body = parsed as Record<string, unknown>;
+    } catch {
+      return NextResponse.json({ success: false, error: "Invalid JSON request body." }, { status: 400 });
+    }
+    const allowedMethods = ["Payoneer", "Skrill", "Binance Pay", "USDT (TRC20)", "USDT (ERC20)", "Bitcoin (BTC)", "Bank Wire Transfer"];
+    const method = typeof body.paymentMethod === "string" ? body.paymentMethod.trim() : "";
+    const address = typeof body.paymentAddress === "string" ? body.paymentAddress.trim() : "";
+    if (!allowedMethods.includes(method) || address.length < 3 || address.length > 500) {
+      return NextResponse.json({ success: false, error: "Select a valid payment method and enter a payment address of 3–500 characters." }, { status: 400 });
+    }
+    const profile = await getProfile(user.id);
+    if (!profile?.affiliate_id?.trim()) return profileUnavailableResponse();
+    const { data: existing, error: lookupError } = await supabaseAdmin
+      .from("affiliate_settings").select("user_id").eq("user_id", user.id).maybeSingle();
+    if (lookupError) throw new Error("Unable to load payment settings.");
+    const paymentFields = { payment_method: method, payment_address: address, updated_at: new Date().toISOString() };
+    const updateExisting = () => supabaseAdmin.from("affiliate_settings")
+      .update(paymentFields).eq("user_id", user.id).select("*").single();
+    let result;
+    if (existing) {
+      result = await updateExisting();
+    } else {
+      result = await supabaseAdmin.from("affiliate_settings").insert({
+        user_id: user.id, affiliate_id: getAffiliateId(profile),
+        full_name: profile.full_name || null, phone: profile.phone || null, company: null,
+        timezone: "Asia/Dhaka", currency: "USD", payment_note: null,
+        email_notifications: true, conversion_notifications: true, payment_notifications: true,
+        ...paymentFields,
+      }).select("*").single();
+      // Another tab may create the settings row after our lookup.
+      if (result.error?.code === "23505") result = await updateExisting();
+    }
+    if (result.error || !result.data) throw new Error("Unable to save payment settings.");
+    return NextResponse.json({ success: true, settings: mapSettings(result.data as AffiliateSettings, user.id, profile, user) }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    console.error("Affiliate payment defaults PATCH error:", error);
+    return NextResponse.json({ success: false, error: "Payment details could not be saved. No withdrawal was submitted. Please try again." }, { status: 500 });
+  }
+}
