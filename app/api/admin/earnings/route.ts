@@ -19,6 +19,7 @@ type ClickRow = {
 type PaymentRow = {
   affiliate_id: string;
   amount: number | string;
+  withdrawal_fee: number | string;
   status: string;
 };
 
@@ -28,6 +29,7 @@ type AffiliateReport = {
   conversions: number;
   earnings: number;
   paid: number;
+  paidFees: number;
   balance: number;
 };
 
@@ -92,6 +94,7 @@ export async function GET(request: NextRequest) {
         conversions: 0,
         earnings: 0,
         paid: 0,
+        paidFees: 0,
         balance: 0,
       };
 
@@ -104,6 +107,7 @@ export async function GET(request: NextRequest) {
     let totalConversions = 0;
     let totalEarnings = 0;
     let totalPaid = 0;
+    let totalPaidFees = 0;
 
     const history: Array<{
       click_id: string;
@@ -195,7 +199,7 @@ export async function GET(request: NextRequest) {
     while (true) {
       const { data, error } = await db
         .from("payment_requests")
-        .select("affiliate_id,amount,status")
+        .select("affiliate_id,amount,withdrawal_fee,status")
         .order("id", {
           ascending: false,
         })
@@ -238,6 +242,8 @@ export async function GET(request: NextRequest) {
         );
 
         report.paid += value;
+        report.paidFees += amount(payment.withdrawal_fee);
+        totalPaidFees += amount(payment.withdrawal_fee);
         totalPaid += value;
       }
 
@@ -253,7 +259,8 @@ export async function GET(request: NextRequest) {
         ...item,
         earnings: money(item.earnings),
         paid: money(item.paid),
-        balance: money(item.earnings - item.paid),
+        paidFees: money(item.paidFees),
+        balance: money(item.earnings - item.paid - item.paidFees),
       }))
       .sort((a, b) => b.earnings - a.earnings);
 
@@ -271,7 +278,8 @@ export async function GET(request: NextRequest) {
         conversions: totalConversions,
         earnings: money(totalEarnings),
         paid: money(totalPaid),
-        balance: money(totalEarnings - totalPaid),
+        paidFees: money(totalPaidFees),
+        balance: money(totalEarnings - totalPaid - totalPaidFees),
       },
       affiliates,
       history: history.slice(0, 100),
