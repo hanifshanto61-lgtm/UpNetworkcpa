@@ -58,6 +58,7 @@ type ClickRow = {
 
 type DashboardStats = {
   totalClicks: number;
+  uniqueVisitors: number;
   conversions: number;
   earnings: number;
   conversionRate: number;
@@ -171,6 +172,7 @@ export default function AffiliatePage() {
 
   const [stats, setStats] = useState<DashboardStats>({
     totalClicks: 0,
+    uniqueVisitors: 0,
     conversions: 0,
     earnings: 0,
     conversionRate: 0,
@@ -178,6 +180,7 @@ export default function AffiliatePage() {
 
   const [todayStats, setTodayStats] = useState<DashboardStats>({
     totalClicks: 0,
+    uniqueVisitors: 0,
     conversions: 0,
     earnings: 0,
     conversionRate: 0,
@@ -299,6 +302,7 @@ export default function AffiliatePage() {
 
       setStats({
         totalClicks: Number(dashboardData?.stats?.totalClicks) || 0,
+        uniqueVisitors: Number(dashboardData?.stats?.uniqueVisitors) || 0,
         conversions: Number(dashboardData?.stats?.conversions) || 0,
         earnings: Number(dashboardData?.stats?.earnings) || 0,
         conversionRate: Number(dashboardData?.stats?.conversionRate) || 0,
@@ -306,6 +310,7 @@ export default function AffiliatePage() {
 
       setTodayStats({
         totalClicks: Number(dashboardData?.todayStats?.totalClicks) || 0,
+        uniqueVisitors: Number(dashboardData?.todayStats?.uniqueVisitors) || 0,
         conversions: Number(dashboardData?.todayStats?.conversions) || 0,
         earnings: Number(dashboardData?.todayStats?.earnings) || 0,
         conversionRate: Number(dashboardData?.todayStats?.conversionRate) || 0,
@@ -418,7 +423,7 @@ export default function AffiliatePage() {
     setProfileOpen(false);
   }
 
-  const totalClicks = stats.totalClicks;
+  const uniqueVisitors = stats.uniqueVisitors;
   const conversions = stats.conversions;
   const earnings = stats.earnings;
 
@@ -891,8 +896,8 @@ export default function AffiliatePage() {
                   </span>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                  <StatCard title="Today Clicks" value={todayStats.totalClicks.toLocaleString()} numericValue={todayStats.totalClicks}
-                    subtitle="Clicks recorded today" icon={<MousePointerClick size={21} />}
+                  <StatCard title="Today Unique Visitors" value={todayStats.uniqueVisitors.toLocaleString()} numericValue={todayStats.uniqueVisitors}
+                    subtitle="Known visitors counted once today" icon={<MousePointerClick size={21} />}
                     accent="cyan" dark={dark} />
                   <StatCard title="Today Conversions" value={todayStats.conversions.toLocaleString()} numericValue={todayStats.conversions}
                     subtitle="Conversions recorded today" icon={<TrendingUp size={21} />}
@@ -943,13 +948,13 @@ export default function AffiliatePage() {
        </div>
 
      <dl className={`${styles.lifetimeMetrics} relative z-10`}>
-       <div><dt>Lifetime clicks</dt><dd><AnimatedMetric value={totalClicks} /></dd></div>
+       <div><dt>Lifetime unique visitors</dt><dd><AnimatedMetric value={uniqueVisitors} /></dd></div>
        <div><dt>Lifetime conversions</dt><dd><AnimatedMetric value={conversions} /></dd></div>
        <div><dt>Conversion rate</dt><dd><AnimatedMetric value={Number(conversionRate)} format="percent" /></dd></div>
      </dl>
      <div className="relative z-10 mt-6 border-t border-white/20 pt-4">
        <p className="text-xs font-medium text-emerald-100">
-        Earnings are updated from your affiliate statistics.
+        Unique visitors exclude older clicks without visitor identifiers. Conversion rate uses total clicks.
             </p>
                </div>
            </div>
