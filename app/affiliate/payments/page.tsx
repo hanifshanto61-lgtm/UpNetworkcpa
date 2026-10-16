@@ -42,6 +42,11 @@ type Payment = {
 
 type PaymentStats = {
   totalEarnings: number;
+  maturedEarnings: number;
+  heldEarnings: number;
+  pendingLeadCount: number;
+  nextReleaseAt: string | null;
+  releaseTimezone: string;
   conversions: number;
   eligibleConversions: number;
   firstWithdrawalCompleted: boolean;
@@ -89,6 +94,11 @@ function withdrawalQuote(value: number) {
 
 const emptyStats: PaymentStats = {
   totalEarnings: 0,
+  maturedEarnings: 0,
+  heldEarnings: 0,
+  pendingLeadCount: 0,
+  nextReleaseAt: null,
+  releaseTimezone: "Asia/Dhaka",
   conversions: 0,
   eligibleConversions: 0,
   firstWithdrawalCompleted: false,
@@ -241,10 +251,9 @@ export default function AffiliatePaymentsPage() {
     ? "text-slate-400"
     : "text-slate-500";
 
-  const loadPayments = useCallback(async () => {
+  const loadPayments = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
-      setError("");
+      if (!silent) { setLoading(true); setError(""); }
 
       const {
         data: sessionData,
@@ -317,13 +326,23 @@ export default function AffiliatePaymentsPage() {
           : "Unable to load payments."
       );
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [router]);
 
   useEffect(() => {
     void loadPayments();
   }, [loadPayments]);
+
+  // Recompute earnings released at 3 AM Bangladesh time while open, without erasing the withdrawal draft.
+  useEffect(() => {
+    const refresh = () => {
+      if (!submitting && document.visibilityState === "visible") void loadPayments(true);
+    };
+    const timer = window.setInterval(refresh, 60000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", refresh); };
+  }, [loadPayments, submitting]);
 
   // Load saved defaults once. Refreshing payment history must not erase a draft.
   useEffect(() => {
@@ -643,8 +662,7 @@ export default function AffiliatePaymentsPage() {
                 </p>
 
                 <p className={`mt-2 text-xs ${muted}`}>
-                  Estimated balance available
-                  for withdrawal
+                  Available after the 3 AM Bangladesh release
                 </p>
               </div>
 
@@ -700,17 +718,30 @@ export default function AffiliatePaymentsPage() {
               </div>
             </section>
 
-            <section className="mb-7 grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <section className={`mb-7 grid gap-5 rounded-2xl border p-5 sm:grid-cols-2 ${cardBg}`}>
+              <div>
+                <p className={`text-xs font-semibold uppercase tracking-wide ${muted}`}>Unreleased earnings · daily 3 AM release</p>
+                <p className="mt-2 text-2xl font-black text-amber-500">{money(stats.heldEarnings)}</p>
+                <p className={`mt-2 text-xs ${muted}`}>{stats.pendingLeadCount || 0} conversion(s) waiting. The day closes at midnight; its earnings release at 3 AM Bangladesh time.</p>
+              </div>
+              <div>
+                <p className={`text-xs font-semibold uppercase tracking-wide ${muted}`}>Next release · Asia/Dhaka</p>
+                <p className="mt-2 text-sm font-semibold">{stats.nextReleaseAt ? new Date(stats.nextReleaseAt).toLocaleString("en-GB", { timeZone: "Asia/Dhaka", dateStyle: "medium", timeStyle: "short" }) : stats.pendingLeadCount ? "Waiting for a valid conversion timestamp" : "No lead earnings waiting"}</p>
+                <p className={`mt-2 text-xs ${muted}`}>Daily cutoff is 12:00 AM. Earnings for that completed day release at 3:00 AM Bangladesh time. Leads after midnight join the next daily batch.</p>
+              </div>
+            </section>
+
+            <section className="mb-7 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.9fr)]">
               <div
-                className={`rounded-2xl border p-6 ${cardBg}`}
+                className={`rounded-[28px] border p-5 shadow-sm sm:p-7 ${cardBg}`}
               >
                 <div className="mb-5 flex items-center gap-2">
                   <Send
                     size={20}
                     className="text-cyan-400"
                   />
-                  <h3 className="text-lg font-bold">
-                    Request Withdrawal
+                  <h3 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                    Confirm balance request
                   </h3>
                 </div>
 
@@ -742,10 +773,26 @@ export default function AffiliatePaymentsPage() {
 
                 <form
                   onSubmit={submitWithdrawal}
-                  className="space-y-4"
+                  className={`space-y-5 rounded-3xl p-4 sm:p-6 ${dark ? "bg-[#080c17]" : "bg-[#f8f8f8]"}`}
                 >
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className={`rounded-2xl border px-4 py-3 ${inputBg}`}>
+                      <label htmlFor="withdrawal-payment-terms" className={`block text-[10px] uppercase tracking-wider ${muted}`}>Payment terms</label>
+                      <input id="withdrawal-payment-terms" aria-label="Payment terms" value="By request" readOnly className="mt-1 w-full bg-transparent text-base outline-none" />
+                    </div>
+                    <div className={`rounded-2xl border px-4 py-3 ${inputBg}`}>
+                      <label htmlFor="withdrawal-balance-type" className={`block text-[10px] uppercase tracking-wider ${muted}`}>Balance type</label>
+                      <input id="withdrawal-balance-type" aria-label="Balance type" value="Main balance" readOnly className="mt-1 w-full bg-transparent text-base outline-none" />
+                    </div>
+                  </div>
+
+                  <div className={`rounded-2xl border px-4 py-3 ${inputBg}`}>
+                    <label htmlFor="withdrawal-available-sum" className={`block text-[10px] uppercase tracking-wider ${muted}`}>Available sum</label>
+                    <input id="withdrawal-available-sum" aria-label="Available sum" value={money(stats.availableBalance)} readOnly className="mt-1 w-full bg-transparent text-xl font-semibold outline-none" />
+                  </div>
+
                   <div>
-                    <label className={`mb-2 block text-sm ${muted}`}>
+                    <label className={`mb-2 block text-xs uppercase tracking-wide ${muted}`}>
                       Withdrawal Amount (USD)
                     </label>
 
@@ -765,7 +812,7 @@ export default function AffiliatePaymentsPage() {
                       }
                       placeholder="Enter amount in USD"
                       required
-                      className={`w-full rounded-xl border px-4 py-3 outline-none focus:border-cyan-500 ${inputBg}`}
+                      className={`w-full rounded-2xl border px-4 py-4 outline-none focus:border-amber-500 ${inputBg}`}
                     />
 
                     <p className={`mt-2 text-xs ${muted}`}>
@@ -774,8 +821,8 @@ export default function AffiliatePaymentsPage() {
                     </p>
                   </div>
 
-                  <fieldset className="space-y-3">
-                    <legend className="mb-2 text-sm font-bold">Choose payment address</legend>
+                  <fieldset className="grid gap-3 sm:grid-cols-2">
+                    <legend className="mb-2 text-xs font-semibold uppercase tracking-wide sm:col-span-2">Choose payment address</legend>
                     <label className={`block rounded-xl border p-4 ${inputBg} ${!savedPaymentDetails ? "opacity-60" : "cursor-pointer"}`}>
                       <span className="flex items-center gap-3">
                         <input type="radio" name="payment-address-source" value="saved" checked={paymentDetailsMode === "saved"} disabled={!savedPaymentDetails} onChange={() => choosePaymentDetails("saved")} />
@@ -796,7 +843,7 @@ export default function AffiliatePaymentsPage() {
 
                   {paymentDetailsMode === "saved" && paymentAccounts.length > 0 && (
                     <div>
-                      <label className={`mb-2 block text-sm ${muted}`}>Select saved payment account</label>
+                      <label className={`mb-2 block text-sm ${muted}`}>Method / saved account</label>
                       <select aria-label="Saved withdrawal account" value={savedPaymentDetails?.id || ""}
                         onChange={(event) => {
                           const account = paymentAccounts.find((item) => item.id === event.target.value);
@@ -806,7 +853,7 @@ export default function AffiliatePaymentsPage() {
                           setPaymentMethod(account.method);
                           setPaymentAddress(account.address);
                         }}
-                        className={`w-full min-w-0 rounded-xl border px-4 py-3 ${inputBg}`}>
+                        className={`w-full min-w-0 rounded-2xl border px-4 py-4 ${inputBg}`}>
                         {paymentAccounts.map((account, index) => (
                           <option key={account.id} value={account.id}>Account {index + 1}{index === 0 ? " (Default)" : ""} — {account.label} — {account.address}</option>
                         ))}
@@ -814,8 +861,8 @@ export default function AffiliatePaymentsPage() {
                     </div>
                   )}
 
-                  <div>
-                    <label className={`mb-2 block text-sm ${muted}`}>
+                  <div className={paymentDetailsMode === "saved" && savedPaymentDetails?.method ? "hidden" : ""}>
+                    <label className={`mb-2 block text-xs uppercase tracking-wide ${muted}`}>
                       Payment Method
                     </label>
 
@@ -833,7 +880,7 @@ export default function AffiliatePaymentsPage() {
                         }
                       }}
                       required
-                      className={`w-full rounded-xl border px-4 py-3 outline-none focus:border-cyan-500 ${inputBg}`}
+                      className={`w-full rounded-2xl border px-4 py-4 outline-none focus:border-amber-500 ${inputBg}`}
                     >
                       <option value="">
                         Select payment method
@@ -850,8 +897,8 @@ export default function AffiliatePaymentsPage() {
                     </select>
                   </div>
 
-                  <div>
-                    <label className={`mb-2 block text-sm ${muted}`}>
+                  <div className={paymentDetailsMode === "saved" ? "hidden" : ""}>
+                    <label className={`mb-2 block text-xs uppercase tracking-wide ${muted}`}>
                       Payment Address / Account
                     </label>
 
@@ -868,7 +915,7 @@ export default function AffiliatePaymentsPage() {
                       rows={3}
                       maxLength={500}
                       required
-                      className={`w-full rounded-xl border px-4 py-3 outline-none focus:border-cyan-500 ${inputBg}`}
+                      className={`w-full rounded-2xl border px-4 py-4 outline-none focus:border-amber-500 ${inputBg}`}
                     />
 
                     {(paymentMethod === "USDT (TRC20)" ||
@@ -898,14 +945,23 @@ export default function AffiliatePaymentsPage() {
                     {paymentDetailsMode === "saved" ? "Your saved address will be used. Choose the new-address option to use a different account." : saveNewPaymentDefault ? "This account will be added to your saved list. The first saved account remains the default." : "The new address is used for this withdrawal only. Your saved Settings will stay unchanged."}
                   </p>
 
-                  {quote && (
-                    <div className={`rounded-xl border p-4 text-sm ${inputBg}`} aria-live="polite">
-                      <div className="flex justify-between gap-3"><span>You receive</span><strong>{money(quote.amount)}</strong></div>
-                      <div className="mt-2 flex justify-between gap-3"><span>Additional fee</span><strong>{money(quote.fee)}</strong></div>
-                      <div className="mt-3 flex justify-between gap-3 border-t border-slate-500/20 pt-3"><span>Total balance deduction</span><strong>{money(quote.total)}</strong></div>
-                      {Math.round(quote.total * 100) > Math.round(stats.availableBalance * 100) && <p className="mt-3 text-amber-500">You need {money(quote.total - stats.availableBalance)} more available balance, including fee.</p>}
+                  <div className="space-y-4 border-t border-slate-500/15 pt-5 text-sm" aria-live="polite">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className={`uppercase tracking-wider ${muted}`}>Commission / fee</span>
+                      <strong className="text-base">{quote ? money(quote.fee) : "—"}</strong>
                     </div>
-                  )}
+                    <div className="flex items-center justify-between gap-3">
+                      <span className={`uppercase tracking-wider ${muted}`}>Payout · you receive</span>
+                      <strong className="text-xl">{quote ? money(quote.amount) : "—"}</strong>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 rounded-xl bg-amber-500/10 p-3">
+                      <span className="font-semibold">Total balance deduction</span>
+                      <strong className="text-base">{quote ? money(quote.total) : "—"}</strong>
+                    </div>
+                    <p className={`text-xs ${muted}`}>Each day closes at midnight. That day’s lead earnings become withdrawable at 3:00 AM Bangladesh time.</p>
+                    <p className={`text-xs ${muted}`}>The fee is added to your payout. For example, a $50 payout requires $55 available balance.</p>
+                    {quote && Math.round(quote.total * 100) > Math.round(stats.availableBalance * 100) && <p className="text-sm text-amber-500">You need {money(quote.total - stats.availableBalance)} more available balance, including fee.</p>}
+                  </div>
 
                   <button
                     type="submit"
@@ -916,7 +972,7 @@ export default function AffiliatePaymentsPage() {
                       !quote ||
                       Math.round((quote?.total || 0) * 100) > Math.round(stats.availableBalance * 100)
                     }
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 px-5 py-3 font-bold text-slate-950 hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex w-full items-center justify-center gap-3 rounded-full bg-[#ffa500] px-6 py-4 text-base font-semibold uppercase tracking-wider text-slate-950 shadow-sm transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40 sm:py-5"
                   >
                     {submitting ? (
                       <>
@@ -929,7 +985,7 @@ export default function AffiliatePaymentsPage() {
                     ) : (
                       <>
                         <Send size={18} />
-                        Submit Withdrawal Request
+                        Send request
                       </>
                     )}
                   </button>
