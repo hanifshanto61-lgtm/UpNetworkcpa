@@ -584,47 +584,12 @@ export default function AffiliateSettingsPage() {
                         Select payment method
                       </option>
 
-                      <option
-                        value="PayPal"
-                        className="bg-slate-900"
-                      >
-                        PayPal
-                      </option>
-
-                      <option
-                        value="Bank Transfer"
-                        className="bg-slate-900"
-                      >
-                        Bank Transfer
-                      </option>
-
-                      <option
-                        value="Payoneer"
-                        className="bg-slate-900"
-                      >
-                        Payoneer
-                      </option>
-
-                      <option
-                        value="Wise"
-                        className="bg-slate-900"
-                      >
-                        Wise
-                      </option>
-
-                      <option
-                        value="Crypto"
-                        className="bg-slate-900"
-                      >
-                        Crypto
-                      </option>
-
-                      <option
-                        value="Other"
-                        className="bg-slate-900"
-                      >
-                        Other
-                      </option>
+                      {["Payoneer", "Skrill", "Binance Pay", "USDT (TRC20)", "USDT (ERC20)", "Bitcoin (BTC)", "Bank Wire Transfer"].map((method) => (
+                        <option key={method} value={method} className="bg-slate-900">{method}</option>
+                      ))}
+                      {settings.paymentMethod && !["Payoneer", "Skrill", "Binance Pay", "USDT (TRC20)", "USDT (ERC20)", "Bitcoin (BTC)", "Bank Wire Transfer"].includes(settings.paymentMethod) && (
+                        <option value={settings.paymentMethod} className="bg-slate-900">{settings.paymentMethod} (previously saved — select a supported method)</option>
+                      )}
                     </select>
                   </div>
                 </div>
