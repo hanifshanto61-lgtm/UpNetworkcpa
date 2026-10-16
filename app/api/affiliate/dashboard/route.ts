@@ -7,6 +7,7 @@ export const revalidate = 0;
 
 type ClickRow = {
   click_id?: string | null;
+  visitor_hash?: string | null;
   affiliate_id?: string | null;
   smartlink_id?: string | null;
   country?: string | null;
@@ -21,6 +22,7 @@ type ClickRow = {
 
 type SummaryStats = {
   totalClicks: number;
+  uniqueVisitors: number;
   conversions: number;
   conversionRate: number;
   earnings: number;
@@ -132,6 +134,7 @@ function dateInTimezone(
 function emptySummary(): SummaryStats {
   return {
     totalClicks: 0,
+    uniqueVisitors: 0,
     conversions: 0,
     conversionRate: 0,
     earnings: 0,
@@ -143,6 +146,7 @@ function finalizeSummary(
 ): SummaryStats {
   return {
     totalClicks: summary.totalClicks,
+    uniqueVisitors: summary.uniqueVisitors,
     conversions: summary.conversions,
     earnings: Number(summary.earnings.toFixed(2)),
     conversionRate:
@@ -450,7 +454,7 @@ export async function GET(request: NextRequest) {
       } = await supabaseAdmin
         .from("clicks")
         .select(
-          "click_id, affiliate_id, smartlink_id, country, device, browser, referer, status, payout, converted_at, created_at"
+          "click_id, visitor_hash, affiliate_id, smartlink_id, country, device, browser, referer, status, payout, converted_at, created_at"
         )
         .eq("affiliate_id", affiliateId)
         .order("created_at", {
@@ -491,6 +495,8 @@ export async function GET(request: NextRequest) {
     const allTimeStats = emptySummary();
 
     allTimeStats.totalClicks = databaseClickCount;
+    const todayVisitors = new Set<string>();
+    const allTimeVisitors = new Set<string>();
 
     for (const click of allClicks) {
       const clickDate = click.created_at
@@ -500,8 +506,16 @@ export async function GET(request: NextRequest) {
           )
         : "";
 
+      // Match Statistics: only known visitor identifiers count as unique.
+      if (click.visitor_hash) {
+        allTimeVisitors.add(click.visitor_hash);
+      }
+
       if (clickDate === currentDate) {
         todayStats.totalClicks += 1;
+        if (click.visitor_hash) {
+          todayVisitors.add(click.visitor_hash);
+        }
       }
 
       if (isConverted(click)) {
@@ -527,6 +541,9 @@ export async function GET(request: NextRequest) {
         }
       }
     }
+
+    todayStats.uniqueVisitors = todayVisitors.size;
+    allTimeStats.uniqueVisitors = allTimeVisitors.size;
 
     const todaySummary =
       finalizeSummary(todayStats);
