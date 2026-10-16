@@ -28,6 +28,7 @@ type PaymentRow = {
   id: string;
   affiliate_id: string;
   amount: number | string;
+  withdrawal_fee: number | string;
   currency: string;
   payment_method: string;
   payment_address: string;
@@ -208,7 +209,7 @@ async function readAllPayments(
     const { data, error } = await supabase
       .from("payment_requests")
       .select(
-        "id, affiliate_id, amount, currency, payment_method, payment_address, status, admin_note, requested_at, processed_at, created_at"
+        "id, affiliate_id, amount, withdrawal_fee, currency, payment_method, payment_address, status, admin_note, requested_at, processed_at, created_at"
       )
       .eq("affiliate_id", affiliateId)
       .order("created_at", { ascending: false })
@@ -250,8 +251,12 @@ export async function GET(request: NextRequest) {
 
     let totalEarnings = 0;
     let conversions = 0;
+    let eligibleConversions = 0;
 
     for (const click of clicks) {
+      if (CONVERTED_STATUSES.has(String(click.status || "").trim().toLowerCase())) {
+        eligibleConversions++;
+      }
       if (isConverted(click)) {
         conversions++;
         totalEarnings += amount(click.payout);
@@ -263,10 +268,14 @@ export async function GET(request: NextRequest) {
     let paidAmount = 0;
     let rejectedAmount = 0;
 
+    let reservedFees = 0;
     for (const payment of payments) {
       const value = amount(payment.amount);
+      if (["pending", "approved", "paid"].includes(String(payment.status).trim().toLowerCase())) {
+        reservedFees += amount(payment.withdrawal_fee);
+      }
 
-      switch (String(payment.status).toLowerCase()) {
+      switch (String(payment.status).trim().toLowerCase()) {
         case "pending":
           pendingAmount += value;
           break;
@@ -283,7 +292,7 @@ export async function GET(request: NextRequest) {
     }
 
     const reservedAmount =
-      pendingAmount + approvedAmount + paidAmount;
+      pendingAmount + approvedAmount + paidAmount + reservedFees;
 
     const availableBalance = Math.max(
       0,
@@ -298,6 +307,8 @@ export async function GET(request: NextRequest) {
         stats: {
           totalEarnings: roundMoney(totalEarnings),
           conversions,
+          eligibleConversions,
+          reservedFees: roundMoney(reservedFees),
           pendingAmount: roundMoney(pendingAmount),
           approvedAmount: roundMoney(approvedAmount),
           paidAmount: roundMoney(paidAmount),
@@ -309,6 +320,8 @@ export async function GET(request: NextRequest) {
         payments: payments.map((payment) => ({
           id: payment.id,
           amount: amount(payment.amount),
+          withdrawalFee: amount(payment.withdrawal_fee),
+          totalDebit: roundMoney(amount(payment.amount) + amount(payment.withdrawal_fee)),
           currency: payment.currency,
           paymentMethod: payment.payment_method,
           paymentAddress: payment.payment_address,
@@ -319,6 +332,8 @@ export async function GET(request: NextRequest) {
         })),
         withdrawalEnabled: true,
         minimumWithdrawal: MINIMUM_WITHDRAWAL,
+        minimumConversions: 30,
+        feePolicy: { threshold: 100, fixedFeeBelowThreshold: 5, percentAtOrAboveThreshold: 3 },
         paymentMethods: PAYMENT_METHODS,
       },
       {
@@ -448,13 +463,14 @@ export async function POST(request: NextRequest) {
 
       if (message.includes("Insufficient available balance")) {
         return responseError(
-          "Insufficient available balance.",
+          message,
           400
         );
       }
 
       if (
         message.includes("Minimum withdrawal") ||
+        message.includes("At least 30 approved conversions") ||
         message.includes("Unsupported payment method") ||
         message.includes("Invalid payment address")
       ) {
