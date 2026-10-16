@@ -190,6 +190,10 @@ export default function AffiliatePaymentsPage() {
 
   const paymentDetailsEditedRef = useRef(false);
   const savedPaymentDefaultsRef = useRef({ method: "", address: "" });
+  const newPaymentDraftRef = useRef({ method: "", address: "" });
+  const [paymentDetailsMode, setPaymentDetailsMode] = useState<"saved" | "new">("new");
+  const [saveNewPaymentDefault, setSaveNewPaymentDefault] = useState(false);
+  const [savedPaymentDetails, setSavedPaymentDetails] = useState<{ method: string; address: string; label: string } | null>(null);
   const [savedDetailsNotice, setSavedDetailsNotice] = useState("");
 
   const quote = withdrawalQuote(Number(withdrawAmount));
@@ -319,11 +323,13 @@ export default function AffiliatePaymentsPage() {
         const method = savedMethod === "Bank Transfer" ? "Bank Wire Transfer" : savedMethod;
         const address = typeof saved?.paymentAddress === "string" ? saved.paymentAddress.trim() : "";
         savedPaymentDefaultsRef.current = { method: PAYMENT_METHODS.includes(method) ? method : "", address };
+        setSavedPaymentDetails(address ? { ...savedPaymentDefaultsRef.current, label: savedMethod } : null);
         if (paymentDetailsEditedRef.current) return;
+        setPaymentDetailsMode(address ? "saved" : "new");
         setPaymentAddress(address);
         if (PAYMENT_METHODS.includes(method)) {
           setPaymentMethod(method);
-          if (address) setSavedDetailsNotice("Your saved payment details are filled below. You may edit them for this withdrawal only.");
+          if (address) setSavedDetailsNotice("Choose your saved payment details or enter a new address for this withdrawal.");
         } else if (savedMethod) {
           setSavedDetailsNotice(`Saved method: ${savedMethod}. Select a supported payment method and check that the saved address matches it.`);
         }
@@ -336,6 +342,21 @@ export default function AffiliatePaymentsPage() {
     void loadSavedPaymentDetails();
     return () => { cancelled = true; controller.abort(); };
   }, []);
+
+  function choosePaymentDetails(mode: "saved" | "new") {
+    paymentDetailsEditedRef.current = true;
+    if (paymentDetailsMode === "new") {
+      newPaymentDraftRef.current = { method: paymentMethod, address: paymentAddress };
+    }
+    if (mode === "saved" && savedPaymentDetails) {
+      setPaymentMethod(savedPaymentDetails.method);
+      setPaymentAddress(savedPaymentDetails.address);
+    } else {
+      setPaymentMethod(newPaymentDraftRef.current.method);
+      setPaymentAddress(newPaymentDraftRef.current.address);
+    }
+    setPaymentDetailsMode(mode);
+  }
 
   async function submitWithdrawal(
     event: FormEvent<HTMLFormElement>
@@ -407,6 +428,22 @@ export default function AffiliatePaymentsPage() {
         return;
       }
 
+      if (paymentDetailsMode === "new" && saveNewPaymentDefault) {
+        const saveResponse = await fetch("/api/affiliate/settings", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ paymentMethod, paymentAddress: paymentAddress.trim() }),
+        });
+        const savedResult = await saveResponse.json();
+        if (!saveResponse.ok || !savedResult.success) {
+          throw new Error(savedResult.error || "Payment details could not be saved. No withdrawal was submitted.");
+        }
+        const defaults = { method: paymentMethod, address: paymentAddress.trim() };
+        savedPaymentDefaultsRef.current = defaults;
+        setSavedPaymentDetails({ ...defaults, label: paymentMethod });
+        setSavedDetailsNotice("Your new payment details have been saved in Settings for future withdrawals.");
+      }
+
       const response = await fetch(
         "/api/affiliate/payments",
         {
@@ -434,6 +471,9 @@ export default function AffiliatePaymentsPage() {
       }
 
       setWithdrawAmount("");
+      newPaymentDraftRef.current = { method: "", address: "" };
+      setSaveNewPaymentDefault(false);
+      setPaymentDetailsMode(savedPaymentDefaultsRef.current.address ? "saved" : "new");
       setPaymentMethod(savedPaymentDefaultsRef.current.method);
       setPaymentAddress(savedPaymentDefaultsRef.current.address);
 
@@ -706,6 +746,28 @@ export default function AffiliatePaymentsPage() {
                     </p>
                   </div>
 
+                  <fieldset className="space-y-3">
+                    <legend className="mb-2 text-sm font-bold">Choose payment address</legend>
+                    <label className={`block rounded-xl border p-4 ${inputBg} ${!savedPaymentDetails ? "opacity-60" : "cursor-pointer"}`}>
+                      <span className="flex items-center gap-3">
+                        <input type="radio" name="payment-address-source" value="saved" checked={paymentDetailsMode === "saved"} disabled={!savedPaymentDetails} onChange={() => choosePaymentDetails("saved")} />
+                        <span className="font-semibold">Use saved payment address</span>
+                      </span>
+                      {savedPaymentDetails ? (
+                        <span className={`mt-2 block break-all text-xs ${muted}`}>
+                          {savedPaymentDetails.label || "Saved account"}: {savedPaymentDetails.address}
+                        </span>
+                      ) : <span className={`mt-2 block text-xs ${muted}`}>No saved address loaded. You can enter a new address below or save one in Settings.</span>}
+                    </label>
+                    <label className={`block cursor-pointer rounded-xl border p-4 ${inputBg}`}>
+                      <span className="flex items-center gap-3">
+                        <input type="radio" name="payment-address-source" value="new" checked={paymentDetailsMode === "new"} onChange={() => choosePaymentDetails("new")} />
+                        <span className="font-semibold">Use a new payment address / ID</span>
+                      </span>
+                      <span className={`mt-2 block text-xs ${muted}`}>Enter different details for this withdrawal only.</span>
+                    </label>
+                  </fieldset>
+
                   <div>
                     <label className={`mb-2 block text-sm ${muted}`}>
                       Payment Method
@@ -713,12 +775,13 @@ export default function AffiliatePaymentsPage() {
 
                     <select
                       value={paymentMethod}
+                      disabled={paymentDetailsMode === "saved" && Boolean(savedPaymentDetails?.method)}
                       onChange={(event) => {
                         paymentDetailsEditedRef.current = true;
                         setPaymentMethod(event.target.value);
                         // Preserve initial legacy address until a method is chosen;
                         // clear it when switching between selected methods/networks.
-                        if (paymentMethod && paymentMethod !== event.target.value) {
+                        if (paymentDetailsMode === "new" && paymentMethod && paymentMethod !== event.target.value) {
                           setPaymentAddress("");
                         }
                       }}
@@ -747,6 +810,7 @@ export default function AffiliatePaymentsPage() {
 
                     <textarea
                       value={paymentAddress}
+                      readOnly={paymentDetailsMode === "saved"}
                       onChange={(event) => {
                         paymentDetailsEditedRef.current = true;
                         setPaymentAddress(event.target.value);
@@ -773,7 +837,19 @@ export default function AffiliatePaymentsPage() {
                     )}
                   </div>
 
-                  <p className={`text-xs ${muted}`}>Changes here apply only to this withdrawal. To change your saved default, use Settings.</p>
+                  {paymentDetailsMode === "new" && (
+                    <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 text-sm ${inputBg}`}>
+                      <input type="checkbox" checked={saveNewPaymentDefault} onChange={(event) => setSaveNewPaymentDefault(event.target.checked)} className="mt-1" />
+                      <span>
+                        <strong>Save this address for future withdrawals</strong>
+                        <span className={`mt-1 block text-xs ${muted}`}>When you submit, save this payment method and address in Settings. If saving fails, no withdrawal request will be submitted.</span>
+                      </span>
+                    </label>
+                  )}
+
+                  <p className={`text-xs ${muted}`}>
+                    {paymentDetailsMode === "saved" ? "Your saved address will be used. Choose the new-address option to use a different account." : saveNewPaymentDefault ? "This payment method and address will also become your saved default." : "The new address is used for this withdrawal only. Your saved Settings will stay unchanged."}
+                  </p>
 
                   {quote && (
                     <div className={`rounded-xl border p-4 text-sm ${inputBg}`} aria-live="polite">
