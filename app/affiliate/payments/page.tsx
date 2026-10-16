@@ -43,6 +43,7 @@ type PaymentStats = {
   totalEarnings: number;
   conversions: number;
   eligibleConversions: number;
+  firstWithdrawalCompleted: boolean;
   reservedFees: number;
   pendingAmount: number;
   approvedAmount: number;
@@ -89,6 +90,7 @@ const emptyStats: PaymentStats = {
   totalEarnings: 0,
   conversions: 0,
   eligibleConversions: 0,
+  firstWithdrawalCompleted: false,
   reservedFees: 0,
   pendingAmount: 0,
   approvedAmount: 0,
@@ -187,7 +189,8 @@ export default function AffiliatePaymentsPage() {
 
   const quote = withdrawalQuote(Number(withdrawAmount));
   const eligibleConversions = Number(stats.eligibleConversions) || 0;
-  const missingConversions = Math.max(0, MINIMUM_CONVERSIONS - eligibleConversions);
+  const firstWithdrawalCompleted = stats.firstWithdrawalCompleted === true;
+  const missingConversions = firstWithdrawalCompleted ? 0 : Math.max(0, MINIMUM_CONVERSIONS - eligibleConversions);
 
   const pageBg = dark
     ? "bg-[#05070c] text-white"
@@ -317,7 +320,7 @@ export default function AffiliatePaymentsPage() {
     }
 
     if (missingConversions > 0) {
-      setError(`At least 30 approved conversions are required. You need ${missingConversions} more.`);
+      setError(`At least 30 approved conversions are required for your first withdrawal. You need ${missingConversions} more.`);
       return;
     }
     const requestedQuote = withdrawalQuote(requestedAmount);
@@ -608,10 +611,16 @@ export default function AffiliatePaymentsPage() {
                 </div>
 
                 <div className="mb-5 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4">
-                  <p className="text-sm font-bold">Approved conversions: {eligibleConversions}/30</p>
+                  <p className="text-sm font-bold">
+                    {firstWithdrawalCompleted ? "First withdrawal completed — no further lead minimum" : `First withdrawal: ${eligibleConversions}/30 approved conversions`}
+                  </p>
                   <p className={`mt-2 text-xs ${muted}`}>
-                    {missingConversions > 0 ? `${missingConversions} more approved conversions required to withdraw.` : "Conversion requirement met."}
-                    {" "}This is a lifetime account requirement.
+                    {firstWithdrawalCompleted
+                      ? "You can withdraw with any number of new conversions once your available balance covers $50 or more plus the fee."
+                      : missingConversions > 0
+                        ? `${missingConversions} more approved conversions required for your first withdrawal.`
+                        : "Conversion requirement met for your first withdrawal."}
+                    {" "}The 30-conversion rule applies only until your first payment is marked Paid.
                   </p>
                   <p className={`mt-3 text-xs ${muted}`}>All payment methods: $50–$99.99 adds a $5 fee; $100 or more adds a 3% fee. Fees are charged on top.</p>
                 </div>
