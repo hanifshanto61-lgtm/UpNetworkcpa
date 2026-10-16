@@ -7,6 +7,17 @@ export const runtime = "nodejs";
 const PAGE_SIZE = 1000;
 const MINIMUM_WITHDRAWAL = 50;
 const MAXIMUM_WITHDRAWAL = 1000000;
+const PAYMENT_RELEASE_TIMEZONE = "Asia/Dhaka";
+
+function nextDhakaDailyRelease(timestamp: number): number {
+  if (!Number.isFinite(timestamp)) return NaN;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: PAYMENT_RELEASE_TIMEZONE, year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(new Date(timestamp));
+  const part = (name: string) => Number(parts.find((item) => item.type === name)?.value);
+  // Bangladesh standard time is UTC+06:00. Date.UTC handles month/year rollover.
+  return Date.UTC(part("year"), part("month") - 1, part("day") + 1, 3) - 6 * 60 * 60 * 1000;
+}
 
 const PAYMENT_METHODS = [
   "Payoneer",
@@ -22,6 +33,7 @@ type ClickRow = {
   status: string | null;
   payout: number | string | null;
   converted_at: string | null;
+  created_at: string | null;
 };
 
 type PaymentRow = {
@@ -178,7 +190,7 @@ async function readAllClicks(
   while (true) {
     const { data, error } = await supabase
       .from("clicks")
-      .select("status, payout, converted_at")
+      .select("status, payout, converted_at, created_at")
       .eq("affiliate_id", affiliateId)
       .order("created_at", { ascending: false })
       .order("click_id", { ascending: false })
@@ -250,6 +262,10 @@ export async function GET(request: NextRequest) {
     ]);
 
     let totalEarnings = 0;
+    let maturedEarnings = 0;
+    let pendingLeadCount = 0;
+    let nextReleaseAt: number | null = null;
+    const nowMs = Date.now();
     let conversions = 0;
     let eligibleConversions = 0;
 
@@ -259,7 +275,16 @@ export async function GET(request: NextRequest) {
       }
       if (isConverted(click)) {
         conversions++;
-        totalEarnings += amount(click.payout);
+        const payout = amount(click.payout);
+        totalEarnings += payout;
+        const conversionTime = Date.parse(click.converted_at || click.created_at || "");
+        const releaseTime = nextDhakaDailyRelease(conversionTime);
+        if (Number.isFinite(releaseTime) && releaseTime <= nowMs) {
+          maturedEarnings += payout;
+        } else {
+          pendingLeadCount++;
+          if (payout > 0 && Number.isFinite(releaseTime) && (nextReleaseAt === null || releaseTime < nextReleaseAt)) nextReleaseAt = releaseTime;
+        }
       }
     }
 
@@ -296,7 +321,7 @@ export async function GET(request: NextRequest) {
 
     const availableBalance = Math.max(
       0,
-      roundMoney(totalEarnings - reservedAmount)
+      roundMoney(maturedEarnings - reservedAmount)
     );
 
     return NextResponse.json(
@@ -306,6 +331,12 @@ export async function GET(request: NextRequest) {
         currency: "USD",
         stats: {
           totalEarnings: roundMoney(totalEarnings),
+          maturedEarnings: roundMoney(maturedEarnings),
+          heldEarnings: roundMoney(totalEarnings - maturedEarnings),
+          pendingLeadCount,
+          nextReleaseAt: nextReleaseAt === null ? null : new Date(nextReleaseAt).toISOString(),
+          releaseTimezone: PAYMENT_RELEASE_TIMEZONE,
+          releasePolicy: "midnight_cutoff_3am_release",
           conversions,
           eligibleConversions,
           firstWithdrawalCompleted: payments.some((payment) => String(payment.status).trim().toLowerCase() === "paid"),
