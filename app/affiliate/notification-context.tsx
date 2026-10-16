@@ -159,11 +159,27 @@ export function AffiliateNotificationProvider({
   const [soundError, setSoundError] = useState("");
   const dismissedLeadsRef = useRef(new Set<string>());
   const pendingSoundRef = useRef(false);
+  const pendingLeadSoundRef = useRef(false);
 
   const ownerRef = useRef<string | null>(null);
   const revisionRef = useRef(0);
   const soundRef = useRef(true);
   const audioRef = useRef<AudioContext | null>(null);
+  const soundUntilRef = useRef(0);
+  const soundNodesRef = useRef(new Set<{
+    oscillator: OscillatorNode;
+    gain: GainNode;
+  }>());
+
+  const stopSound = useCallback(() => {
+    for (const node of soundNodesRef.current) {
+      try { node.oscillator.stop(); } catch {}
+      node.oscillator.disconnect();
+      node.gain.disconnect();
+    }
+    soundNodesRef.current.clear();
+    soundUntilRef.current = 0;
+  }, []);
 
   const notifications = useMemo(
     () =>
@@ -216,6 +232,8 @@ export function AffiliateNotificationProvider({
         return;
       }
 
+      stopSound();
+      pendingLeadSoundRef.current = false;
       ownerRef.current = next;
       revisionRef.current++;
       dismissedLeadsRef.current = new Set<string>();
@@ -301,7 +319,7 @@ export function AffiliateNotificationProvider({
       active = false;
       listener.subscription.unsubscribe();
     };
-  }, []);
+  }, [stopSound]);
 
   useEffect(() => {
     if (
@@ -357,7 +375,7 @@ export function AffiliateNotificationProvider({
     return audioRef.current;
   }, []);
 
-  const playSound = useCallback(async (): Promise<boolean> => {
+  const playSound = useCallback(async (leadMelody = false): Promise<boolean> => {
     if (!soundRef.current) return false;
     const owner = ownerRef.current;
     try {
@@ -370,27 +388,51 @@ export function AffiliateNotificationProvider({
       if (audio.state !== "running") await audio.resume();
       if (ownerRef.current !== owner || !soundRef.current) return false;
       if (audio.state !== "running") throw new Error("Tap Enable & Test Sound to allow audio.");
-      const oscillator = audio.createOscillator();
-      const gain = audio.createGain();
       const now = audio.currentTime;
-      oscillator.type = "sine";
-      oscillator.frequency.setValueAtTime(880, now);
-      oscillator.frequency.exponentialRampToValueAtTime(1320, now + 0.12);
-      gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(0.12, now + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
-      oscillator.connect(gain);
-      gain.connect(audio.destination);
-      oscillator.start(now);
-      oscillator.stop(now + 0.35);
-      oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
+      // Coalesce alerts arriving during the same tune.
+      if (soundUntilRef.current > now) return true;
+      const notes = leadMelody
+        ? [659.25, 783.99, 987.77, 783.99, 659.25, 783.99,
+           1046.50, 987.77, 783.99, 659.25, 783.99, 987.77, 1046.50]
+        : [880];
+      soundUntilRef.current = now + (leadMelody ? 5.5 : 0.35);
+
+      notes.forEach((frequency, index) => {
+        const at = now + (leadMelody ? index * 0.4 : 0);
+        const duration = leadMelody
+          ? (index === notes.length - 1 ? 0.7 : 0.34)
+          : 0.35;
+        const oscillator = audio.createOscillator();
+        const gain = audio.createGain();
+        const node = { oscillator, gain };
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(frequency, at);
+        if (!leadMelody) {
+          oscillator.frequency.exponentialRampToValueAtTime(1320, at + 0.12);
+        }
+        gain.gain.setValueAtTime(0.0001, at);
+        gain.gain.exponentialRampToValueAtTime(0.12, at + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, at + duration);
+        oscillator.connect(gain);
+        gain.connect(audio.destination);
+        soundNodesRef.current.add(node);
+        oscillator.onended = () => {
+          oscillator.disconnect();
+          gain.disconnect();
+          soundNodesRef.current.delete(node);
+        };
+        oscillator.start(at);
+        oscillator.stop(at + duration);
+      });
       pendingSoundRef.current = false;
+      pendingLeadSoundRef.current = false;
       setSoundReady(true);
       setSoundError("");
       return true;
     } catch {
       if (ownerRef.current === owner) {
         pendingSoundRef.current = true;
+        pendingLeadSoundRef.current = pendingLeadSoundRef.current || leadMelody;
         setSoundReady(false);
         setSoundError("Tap Enable & Test Sound. Also check your device volume.");
       }
@@ -407,7 +449,7 @@ export function AffiliateNotificationProvider({
         if (!audio) return;
         void audio.resume().then(() => {
           setSoundReady(audio.state === "running");
-          if (pendingSoundRef.current && audio.state === "running") void playSound();
+          if (pendingSoundRef.current && audio.state === "running") void playSound(pendingLeadSoundRef.current);
         }).catch(() => {});
       } catch {}
     };
@@ -433,13 +475,14 @@ export function AffiliateNotificationProvider({
         unlock
       );
 
+      stopSound();
       void audioRef.current
         ?.close()
         .catch(() => {});
 
       audioRef.current = null;
     };
-  }, [getAudio, playSound]);
+  }, [getAudio, playSound, stopSound]);
 
   // Load persistent payment notifications from the server.
   useEffect(() => {
@@ -690,7 +733,7 @@ export function AffiliateNotificationProvider({
         initialized = true;
         updateItems(userId!, items => mergeLeads(items, incoming, dismissedLeadsRef.current));
         setLeadSyncError("");
-        if (shouldSound) void playSound();
+        if (shouldSound) void playSound(true);
       } catch (error) {
         if (!cancelled && ownerRef.current === userId) {
           setLeadSyncError(error instanceof Error ? error.message : "Lead notification sync failed.");
@@ -858,7 +901,7 @@ export function AffiliateNotificationProvider({
       if (
         notification.sound !== false
       ) {
-        playSound();
+        void playSound(notification.type === "lead");
       }
     },
     [updateItems, playSound]
@@ -991,19 +1034,23 @@ export function AffiliateNotificationProvider({
       if (!owner) return;
 
       soundRef.current = enabled;
-      if (!enabled) pendingSoundRef.current = false;
+      if (!enabled) {
+        pendingSoundRef.current = false;
+        pendingLeadSoundRef.current = false;
+        stopSound();
+      }
 
       setSoundPreference({
         userId: owner,
         enabled,
       });
     },
-    []
+    [stopSound]
   );
 
   const testSound = useCallback(async () => {
     setSoundEnabled(true);
-    await playSound();
+    await playSound(true);
   }, [setSoundEnabled, playSound]);
 
   const toggleSound = useCallback(
