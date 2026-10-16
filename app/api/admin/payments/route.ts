@@ -19,6 +19,7 @@ type PaymentRow = {
   id: string;
   affiliate_id: string;
   amount: number | string;
+  withdrawal_fee: number | string;
   currency: string;
   payment_method: string;
   payment_address: string;
@@ -113,7 +114,7 @@ async function readAllPayments(
     const { data, error } = await client
       .from("payment_requests")
       .select(
-        "id,affiliate_id,amount,currency,payment_method,payment_address,status,admin_note,requested_at,processed_at,created_at,updated_at"
+        "id,affiliate_id,amount,withdrawal_fee,currency,payment_method,payment_address,status,admin_note,requested_at,processed_at,created_at,updated_at"
       )
       .order("created_at", {
         ascending: false,
@@ -218,6 +219,8 @@ export async function GET(request: NextRequest) {
           id: payment.id,
           affiliateId: payment.affiliate_id,
           amount: Number(payment.amount),
+          withdrawalFee: Number(payment.withdrawal_fee || 0),
+          totalDebit: Math.round((Number(payment.amount) + Number(payment.withdrawal_fee || 0)) * 100) / 100,
           currency: payment.currency,
           paymentMethod: payment.payment_method,
           paymentAddress: payment.payment_address,
