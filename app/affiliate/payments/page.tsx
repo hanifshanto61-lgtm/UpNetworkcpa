@@ -662,7 +662,7 @@ export default function AffiliatePaymentsPage() {
                 </p>
 
                 <p className={`mt-2 text-xs ${muted}`}>
-                  Available after the 3 AM Bangladesh release
+                  Available for withdrawal
                 </p>
               </div>
 
@@ -715,19 +715,6 @@ export default function AffiliatePaymentsPage() {
                 <p className={`mt-2 text-xs ${muted}`}>
                   Marked paid by admin
                 </p>
-              </div>
-            </section>
-
-            <section className={`mb-7 grid gap-5 rounded-2xl border p-5 sm:grid-cols-2 ${cardBg}`}>
-              <div>
-                <p className={`text-xs font-semibold uppercase tracking-wide ${muted}`}>Unreleased earnings · daily 3 AM release</p>
-                <p className="mt-2 text-2xl font-black text-amber-500">{money(stats.heldEarnings)}</p>
-                <p className={`mt-2 text-xs ${muted}`}>{stats.pendingLeadCount || 0} conversion(s) waiting. The day closes at midnight; its earnings release at 3 AM Bangladesh time.</p>
-              </div>
-              <div>
-                <p className={`text-xs font-semibold uppercase tracking-wide ${muted}`}>Next release · Asia/Dhaka</p>
-                <p className="mt-2 text-sm font-semibold">{stats.nextReleaseAt ? new Date(stats.nextReleaseAt).toLocaleString("en-GB", { timeZone: "Asia/Dhaka", dateStyle: "medium", timeStyle: "short" }) : stats.pendingLeadCount ? "Waiting for a valid conversion timestamp" : "No lead earnings waiting"}</p>
-                <p className={`mt-2 text-xs ${muted}`}>Daily cutoff is 12:00 AM. Earnings for that completed day release at 3:00 AM Bangladesh time. Leads after midnight join the next daily batch.</p>
               </div>
             </section>
 
@@ -958,7 +945,6 @@ export default function AffiliatePaymentsPage() {
                       <span className="font-semibold">Total balance deduction</span>
                       <strong className="text-base">{quote ? money(quote.total) : "—"}</strong>
                     </div>
-                    <p className={`text-xs ${muted}`}>Each day closes at midnight. That day’s lead earnings become withdrawable at 3:00 AM Bangladesh time.</p>
                     <p className={`text-xs ${muted}`}>The fee is added to your payout. For example, a $50 payout requires $55 available balance.</p>
                     {quote && Math.round(quote.total * 100) > Math.round(stats.availableBalance * 100) && <p className="text-sm text-amber-500">You need {money(quote.total - stats.availableBalance)} more available balance, including fee.</p>}
                   </div>
