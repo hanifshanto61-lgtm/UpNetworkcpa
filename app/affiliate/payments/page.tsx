@@ -28,6 +28,8 @@ import { useAffiliateTheme } from "../theme-context";
 type Payment = {
   id: string;
   amount: number;
+  withdrawalFee: number;
+  totalDebit: number;
   currency: string;
   paymentMethod: string;
   paymentAddress: string;
@@ -40,6 +42,8 @@ type Payment = {
 type PaymentStats = {
   totalEarnings: number;
   conversions: number;
+  eligibleConversions: number;
+  reservedFees: number;
   pendingAmount: number;
   approvedAmount: number;
   paidAmount: number;
@@ -72,10 +76,20 @@ const PAYMENT_METHODS = [
 ];
 
 const MINIMUM_WITHDRAWAL = 50;
+const MINIMUM_CONVERSIONS = 30;
+
+function withdrawalQuote(value: number) {
+  const cents = Math.round(value * 100);
+  if (!Number.isFinite(value) || cents < 5000 || cents > 100000000) return null;
+  const feeCents = cents < 10000 ? 500 : Math.floor((cents * 3 + 50) / 100);
+  return { amount: cents / 100, fee: feeCents / 100, total: (cents + feeCents) / 100 };
+}
 
 const emptyStats: PaymentStats = {
   totalEarnings: 0,
   conversions: 0,
+  eligibleConversions: 0,
+  reservedFees: 0,
   pendingAmount: 0,
   approvedAmount: 0,
   paidAmount: 0,
@@ -170,6 +184,10 @@ export default function AffiliatePaymentsPage() {
 
   const [paymentAddress, setPaymentAddress] =
     useState("");
+
+  const quote = withdrawalQuote(Number(withdrawAmount));
+  const eligibleConversions = Number(stats.eligibleConversions) || 0;
+  const missingConversions = Math.max(0, MINIMUM_CONVERSIONS - eligibleConversions);
 
   const pageBg = dark
     ? "bg-[#05070c] text-white"
@@ -298,13 +316,13 @@ export default function AffiliatePaymentsPage() {
       return;
     }
 
-    if (
-      requestedAmount >
-      stats.availableBalance
-    ) {
-      setError(
-        "Insufficient available balance."
-      );
+    if (missingConversions > 0) {
+      setError(`At least 30 approved conversions are required. You need ${missingConversions} more.`);
+      return;
+    }
+    const requestedQuote = withdrawalQuote(requestedAmount);
+    if (!requestedQuote || Math.round(requestedQuote.total * 100) > Math.round(stats.availableBalance * 100)) {
+      setError(`Insufficient available balance including fee. Required: ${money(requestedQuote?.total || 0)}.`);
       return;
     }
 
@@ -589,6 +607,15 @@ export default function AffiliatePaymentsPage() {
                   </p>
                 </div>
 
+                <div className="mb-5 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4">
+                  <p className="text-sm font-bold">Approved conversions: {eligibleConversions}/30</p>
+                  <p className={`mt-2 text-xs ${muted}`}>
+                    {missingConversions > 0 ? `${missingConversions} more approved conversions required to withdraw.` : "Conversion requirement met."}
+                    {" "}This is a lifetime account requirement.
+                  </p>
+                  <p className={`mt-3 text-xs ${muted}`}>All payment methods: $50–$99.99 adds a $5 fee; $100 or more adds a 3% fee. Fees are charged on top.</p>
+                </div>
+
                 <form
                   onSubmit={submitWithdrawal}
                   className="space-y-4"
@@ -688,13 +715,23 @@ export default function AffiliatePaymentsPage() {
                     )}
                   </div>
 
+                  {quote && (
+                    <div className={`rounded-xl border p-4 text-sm ${inputBg}`} aria-live="polite">
+                      <div className="flex justify-between gap-3"><span>You receive</span><strong>{money(quote.amount)}</strong></div>
+                      <div className="mt-2 flex justify-between gap-3"><span>Additional fee</span><strong>{money(quote.fee)}</strong></div>
+                      <div className="mt-3 flex justify-between gap-3 border-t border-slate-500/20 pt-3"><span>Total balance deduction</span><strong>{money(quote.total)}</strong></div>
+                      {Math.round(quote.total * 100) > Math.round(stats.availableBalance * 100) && <p className="mt-3 text-amber-500">You need {money(quote.total - stats.availableBalance)} more available balance, including fee.</p>}
+                    </div>
+                  )}
+
                   <button
                     type="submit"
                     disabled={
                       submitting ||
                       !withdrawalEnabled ||
-                      stats.availableBalance <
-                        minimumWithdrawal
+                      missingConversions > 0 ||
+                      !quote ||
+                      Math.round((quote?.total || 0) * 100) > Math.round(stats.availableBalance * 100)
                     }
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 px-5 py-3 font-bold text-slate-950 hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
                   >
@@ -723,11 +760,11 @@ export default function AffiliatePaymentsPage() {
 
                   {withdrawalEnabled &&
                     stats.availableBalance <
-                      minimumWithdrawal && (
+                      minimumWithdrawal + 5 && (
                       <p className={`text-sm ${muted}`}>
                         You need at least{" "}
-                        {money(minimumWithdrawal)}
-                        {" "}in available balance
+                        {money(minimumWithdrawal + 5)}
+                        {" "}in available balance (including the $5 fee)
                         to request a withdrawal.
                       </p>
                     )}
@@ -782,6 +819,7 @@ export default function AffiliatePaymentsPage() {
                   </div>
 
                   <p className={`text-sm ${muted}`}>
+                    Reserved balance includes fees on pending, approved and paid requests. Rejected requests release both amount and fee.
                     All withdrawals are
                     denominated in USD.
                     Crypto payouts require
@@ -873,6 +911,8 @@ export default function AffiliatePaymentsPage() {
 
                         <td className="px-5 py-4 font-bold">
                           {money(payment.amount)}
+                          <p className={`mt-1 text-xs font-normal ${muted}`}>Fee: {money(payment.withdrawalFee)}</p>
+                          <p className={`mt-1 text-xs font-normal ${muted}`}>Total debit: {money(payment.totalDebit ?? payment.amount)}</p>
                         </td>
 
                         <td className="px-5 py-4">
