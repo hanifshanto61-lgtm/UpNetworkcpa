@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
   type FormEvent,
 } from "react";
@@ -187,6 +188,10 @@ export default function AffiliatePaymentsPage() {
   const [paymentAddress, setPaymentAddress] =
     useState("");
 
+  const paymentDetailsEditedRef = useRef(false);
+  const savedPaymentDefaultsRef = useRef({ method: "", address: "" });
+  const [savedDetailsNotice, setSavedDetailsNotice] = useState("");
+
   const quote = withdrawalQuote(Number(withdrawAmount));
   const eligibleConversions = Number(stats.eligibleConversions) || 0;
   const firstWithdrawalCompleted = stats.firstWithdrawalCompleted === true;
@@ -292,6 +297,46 @@ export default function AffiliatePaymentsPage() {
     void loadPayments();
   }, [loadPayments]);
 
+  // Load saved defaults once. Refreshing payment history must not erase a draft.
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+    async function loadSavedPaymentDetails() {
+      try {
+        const { data, error: sessionError } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+        if (cancelled || sessionError || !token) return;
+        const response = await fetch("/api/affiliate/settings", {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error("Saved details unavailable");
+        if (cancelled) return;
+        const saved = result.settings;
+        const savedMethod = typeof saved?.paymentMethod === "string" ? saved.paymentMethod.trim() : "";
+        const method = savedMethod === "Bank Transfer" ? "Bank Wire Transfer" : savedMethod;
+        const address = typeof saved?.paymentAddress === "string" ? saved.paymentAddress.trim() : "";
+        savedPaymentDefaultsRef.current = { method: PAYMENT_METHODS.includes(method) ? method : "", address };
+        if (paymentDetailsEditedRef.current) return;
+        setPaymentAddress(address);
+        if (PAYMENT_METHODS.includes(method)) {
+          setPaymentMethod(method);
+          if (address) setSavedDetailsNotice("Your saved payment details are filled below. You may edit them for this withdrawal only.");
+        } else if (savedMethod) {
+          setSavedDetailsNotice(`Saved method: ${savedMethod}. Select a supported payment method and check that the saved address matches it.`);
+        }
+      } catch {
+        if (!cancelled && !paymentDetailsEditedRef.current) {
+          setSavedDetailsNotice("Saved payment details could not be loaded. You can enter them manually below.");
+        }
+      }
+    }
+    void loadSavedPaymentDetails();
+    return () => { cancelled = true; controller.abort(); };
+  }, []);
+
   async function submitWithdrawal(
     event: FormEvent<HTMLFormElement>
   ) {
@@ -389,8 +434,8 @@ export default function AffiliatePaymentsPage() {
       }
 
       setWithdrawAmount("");
-      setPaymentMethod("");
-      setPaymentAddress("");
+      setPaymentMethod(savedPaymentDefaultsRef.current.method);
+      setPaymentAddress(savedPaymentDefaultsRef.current.address);
 
       await loadPayments();
 
@@ -625,6 +670,8 @@ export default function AffiliatePaymentsPage() {
                   <p className={`mt-3 text-xs ${muted}`}>All payment methods: $50–$99.99 adds a $5 fee; $100 or more adds a 3% fee. Fees are charged on top.</p>
                 </div>
 
+                {savedDetailsNotice && <p className={`mb-4 text-sm ${muted}`} role="status">{savedDetailsNotice}</p>}
+
                 <form
                   onSubmit={submitWithdrawal}
                   className="space-y-4"
@@ -667,10 +714,13 @@ export default function AffiliatePaymentsPage() {
                     <select
                       value={paymentMethod}
                       onChange={(event) => {
-                        setPaymentMethod(
-                          event.target.value
-                        );
-                        setPaymentAddress("");
+                        paymentDetailsEditedRef.current = true;
+                        setPaymentMethod(event.target.value);
+                        // Preserve initial legacy address until a method is chosen;
+                        // clear it when switching between selected methods/networks.
+                        if (paymentMethod && paymentMethod !== event.target.value) {
+                          setPaymentAddress("");
+                        }
                       }}
                       required
                       className={`w-full rounded-xl border px-4 py-3 outline-none focus:border-cyan-500 ${inputBg}`}
@@ -697,11 +747,10 @@ export default function AffiliatePaymentsPage() {
 
                     <textarea
                       value={paymentAddress}
-                      onChange={(event) =>
-                        setPaymentAddress(
-                          event.target.value
-                        )
-                      }
+                      onChange={(event) => {
+                        paymentDetailsEditedRef.current = true;
+                        setPaymentAddress(event.target.value);
+                      }}
                       placeholder={addressPlaceholder(
                         paymentMethod
                       )}
@@ -723,6 +772,8 @@ export default function AffiliatePaymentsPage() {
                       </p>
                     )}
                   </div>
+
+                  <p className={`text-xs ${muted}`}>Changes here apply only to this withdrawal. To change your saved default, use Settings.</p>
 
                   {quote && (
                     <div className={`rounded-xl border p-4 text-sm ${inputBg}`} aria-live="polite">
