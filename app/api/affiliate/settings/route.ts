@@ -159,7 +159,31 @@ function cleanBoolean(
   return fallback;
 }
 
-function mapSettings(
+type SavedPaymentAccount = {
+  id: string;
+  paymentMethod: string;
+  paymentAddress: string;
+  createdAt: string;
+};
+
+async function readPaymentAccounts(userId: string): Promise<SavedPaymentAccount[]> {
+  const accounts: SavedPaymentAccount[] = [];
+  const pageSize = 1000;
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await supabaseAdmin.from("affiliate_payment_accounts")
+      .select("id, payment_method, payment_address, created_at")
+      .eq("user_id", userId).order("account_order", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw new Error("Unable to load saved payment accounts.");
+    for (const row of data || []) {
+      accounts.push({ id: row.id, paymentMethod: row.payment_method, paymentAddress: row.payment_address, createdAt: row.created_at });
+    }
+    if ((data || []).length < pageSize) break;
+  }
+  return accounts;
+}
+
+async function mapSettings(
   row: AffiliateSettings | null,
   userId: string,
   profile: Profile | null,
@@ -169,8 +193,11 @@ function mapSettings(
   }
 ) {
   const affiliateId = getAffiliateId(profile);
+  const paymentAccounts = await readPaymentAccounts(userId);
+  const firstAccount = paymentAccounts[0];
 
   return {
+    paymentAccounts,
     userId,
     affiliateId,
 
@@ -194,12 +221,10 @@ function mapSettings(
       "USD",
 
     paymentMethod:
-      row?.payment_method ??
-      "",
+      firstAccount?.paymentMethod ?? row?.payment_method ?? "",
 
     paymentAddress:
-      row?.payment_address ??
-      "",
+      firstAccount?.paymentAddress ?? row?.payment_address ?? "",
 
     paymentNote:
       row?.payment_note ??
@@ -290,7 +315,7 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      settings: mapSettings(
+      settings: await mapSettings(
         data as AffiliateSettings | null,
         user.id,
         profile,
@@ -536,7 +561,7 @@ export async function PUT(
       success: true,
       message:
         "Settings saved successfully.",
-      settings: mapSettings(
+      settings: await mapSettings(
         data as AffiliateSettings,
         user.id,
         profile,
@@ -606,7 +631,7 @@ export async function PATCH(request: NextRequest) {
       if (result.error?.code === "23505") result = await updateExisting();
     }
     if (result.error || !result.data) throw new Error("Unable to save payment settings.");
-    return NextResponse.json({ success: true, settings: mapSettings(result.data as AffiliateSettings, user.id, profile, user) }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ success: true, settings: await mapSettings(result.data as AffiliateSettings, user.id, profile, user) }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("Affiliate payment defaults PATCH error:", error);
     return NextResponse.json({ success: false, error: "Payment details could not be saved. No withdrawal was submitted. Please try again." }, { status: 500 });
