@@ -35,6 +35,7 @@ type Settings = {
   paymentMethod: string;
   paymentAddress: string;
   paymentNote: string;
+  paymentAccounts: { id: string; paymentMethod: string; paymentAddress: string; createdAt: string }[];
 
   emailNotifications: boolean;
   conversionNotifications: boolean;
@@ -58,6 +59,7 @@ const defaultSettings: Settings = {
   paymentMethod: "",
   paymentAddress: "",
   paymentNote: "",
+  paymentAccounts: [],
 
   emailNotifications: true,
   conversionNotifications: true,
@@ -546,7 +548,7 @@ export default function AffiliateSettingsPage() {
 
                 <div>
                   <h2 className="font-semibold">
-                    Payment Address
+                    Withdrawal Accounts
                   </h2>
 
                   <p className="text-sm text-slate-400">
@@ -557,6 +559,23 @@ export default function AffiliateSettingsPage() {
             </div>
 
             <div className="space-y-5 p-5 sm:p-6">
+              <div className="rounded-xl border border-emerald-400/20 p-4">
+                <h3 className="font-semibold">Saved withdrawal accounts ({settings.paymentAccounts.length})</h3>
+                <p className="mt-2 text-xs text-slate-400">You can add multiple accounts. Your first saved account is the default in the Withdrawal form.</p>
+                <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">
+                  {settings.paymentAccounts.map((account, index) => (
+                    <div key={account.id} className="break-all rounded-lg bg-black/20 p-3 text-xs">
+                      <strong>Account {index + 1}{index === 0 ? " — Default" : ""} · {account.paymentMethod}</strong>
+                      <p className="mt-1 text-slate-400">{account.paymentAddress}</p>
+                    </div>
+                  ))}
+                  {!settings.paymentAccounts.length && <p className="text-xs text-slate-400">No saved accounts yet. Fill the details below and save.</p>}
+                </div>
+                <button type="button" onClick={() => {
+                  setSettings((current) => ({ ...current, paymentMethod: "", paymentAddress: "" }));
+                }} className="mt-4 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-bold text-slate-950">Add another withdrawal account</button>
+                <p className="mt-2 text-xs text-slate-400">Choose a method, enter the new account below, then press Save Settings. Previous accounts stay saved.</p>
+              </div>
               <div className="grid gap-5 sm:grid-cols-2">
                 {/* Payment Method */}
                 <div>
