@@ -28,6 +28,8 @@ type Payment = {
   id: string;
   affiliateId: string;
   amount: number;
+  withdrawalFee: number;
+  totalDebit: number;
   currency: string;
   paymentMethod: string;
   paymentAddress: string;
@@ -460,6 +462,10 @@ export default function AdminPaymentsPage() {
                       <p className="text-2xl font-black">
                         {money(payment.amount)}
                       </p>
+                      <p className="mt-2 text-xs text-slate-500">
+                        Extra fee: {money(payment.withdrawalFee)} · Total balance debit: {money(payment.totalDebit ?? payment.amount)}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">Send only the withdrawal amount to the affiliate.</p>
                     </div>
 
                     <CreditCard className="text-blue-600" />
