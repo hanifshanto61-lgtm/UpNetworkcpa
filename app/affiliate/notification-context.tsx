@@ -172,11 +172,11 @@ export function AffiliateNotificationProvider({
   }>());
 
   const stopSound = useCallback(() => {
-    for (const node of soundNodesRef.current) {
+    soundNodesRef.current.forEach((node) => {
       try { node.oscillator.stop(); } catch {}
       node.oscillator.disconnect();
       node.gain.disconnect();
-    }
+    });
     soundNodesRef.current.clear();
     soundUntilRef.current = 0;
   }, []);
