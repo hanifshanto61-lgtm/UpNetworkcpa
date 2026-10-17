@@ -25,6 +25,7 @@ import {
   Zap,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import ContactManagersPreview from "@/components/contact-managers-preview";
 
 function BrandLogo({ light = false }: { light?: boolean }) {
   return (
@@ -576,6 +577,8 @@ export default function LoginPage() {
                   </p>
                 </div>
               </div>
+            
+             <ContactManagersPreview />
             </div>
 
             <footer className="mt-6 text-center">
