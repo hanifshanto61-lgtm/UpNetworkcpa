@@ -25,15 +25,15 @@ export default function ContactManagersPreview() {
           signal: controller.signal,
         });
 
-        const result = await response.json();
-
         if (!response.ok) {
           throw new Error("Unable to load contacts.");
         }
 
-        setContacts(result.contacts ?? []);
+        const result = await response.json();
+        setContacts(Array.isArray(result.contacts) ? result.contacts : []);
       } catch (err) {
         if (controller.signal.aborted) return;
+
         setError(
           err instanceof Error ? err.message : "Unable to load contacts."
         );
@@ -43,6 +43,7 @@ export default function ContactManagersPreview() {
     }
 
     void loadContacts();
+
     return () => controller.abort();
   }, []);
 
@@ -52,6 +53,7 @@ export default function ContactManagersPreview() {
         <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
           <Users size={22} />
         </div>
+
         <div>
           <h3 className="font-bold text-[#10234a]">Contact Manager</h3>
           <p className="text-xs text-slate-500">
@@ -81,14 +83,18 @@ export default function ContactManagersPreview() {
       {!loading && !error && contacts.length > 0 && (
         <div className="mt-4 space-y-3">
           {contacts.map((contact) => {
-            const telegram = contact.telegram?.trim().replace(/^@/, "");
-            const email = contact.email?.trim();
+            const email = contact.email?.trim() || "";
+            const telegram = contact.telegram?.trim().replace(/^@/, "") || "";
             const subject = "UpNetwork CPA - Affiliate Support";
 
             const gmailUrl = email
-              ? "https://mail.google.com/mail/?view=cm&fs=1" +
-                `&to=${encodeURIComponent(email)}` +
-                `&su=${encodeURIComponent(subject)}`
+              ? `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(
+                  email
+                )}&su=${encodeURIComponent(subject)}`
+              : "";
+
+            const mailtoUrl = email
+              ? `mailto:${email}?subject=${encodeURIComponent(subject)}`
               : "";
 
             const telegramUrl = telegram
@@ -110,15 +116,25 @@ export default function ContactManagersPreview() {
 
                 <div className="mt-3 flex flex-wrap gap-2">
                   {email && (
-                    <a
-                      href={gmailUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-                    >
-                      <Mail size={16} />
-                      Email via Gmail
-                    </a>
+                    <>
+                      <a
+                        href={gmailUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                      >
+                        <Mail size={16} />
+                        Email via Gmail
+                      </a>
+
+                      <a
+                        href={mailtoUrl}
+                        className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+                      >
+                        <Mail size={16} />
+                        Open Email App
+                      </a>
+                    </>
                   )}
 
                   {telegramUrl && (
