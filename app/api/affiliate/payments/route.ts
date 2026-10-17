@@ -7,16 +7,31 @@ export const runtime = "nodejs";
 const PAGE_SIZE = 1000;
 const MINIMUM_WITHDRAWAL = 50;
 const MAXIMUM_WITHDRAWAL = 1000000;
+const MINIMUM_FIRST_WITHDRAWAL_CONVERSIONS = 50;
 const PAYMENT_RELEASE_TIMEZONE = "Asia/Dhaka";
 
 function nextDhakaDailyRelease(timestamp: number): number {
   if (!Number.isFinite(timestamp)) return NaN;
+
   const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: PAYMENT_RELEASE_TIMEZONE, year: "numeric", month: "2-digit", day: "2-digit",
+    timeZone: PAYMENT_RELEASE_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
   }).formatToParts(new Date(timestamp));
-  const part = (name: string) => Number(parts.find((item) => item.type === name)?.value);
-  // Bangladesh standard time is UTC+06:00. Date.UTC handles month/year rollover.
-  return Date.UTC(part("year"), part("month") - 1, part("day") + 1, 3) - 6 * 60 * 60 * 1000;
+
+  const part = (name: string) =>
+    Number(parts.find((item) => item.type === name)?.value);
+
+  return (
+    Date.UTC(
+      part("year"),
+      part("month") - 1,
+      part("day") + 1,
+      3
+    ) -
+    6 * 60 * 60 * 1000
+  );
 }
 
 const PAYMENT_METHODS = [
@@ -79,6 +94,7 @@ function roundMoney(value: number): number {
 
 function isConverted(row: ClickRow): boolean {
   const status = String(row.status || "").trim().toLowerCase();
+
   return (
     CONVERTED_STATUSES.has(status) ||
     Boolean(row.converted_at)
@@ -104,6 +120,7 @@ function createAdminClient() {
 function getBearerToken(request: NextRequest): string | null {
   const authorization = request.headers.get("authorization");
   const match = authorization?.match(/^Bearer\s+(.+)$/i);
+
   return match?.[1]?.trim() || null;
 }
 
@@ -204,6 +221,7 @@ async function readAllClicks(
     rows.push(...page);
 
     if (page.length < PAGE_SIZE) break;
+
     offset += PAGE_SIZE;
   }
 
@@ -236,6 +254,7 @@ async function readAllPayments(
     rows.push(...page);
 
     if (page.length < PAGE_SIZE) break;
+
     offset += PAGE_SIZE;
   }
 
@@ -265,25 +284,51 @@ export async function GET(request: NextRequest) {
     let maturedEarnings = 0;
     let pendingLeadCount = 0;
     let nextReleaseAt: number | null = null;
+
     const nowMs = Date.now();
+
     let conversions = 0;
     let eligibleConversions = 0;
 
     for (const click of clicks) {
-      if (CONVERTED_STATUSES.has(String(click.status || "").trim().toLowerCase())) {
+      if (
+        CONVERTED_STATUSES.has(
+          String(click.status || "").trim().toLowerCase()
+        )
+      ) {
         eligibleConversions++;
       }
+
       if (isConverted(click)) {
         conversions++;
+
         const payout = amount(click.payout);
         totalEarnings += payout;
-        const conversionTime = Date.parse(click.converted_at || click.created_at || "");
+
+        const conversionTime = Date.parse(
+          click.converted_at || click.created_at || ""
+        );
+
         const releaseTime = nextDhakaDailyRelease(conversionTime);
-        if (Number.isFinite(releaseTime) && releaseTime <= nowMs) {
+
+        if (
+          Number.isFinite(releaseTime) &&
+          releaseTime <= nowMs
+        ) {
           maturedEarnings += payout;
         } else {
           pendingLeadCount++;
-          if (payout > 0 && Number.isFinite(releaseTime) && (nextReleaseAt === null || releaseTime < nextReleaseAt)) nextReleaseAt = releaseTime;
+
+          if (
+            payout > 0 &&
+            Number.isFinite(releaseTime) &&
+            (
+              nextReleaseAt === null ||
+              releaseTime < nextReleaseAt
+            )
+          ) {
+            nextReleaseAt = releaseTime;
+          }
         }
       }
     }
@@ -292,24 +337,29 @@ export async function GET(request: NextRequest) {
     let approvedAmount = 0;
     let paidAmount = 0;
     let rejectedAmount = 0;
-
     let reservedFees = 0;
+
     for (const payment of payments) {
       const value = amount(payment.amount);
-      if (["pending", "approved", "paid"].includes(String(payment.status).trim().toLowerCase())) {
+      const status = String(payment.status).trim().toLowerCase();
+
+      if (["pending", "approved", "paid"].includes(status)) {
         reservedFees += amount(payment.withdrawal_fee);
       }
 
-      switch (String(payment.status).trim().toLowerCase()) {
+      switch (status) {
         case "pending":
           pendingAmount += value;
           break;
+
         case "approved":
           approvedAmount += value;
           break;
+
         case "paid":
           paidAmount += value;
           break;
+
         case "rejected":
           rejectedAmount += value;
           break;
@@ -329,17 +379,30 @@ export async function GET(request: NextRequest) {
         success: true,
         affiliateId,
         currency: "USD",
+
         stats: {
           totalEarnings: roundMoney(totalEarnings),
           maturedEarnings: roundMoney(maturedEarnings),
-          heldEarnings: roundMoney(totalEarnings - maturedEarnings),
+          heldEarnings: roundMoney(
+            totalEarnings - maturedEarnings
+          ),
           pendingLeadCount,
-          nextReleaseAt: nextReleaseAt === null ? null : new Date(nextReleaseAt).toISOString(),
+
+          nextReleaseAt:
+            nextReleaseAt === null
+              ? null
+              : new Date(nextReleaseAt).toISOString(),
+
           releaseTimezone: PAYMENT_RELEASE_TIMEZONE,
           releasePolicy: "midnight_cutoff_3am_release",
           conversions,
           eligibleConversions,
-          firstWithdrawalCompleted: payments.some((payment) => String(payment.status).trim().toLowerCase() === "paid"),
+
+          firstWithdrawalCompleted: payments.some(
+            (payment) =>
+              String(payment.status).trim().toLowerCase() === "paid"
+          ),
+
           reservedFees: roundMoney(reservedFees),
           pendingAmount: roundMoney(pendingAmount),
           approvedAmount: roundMoney(approvedAmount),
@@ -349,11 +412,17 @@ export async function GET(request: NextRequest) {
           availableBalance,
           totalRequests: payments.length,
         },
+
         payments: payments.map((payment) => ({
           id: payment.id,
           amount: amount(payment.amount),
           withdrawalFee: amount(payment.withdrawal_fee),
-          totalDebit: roundMoney(amount(payment.amount) + amount(payment.withdrawal_fee)),
+
+          totalDebit: roundMoney(
+            amount(payment.amount) +
+            amount(payment.withdrawal_fee)
+          ),
+
           currency: payment.currency,
           paymentMethod: payment.payment_method,
           paymentAddress: payment.payment_address,
@@ -362,10 +431,18 @@ export async function GET(request: NextRequest) {
           requestedAt: payment.requested_at,
           processedAt: payment.processed_at,
         })),
+
         withdrawalEnabled: true,
         minimumWithdrawal: MINIMUM_WITHDRAWAL,
-        minimumConversions: 30,
-        feePolicy: { threshold: 100, fixedFeeBelowThreshold: 5, percentAtOrAboveThreshold: 3 },
+        bankWireMinimumWithdrawal: 1000,
+        minimumConversions: MINIMUM_FIRST_WITHDRAWAL_CONVERSIONS,
+
+        feePolicy: {
+          threshold: 100,
+          fixedFeeBelowThreshold: 5,
+          percentAtOrAboveThreshold: 3,
+        },
+
         paymentMethods: PAYMENT_METHODS,
       },
       {
@@ -377,7 +454,11 @@ export async function GET(request: NextRequest) {
     );
   } catch (error) {
     console.error("Affiliate payments GET error:", error);
-    return responseError("Unable to load affiliate payments.", 500);
+
+    return responseError(
+      "Unable to load affiliate payments.",
+      500
+    );
   }
 }
 
@@ -421,27 +502,35 @@ export async function POST(request: NextRequest) {
     const paymentMethod = body.paymentMethod;
     const paymentAddress = body.paymentAddress;
 
-    if (
-      typeof requestedAmount !== "number" ||
-      !Number.isFinite(requestedAmount) ||
-      requestedAmount < MINIMUM_WITHDRAWAL ||
-      requestedAmount > MAXIMUM_WITHDRAWAL ||
-      Math.round(requestedAmount * 100) / 100 !==
-        requestedAmount
-    ) {
-      return responseError(
-        "Amount must be between $50 and $1,000,000 USD with at most 2 decimal places.",
-        400
-      );
-    }
+    const normalizedPaymentMethod =
+      typeof paymentMethod === "string"
+        ? paymentMethod.trim()
+        : "";
 
     if (
-      typeof paymentMethod !== "string" ||
       !PAYMENT_METHODS.some(
-        (method) => method === paymentMethod.trim()
+        (method) => method === normalizedPaymentMethod
       )
     ) {
       return responseError("Unsupported payment method.", 400);
+    }
+
+    const methodMinimum =
+      normalizedPaymentMethod === "Bank Wire Transfer"
+        ? 1000
+        : MINIMUM_WITHDRAWAL;
+
+    if (
+      typeof requestedAmount !== "number" ||
+      !Number.isFinite(requestedAmount) ||
+      requestedAmount < methodMinimum ||
+      requestedAmount > MAXIMUM_WITHDRAWAL ||
+      Math.round(requestedAmount * 100) / 100 !== requestedAmount
+    ) {
+      return responseError(
+        `Amount must be between $${methodMinimum} and $1,000,000 USD for ${normalizedPaymentMethod}, with at most 2 decimal places.`,
+        400
+      );
     }
 
     if (
@@ -454,6 +543,7 @@ export async function POST(request: NextRequest) {
 
     const supabaseUrl =
       process.env.NEXT_PUBLIC_SUPABASE_URL;
+
     const anonKey =
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -485,7 +575,7 @@ export async function POST(request: NextRequest) {
         "request_affiliate_withdrawal",
         {
           p_amount: requestedAmount,
-          p_payment_method: paymentMethod.trim(),
+          p_payment_method: normalizedPaymentMethod,
           p_payment_address: paymentAddress.trim(),
         }
       );
@@ -494,15 +584,12 @@ export async function POST(request: NextRequest) {
       const message = String(rpcError.message || "");
 
       if (message.includes("Insufficient available balance")) {
-        return responseError(
-          message,
-          400
-        );
+        return responseError(message, 400);
       }
 
       if (
         message.includes("Minimum withdrawal") ||
-        message.includes("At least 30 approved conversions") ||
+        message.includes("At least 50 approved conversions") ||
         message.includes("Unsupported payment method") ||
         message.includes("Invalid payment address")
       ) {
@@ -544,8 +631,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: true,
-        message:
-          "Withdrawal request submitted successfully.",
+        message: "Withdrawal request submitted successfully.",
         requestId,
         status: "pending",
       },
@@ -556,6 +642,7 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error("Affiliate withdrawal POST error:", error);
+
     return responseError(
       "Unable to submit withdrawal request.",
       500
