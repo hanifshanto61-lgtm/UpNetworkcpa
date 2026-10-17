@@ -33,6 +33,12 @@ type MenuItem = {
 
 const menuItems: MenuItem[] = [
   {
+    label: "Network Revenue & Profit",
+    icon: TrendingUp,
+    action: "/admin/revenue",
+    available: true,
+  },
+  {
     label: "Contact Manager Emails",
     icon: Users,
     action: "/admin/contact-managers",
@@ -121,6 +127,13 @@ type ControlCard = {
 };
 
 const controlCards: ControlCard[] = [
+  {
+    title: "Network Revenue & Profit",
+    description: "View revenue by source and affiliate, affiliate commission and your share.",
+    icon: TrendingUp,
+    status: "Active",
+    action: "/admin/revenue",
+  },
   {
     title: "Affiliate Management",
     description:
