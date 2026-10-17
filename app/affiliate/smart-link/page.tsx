@@ -27,6 +27,7 @@ import {
   Globe,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import SubIdManager from "@/components/sub-id-manager";
 import { useAffiliateTheme } from "../theme-context";
 
 type Offer = {
@@ -580,6 +581,8 @@ export default function SmartLinksPage() {
             </p>
           </div>
         </div>
+
+        <SubIdManager affiliateId={affiliateId} smartLinks={smartLinks} dark={dark} />
 
         {/* Global Smart Link */}
         <section
