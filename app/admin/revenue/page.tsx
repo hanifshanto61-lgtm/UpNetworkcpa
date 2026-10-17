@@ -70,6 +70,7 @@ export default function RevenuePage() {
         <div><p className="text-sm font-semibold text-blue-600 dark:text-cyan-400">UpNetwork CPA · Admin</p><h1 className="mt-2 text-3xl font-bold">Network Revenue &amp; Profit</h1><p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Recorded conversions, affiliate commission and your share · USD</p></div>
         <button disabled={loading} onClick={()=>void load(from,to)} className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white disabled:opacity-50">{loading?'Loading…':'Refresh'}</button>
       </div>
+      <Link href="/admin/sub-ids" className="inline-block rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white">Worker Sub ID Reports →</Link>
       <section className={box}>
         <form onSubmit={e=>{e.preventDefault();void load(from,to);}} className="grid gap-4 sm:grid-cols-3">
           <label className="space-y-2 text-sm font-semibold"><span>From · Bangladesh time</span><input required={false} type="date" min="2000-01-01" max="2100-12-31" className={input} value={from} onChange={e=>setFrom(e.target.value)}/></label>
