@@ -33,6 +33,12 @@ type MenuItem = {
 
 const menuItems: MenuItem[] = [
   {
+    label: "Worker Sub ID Reports",
+    icon: Users,
+    action: "/admin/sub-ids",
+    available: true,
+  },
+  {
     label: "Network Revenue & Profit",
     icon: TrendingUp,
     action: "/admin/revenue",
@@ -127,6 +133,13 @@ type ControlCard = {
 };
 
 const controlCards: ControlCard[] = [
+  {
+    title: "Worker Sub ID Reports",
+    description: "View worker clicks, leads, affiliate earnings and your share by affiliate and Smart Link.",
+    icon: Users,
+    status: "Active",
+    action: "/admin/sub-ids",
+  },
   {
     title: "Network Revenue & Profit",
     description: "View revenue by source and affiliate, affiliate commission and your share.",
