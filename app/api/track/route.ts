@@ -3,6 +3,7 @@ import { isIP } from "net";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { hasOfferApproval } from "@/lib/offer-access";
+import { SUB_ID_PATTERN } from "@/lib/sub-id-report";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -388,6 +389,18 @@ export async function GET(request: NextRequest) {
         "Affiliate account is not approved or active.",
         403
       );
+    }
+
+    // No worker lookup or new click column is used for existing links without sub_id.
+    const workerSubId = params.has("sub_id") ? clean(params.get("sub_id")) : null;
+    if (workerSubId !== null) {
+      if (!SUB_ID_PATTERN.test(workerSubId)) return errorResponse("Invalid worker Sub ID.", 400);
+      const { data: worker, error: workerError } = await supabase
+        .from("affiliate_sub_ids").select("id")
+        .eq("affiliate_id", affiliateId).eq("user_id", affiliate.id)
+        .eq("sub_id", workerSubId).maybeSingle();
+      if (workerError) return errorResponse("Worker tracking is unavailable. Please contact support.", 503);
+      if (!worker) return errorResponse("Worker Sub ID does not belong to this affiliate.", 404);
     }
 
     const clickId = randomUUID();
@@ -826,6 +839,8 @@ export async function GET(request: NextRequest) {
       status: "click",
       payout: trackedOfferId ? payout : 0,
     };
+
+    if (workerSubId !== null) clickData.worker_sub_id = workerSubId;
 
     if (trackedOfferId) {
       clickData.offer_id = trackedOfferId;
