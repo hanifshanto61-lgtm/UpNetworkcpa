@@ -43,7 +43,7 @@ export async function GET() {
       .order("created_at", { ascending: true });
 
     if (error) {
-      console.error("Public manager contacts:", error);
+      console.error("Public manager contacts:", error.message);
       return reply(
         { error: "Unable to load manager contacts." },
         500
@@ -52,7 +52,10 @@ export async function GET() {
 
     return reply({ contacts: data ?? [] });
   } catch (error) {
-    console.error("Public manager contacts:", error);
+    console.error(
+      "Public manager contacts:",
+      error instanceof Error ? error.message : "Unknown error"
+    );
 
     return reply(
       { error: "Unable to load manager contacts." },
