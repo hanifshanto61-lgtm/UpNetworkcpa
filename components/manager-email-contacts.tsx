@@ -33,9 +33,7 @@ export default function ManagerEmailContacts({
 
       try {
         if (!supabase) {
-          throw new Error(
-            "Contact support is not configured."
-          );
+          throw new Error("Contact support is not configured.");
         }
 
         const { data } = await supabase.auth.getSession();
@@ -45,23 +43,19 @@ export default function ManagerEmailContacts({
           throw new Error("Please log in again.");
         }
 
-        const response = await fetch(
-          "/api/manager-contacts",
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-            cache: "no-store",
-            signal: controller.signal,
-          }
-        );
+        const response = await fetch("/api/manager-contacts", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          cache: "no-store",
+          signal: controller.signal,
+        });
 
         const result = await response.json();
 
         if (!response.ok) {
           throw new Error(
-            result.error ||
-              "Unable to load manager contacts."
+            result.error || "Unable to load manager contacts."
           );
         }
 
@@ -69,9 +63,8 @@ export default function ManagerEmailContacts({
           setContacts(result.contacts ?? []);
         }
       } catch (err) {
-        if (active) {
+        if (active && !controller.signal.aborted) {
           setContacts([]);
-
           setError(
             err instanceof Error
               ? err.message
@@ -102,13 +95,8 @@ export default function ManagerEmailContacts({
     }
   `;
 
-  const emails = contacts.filter(
-    (contact) => contact.email
-  );
-
-  const telegrams = contacts.filter(
-    (contact) => contact.telegram
-  );
+  const emails = contacts.filter((contact) => contact.email?.trim());
+  const telegrams = contacts.filter((contact) => contact.telegram);
 
   if (loading) {
     return (
@@ -120,17 +108,11 @@ export default function ManagerEmailContacts({
 
   if (error) {
     return (
-      <div
-        role="alert"
-        className="text-sm text-red-400"
-      >
+      <div role="alert" className="text-sm text-red-400">
         <p>{error}</p>
-
         <button
           type="button"
-          onClick={() =>
-            setRetry((value) => value + 1)
-          }
+          onClick={() => setRetry((value) => value + 1)}
           className="mt-2 underline"
         >
           Try again
@@ -153,32 +135,48 @@ export default function ManagerEmailContacts({
           </p>
         ) : (
           <div className="space-y-2">
-            {emails.map((contact) => (
-              <a
-                key={contact.id}
-                className={cardClass}
-                href={`mailto:${encodeURIComponent(
-                  contact.email!
-                )}?subject=${encodeURIComponent(
-                  `UpNetwork CPA Support - ${affiliateId}`
-                )}`}
-              >
-                <Mail
-                  size={20}
-                  className="shrink-0 text-cyan-500"
-                />
+            {emails.map((contact) => {
+              const subject = `UpNetwork CPA Support - ${affiliateId}`;
+              const body =
+                `Hello ${contact.name},\n\n` +
+                `I need assistance with my UpNetwork CPA affiliate account.\n\n` +
+                `Affiliate ID: ${affiliateId}\n\n` +
+                `Thank you.`;
 
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold">
-                    {contact.name}
-                  </p>
+              const gmailUrl =
+                "https://mail.google.com/mail/?view=cm&fs=1" +
+                `&to=${encodeURIComponent(contact.email!.trim())}` +
+                `&su=${encodeURIComponent(subject)}` +
+                `&body=${encodeURIComponent(body)}`;
 
-                  <p className="mt-1 break-all text-xs text-cyan-500">
-                    {contact.email}
-                  </p>
-                </div>
-              </a>
-            ))}
+              return (
+                <a
+                  key={contact.id}
+                  className={cardClass}
+                  href={gmailUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`Email ${contact.name} using Gmail`}
+                >
+                  <Mail
+                    size={20}
+                    className="shrink-0 text-cyan-500"
+                  />
+
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold">
+                      {contact.name}
+                    </p>
+                    <p className="mt-1 break-all text-xs text-cyan-500">
+                      {contact.email}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Open Gmail to send an email
+                    </p>
+                  </div>
+                </a>
+              );
+            })}
           </div>
         )}
       </section>
@@ -200,7 +198,7 @@ export default function ManagerEmailContacts({
                 key={contact.id}
                 className={cardClass}
                 href={`https://t.me/${encodeURIComponent(
-                  contact.telegram!
+                  contact.telegram!.replace(/^@/, "")
                 )}`}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -214,9 +212,8 @@ export default function ManagerEmailContacts({
                   <p className="text-sm font-semibold">
                     {contact.name}
                   </p>
-
                   <p className="mt-1 break-all text-xs text-emerald-500">
-                    @{contact.telegram}
+                    @{contact.telegram!.replace(/^@/, "")}
                   </p>
                 </div>
               </a>
