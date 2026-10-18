@@ -1,4 +1,3 @@
-
 "use client";
 
 import { FormEvent, useState } from "react";
@@ -19,6 +18,7 @@ import {
   RefreshCw,
   Rocket,
   ShieldCheck,
+  Send,
   TrendingUp,
   Users,
   Wallet,
@@ -549,6 +549,24 @@ export default function LoginPage() {
                 </span>
               </Link>
 
+              <a
+                href="https://t.me/UpNetworkCpaOfficial"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 flex min-h-[54px] w-full items-center justify-center gap-3 rounded-xl bg-[#229ED9] px-4 py-3 text-white shadow-md transition hover:bg-[#168AC0] hover:shadow-lg"
+              >
+                <Send className="h-5 w-5" />
+                <span className="text-left">
+                  <span className="block text-sm font-bold">
+                    Join Official Telegram Channel
+                  </span>
+                  <span className="mt-1 block text-[10px] text-white/85">
+                    Get the latest offers and network updates
+                  </span>
+                </span>
+                <ArrowUpRight className="ml-auto h-4 w-4 shrink-0" />
+              </a>
+
               <button
                 type="button"
                 onClick={handleResetPassword}
@@ -577,8 +595,8 @@ export default function LoginPage() {
                   </p>
                 </div>
               </div>
-            
-             <ContactManagersPreview />
+
+              <ContactManagersPreview />
             </div>
 
             <footer className="mt-6 text-center">
