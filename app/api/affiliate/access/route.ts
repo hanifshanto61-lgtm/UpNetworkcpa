@@ -36,10 +36,11 @@ export async function GET(request: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !serviceRoleKey) {
+      console.error("Affiliate access: Supabase configuration missing.");
+
       return NextResponse.json(
         {
-          error:
-            "Supabase server configuration is missing.",
+          error: "Supabase server configuration is missing.",
         },
         { status: 500 }
       );
@@ -56,7 +57,10 @@ export async function GET(request: NextRequest) {
         {
           error: "Authentication required.",
         },
-        { status: 401 }
+        {
+          status: 401,
+          headers: { "Cache-Control": "no-store" },
+        }
       );
     }
 
@@ -67,10 +71,12 @@ export async function GET(request: NextRequest) {
     if (!accessToken) {
       return NextResponse.json(
         {
-          error:
-            "Authentication token is missing.",
+          error: "Authentication token is missing.",
         },
-        { status: 401 }
+        {
+          status: 401,
+          headers: { "Cache-Control": "no-store" },
+        }
       );
     }
 
@@ -88,40 +94,60 @@ export async function GET(request: NextRequest) {
     const {
       data: authData,
       error: authError,
-    } =
-      await supabaseAdmin.auth.getUser(
-        accessToken
-      );
+    } = await supabaseAdmin.auth.getUser(accessToken);
 
     const user = authData?.user;
 
     if (authError || !user) {
+      console.warn("Affiliate access: Authentication failed.", {
+        authError: authError?.message ?? null,
+      });
+
       return NextResponse.json(
         {
-          error:
-            "Your login session is invalid or expired.",
+          error: "Your login session is invalid or expired.",
         },
-        { status: 401 }
+        {
+          status: 401,
+          headers: { "Cache-Control": "no-store" },
+        }
       );
     }
 
-    // Authorization must use the server-controlled profile, never user metadata.
-    const { data: profile, error: profileError } =
-      await supabaseAdmin
-        .from("profiles")
-        .select("id, application_status")
-        .eq("id", user.id)
-        .maybeSingle();
+    const {
+      data: profile,
+      error: profileError,
+    } = await supabaseAdmin
+      .from("profiles")
+      .select("id, application_status")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    // Diagnostic information only; never log access tokens or passwords.
+    console.info("Affiliate access diagnostic:", {
+      authUserId: user.id,
+      profileFound: Boolean(profile),
+      applicationStatus: profile?.application_status ?? null,
+      profileLookupError: profileError?.message ?? null,
+    });
 
     if (profileError) {
-      console.error("Affiliate profile lookup failed:", profileError);
+      console.error(
+        "Affiliate profile lookup failed:",
+        profileError
+      );
+
       return NextResponse.json(
         {
           allowed: false,
           code: "AFFILIATE_STATUS_UNAVAILABLE",
-          error: "Unable to verify affiliate account status. Please try again.",
+          error:
+            "Unable to verify affiliate account status. Please try again.",
         },
-        { status: 503, headers: { "Cache-Control": "no-store" } }
+        {
+          status: 503,
+          headers: { "Cache-Control": "no-store" },
+        }
       );
     }
 
@@ -131,17 +157,20 @@ export async function GET(request: NextRequest) {
           allowed: false,
           status: "pending",
           code: "AFFILIATE_PROFILE_NOT_FOUND",
-          error: "Your affiliate profile could not be found. Please contact support.",
+          error:
+            "Your affiliate profile could not be found. Please contact support.",
         },
-        { status: 403, headers: { "Cache-Control": "no-store" } }
+        {
+          status: 403,
+          headers: { "Cache-Control": "no-store" },
+        }
       );
     }
 
-    const status = normalizeStatus(profile.application_status);
+    const status = normalizeStatus(
+      profile.application_status
+    );
 
-    /*
-     * APPROVED
-     */
     if (status === "approved") {
       return NextResponse.json(
         {
@@ -162,9 +191,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    /*
-     * REJECTED
-     */
     if (status === "rejected") {
       return NextResponse.json(
         {
@@ -176,17 +202,11 @@ export async function GET(request: NextRequest) {
         },
         {
           status: 403,
-          headers: {
-            "Cache-Control":
-              "no-store, no-cache, must-revalidate",
-          },
+          headers: { "Cache-Control": "no-store" },
         }
       );
     }
 
-    /*
-     * SUSPENDED
-     */
     if (status === "suspended") {
       return NextResponse.json(
         {
@@ -198,17 +218,11 @@ export async function GET(request: NextRequest) {
         },
         {
           status: 403,
-          headers: {
-            "Cache-Control":
-              "no-store, no-cache, must-revalidate",
-          },
+          headers: { "Cache-Control": "no-store" },
         }
       );
     }
 
-    /*
-     * PENDING
-     */
     return NextResponse.json(
       {
         allowed: false,
@@ -219,16 +233,15 @@ export async function GET(request: NextRequest) {
       },
       {
         status: 403,
-        headers: {
-          "Cache-Control":
-            "no-store, no-cache, must-revalidate",
-        },
+        headers: { "Cache-Control": "no-store" },
       }
     );
   } catch (error) {
     console.error(
       "Affiliate access check error:",
-      error
+      error instanceof Error
+        ? error.message
+        : "Unknown error"
     );
 
     return NextResponse.json(
@@ -236,7 +249,10 @@ export async function GET(request: NextRequest) {
         error:
           "Unable to verify affiliate account status.",
       },
-      { status: 500 }
+      {
+        status: 500,
+        headers: { "Cache-Control": "no-store" },
+      }
     );
   }
 }
