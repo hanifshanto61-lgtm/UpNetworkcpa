@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 type ApplicationStatus =
   | "pending"
@@ -36,13 +37,18 @@ export async function GET(request: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !serviceRoleKey) {
-      console.error("Affiliate access: Supabase configuration missing.");
+      console.error(
+        "Affiliate access: Supabase configuration missing."
+      );
 
       return NextResponse.json(
         {
           error: "Supabase server configuration is missing.",
         },
-        { status: 500 }
+        {
+          status: 500,
+          headers: { "Cache-Control": "no-store" },
+        }
       );
     }
 
@@ -88,6 +94,13 @@ export async function GET(request: NextRequest) {
           autoRefreshToken: false,
           persistSession: false,
         },
+        global: {
+          fetch: (url, options = {}) =>
+            fetch(url, {
+              ...options,
+              cache: "no-store",
+            }),
+        },
       }
     );
 
@@ -99,9 +112,12 @@ export async function GET(request: NextRequest) {
     const user = authData?.user;
 
     if (authError || !user) {
-      console.warn("Affiliate access: Authentication failed.", {
-        authError: authError?.message ?? null,
-      });
+      console.warn(
+        "Affiliate access: Authentication failed.",
+        {
+          authError: authError?.message ?? null,
+        }
+      );
 
       return NextResponse.json(
         {
@@ -123,12 +139,14 @@ export async function GET(request: NextRequest) {
       .eq("id", user.id)
       .maybeSingle();
 
-    // Diagnostic information only; never log access tokens or passwords.
+    // Diagnostic only. Never log access tokens or passwords.
     console.info("Affiliate access diagnostic:", {
       authUserId: user.id,
       profileFound: Boolean(profile),
-      applicationStatus: profile?.application_status ?? null,
-      profileLookupError: profileError?.message ?? null,
+      applicationStatus:
+        profile?.application_status ?? null,
+      profileLookupError:
+        profileError?.message ?? null,
     });
 
     if (profileError) {
