@@ -75,13 +75,13 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      const ids = [
-        ...new Set(
+      const ids = Array.from(
+        new Set(
           (messages ?? []).map(
             (item) => item.affiliate_user_id
           )
-        ),
-      ];
+        )
+      );
 
       let profiles: any[] = [];
 
