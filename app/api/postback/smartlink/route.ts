@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { deliverAffiliateConversion } from "@/lib/affiliate-postback-delivery";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -57,9 +58,7 @@ export async function GET(request: NextRequest) {
       return reply(false, "Invalid Click ID.", 400);
     }
 
-    if (
-      !/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/.test(revenueText)
-    ) {
+    if (!/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/.test(revenueText)) {
       return reply(false, "Invalid revenue amount.", 400);
     }
 
@@ -87,17 +86,52 @@ export async function GET(request: NextRequest) {
     );
 
     if (error) {
-      // Do not log the callback URL or secret.
       console.error("Smart Link postback RPC error:", error.code);
       return reply(false, "Conversion processing failed.", 500);
     }
 
     switch (data) {
-      case "recorded":
+      case "recorded": {
+        // Only deliver notifications after the database confirms
+        // this is a newly recorded conversion.
+        try {
+          const { data: conversion, error: conversionError } =
+            await supabase
+              .from("clicks")
+              .select(
+                "click_id, affiliate_id, smartlink_id, status, payout, gross_revenue, country"
+              )
+              .eq("click_id", clickId)
+              .eq("smartlink_id", smartlinkId)
+              .maybeSingle();
+
+          if (conversionError) {
+            console.error(
+              "Recorded conversion lookup failed:",
+              conversionError.code
+            );
+          } else if (conversion?.affiliate_id) {
+            await deliverAffiliateConversion(supabase, {
+              click_id: String(conversion.click_id),
+              affiliate_id: String(conversion.affiliate_id),
+              status: String(conversion.status || "converted"),
+              payout: conversion.payout,
+              gross_revenue: conversion.gross_revenue,
+              country: conversion.country
+                ? String(conversion.country)
+                : null,
+            });
+          }
+        } catch {
+          // Delivery problems must not undo a recorded conversion.
+          console.error("Postback notification delivery failed.");
+        }
+
         return reply(true, "Conversion recorded.");
+      }
 
       case "already_converted":
-        // Acknowledge retries without crediting twice.
+        // Retries are acknowledged without sending duplicate alerts.
         return reply(true, "Conversion already recorded.");
 
       case "unauthorized":
