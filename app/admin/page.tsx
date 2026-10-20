@@ -11,6 +11,7 @@ import {
   CreditCard,
   DollarSign,
   Link2,
+  MessageCircle,
   LogOut,
   Menu,
   Settings,
@@ -78,6 +79,12 @@ const menuItems: MenuItem[] = [
     label: "Affiliates",
     icon: Users,
     action: "/admin/affiliates",
+    available: true,
+  },
+  {
+    label: "Application Chats",
+    icon: MessageCircle,
+    action: "/admin/application-chats",
     available: true,
   },
   {
