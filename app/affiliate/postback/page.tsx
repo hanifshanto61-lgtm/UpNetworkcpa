@@ -448,6 +448,53 @@ export default function AffiliatePostbackPage() {
                   onChange={(e) => setTelegramEnabled(e.target.checked)}
                   className="h-4 w-4 accent-sky-400"
                 />
+                <section className="rounded-2xl border border-amber-500/30 bg-slate-900 p-5 sm:p-7">
+          <h2 className="text-lg font-semibold">
+            Affise Tracker — Setup Guide
+          </h2>
+
+          <p className="mt-2 text-sm leading-6 text-slate-400">
+            1. Affise account থেকে নিজের postback endpoint সংগ্রহ করো।
+            2. Add Postback-এ Affise নির্বাচন করো।
+            3. নিচের উদাহরণে নিজের আসল Affise domain বসাও।
+            4. URL Save Postback দিয়ে সংরক্ষণ করো।
+          </p>
+
+          <label
+            htmlFor="affise-template"
+            className="mb-2 mt-5 block text-sm font-medium"
+          >
+            Affise Postback Example
+          </label>
+
+          <textarea
+            id="affise-template"
+            readOnly
+            rows={2}
+            value="https://YOUR-AFFISE-DOMAIN/postback?clickid={click_id}&sum={payout}"
+            className="w-full break-all rounded-lg border border-slate-700 bg-slate-950 px-3 py-3 font-mono text-sm text-slate-200"
+          />
+
+          <button
+            type="button"
+            onClick={() =>
+              void copyText(
+                "https://YOUR-AFFISE-DOMAIN/postback?clickid={click_id}&sum={payout}"
+              )
+            }
+            className="mt-3 inline-flex items-center gap-2 rounded-lg bg-amber-400 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-amber-300"
+          >
+            <Copy size={16} />
+            Copy Affise Example
+          </button>
+
+          <p className="mt-4 text-xs leading-5 text-slate-400">
+            {`{click_id}`} is replaced with the recorded click ID.
+            {` {payout}`} is replaced with the conversion payout.
+            Replace YOUR-AFFISE-DOMAIN with the actual endpoint from your
+            Affise account before saving.
+          </p>
+        </section>
                 Enable Telegram lead notifications
               </label>
 
