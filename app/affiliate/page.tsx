@@ -29,6 +29,7 @@ import {
   ShieldCheck,
   Send,
   HelpCircle,
+  Webhook,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -78,6 +79,7 @@ const DEFAULT_PANEL_SETTINGS: PanelSettings = {
   smart_links: true,
   statistics: true,
   earnings: true,
+  postback: true,
   referrals: true,
   payments: true,
   profile: true,
@@ -133,6 +135,12 @@ const mainMenu = [
     icon: Wallet,
     action: "earnings",
     feature: "earnings",
+  },
+  {
+    label: "Postback Settings",
+    icon: Webhook,
+    action: "postback",
+    feature: "postback",
   },
   {
     label: "Referrals",
@@ -374,6 +382,7 @@ export default function AffiliatePage() {
       smartlinks: "/affiliate/smart-link",
       statistics: "/affiliate/statistics",
       earnings: "/affiliate/earnings",
+      postback: "/affiliate/postback",
       referrals: "/affiliate/referrals",
       payments: "/affiliate/payments",
     };
