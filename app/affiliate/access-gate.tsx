@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import ApplicationChat from "./application-chat";
 
 type AccessStatus =
   | "checking"
@@ -56,8 +57,7 @@ export default function AffiliateAccessGate({
       const {
         data: sessionData,
         error: sessionError,
-      } =
-        await supabase.auth.getSession();
+      } = await supabase.auth.getSession();
 
       if (
         sessionError ||
@@ -86,8 +86,7 @@ export default function AffiliateAccessGate({
       }
 
       if (
-        data?.code ===
-        "AFFILIATE_PENDING"
+        data?.code === "AFFILIATE_PENDING"
       ) {
         setStatus("pending");
         setMessage(
@@ -98,8 +97,7 @@ export default function AffiliateAccessGate({
       }
 
       if (
-        data?.code ===
-        "AFFILIATE_REJECTED"
+        data?.code === "AFFILIATE_REJECTED"
       ) {
         setStatus("rejected");
         setMessage(
@@ -110,8 +108,7 @@ export default function AffiliateAccessGate({
       }
 
       if (
-        data?.code ===
-        "AFFILIATE_SUSPENDED"
+        data?.code === "AFFILIATE_SUSPENDED"
       ) {
         setStatus("suspended");
         setMessage(
@@ -121,9 +118,7 @@ export default function AffiliateAccessGate({
         return;
       }
 
-      if (
-        response.status === 401
-      ) {
+      if (response.status === 401) {
         router.replace("/login");
         return;
       }
@@ -205,6 +200,7 @@ export default function AffiliateAccessGate({
         iconClass="border-amber-400/20 bg-amber-400/10"
         onRefresh={checkAccess}
         onLogout={handleLogout}
+        extra={<ApplicationChat />}
         showRefresh
       />
     );
@@ -286,6 +282,7 @@ function AccessScreen({
   iconClass,
   onRefresh,
   onLogout,
+  extra,
   showRefresh = false,
 }: {
   icon: React.ReactNode;
@@ -296,6 +293,7 @@ function AccessScreen({
   iconClass: string;
   onRefresh?: () => void;
   onLogout: () => void;
+  extra?: React.ReactNode;
   showRefresh?: boolean;
 }) {
   return (
@@ -324,17 +322,18 @@ function AccessScreen({
             {message}
           </p>
 
-          {showRefresh &&
-            onRefresh && (
-              <button
-                type="button"
-                onClick={onRefresh}
-                className="mt-7 inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-400 transition hover:bg-cyan-400/15"
-              >
-                <RefreshCw size={17} />
-                Check Again
-              </button>
-            )}
+          {showRefresh && onRefresh && (
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="mt-7 inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-400 transition hover:bg-cyan-400/15"
+            >
+              <RefreshCw size={17} />
+              Check Again
+            </button>
+          )}
+
+          {extra}
 
           <button
             type="button"
