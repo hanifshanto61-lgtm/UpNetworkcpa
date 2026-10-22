@@ -2,12 +2,8 @@
 
 import type { ReactNode } from "react";
 import { AffiliateNotificationProvider } from "./notification-context";
-import {
-  AffiliateThemeProvider,
-  useAffiliateTheme,
-} from "./theme-context";
+import { AffiliateThemeProvider, useAffiliateTheme } from "./theme-context";
 import AffiliateAccessGate from "./access-gate";
-import AffiliateThemeToggle from "./theme-toggle";
 
 function ColorfulAffiliateLayout({
   children,
@@ -40,7 +36,6 @@ function ColorfulAffiliateLayout({
       </div>
 
       <div className="relative z-0 min-h-screen">
-        <AffiliateThemeToggle />
         {children}
       </div>
     </div>
