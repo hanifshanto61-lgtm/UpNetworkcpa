@@ -195,19 +195,46 @@ function Metric({
   color: string;
   description: string;
 }) {
+  const gradients: Record<string, string> = {
+    "Total Clicks": "from-cyan-600 via-sky-700 to-blue-800",
+    "Unique Visitors": "from-blue-600 via-indigo-700 to-violet-800",
+    Conversions: "from-violet-600 via-purple-700 to-fuchsia-800",
+    "Affiliate Earnings": "from-emerald-600 via-green-700 to-teal-800",
+    "Conversion Rate": "from-amber-500 via-orange-600 to-rose-700",
+    "Clean Clicks": "from-teal-600 via-cyan-700 to-sky-800",
+    "Suspicious Traffic": "from-rose-600 via-red-700 to-pink-800",
+    Countries: "from-indigo-600 via-blue-700 to-cyan-800",
+  };
+
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-5 shadow-lg">
-      <div className={`mb-4 inline-flex rounded-xl p-3 ${color}`}>
+    <div
+      className={`group relative overflow-hidden rounded-2xl
+        border border-white/25 bg-gradient-to-br
+        ${gradients[title] || "from-slate-700 to-slate-900"}
+        p-5 text-white shadow-xl
+        transition-all duration-300
+        hover:-translate-y-1 hover:scale-[1.02]
+        hover:shadow-2xl`}
+    >
+      <div className="pointer-events-none absolute -right-8 -top-8
+        h-28 w-28 rounded-full bg-white/15 blur-2xl
+        transition-all duration-300 group-hover:bg-white/25" />
+
+      <div className="relative mb-4 inline-flex rounded-xl
+        border border-white/25 bg-white/20 p-3 text-white">
         {icon}
       </div>
 
-      <p className="text-sm text-slate-400">{title}</p>
+      <p className="relative text-sm font-medium text-white/90">
+        {title}
+      </p>
 
-      <p className="mt-1 text-2xl font-bold text-white">
+      <p className="relative mt-1 text-2xl font-bold tracking-tight
+        text-white drop-shadow-sm">
         {value}
       </p>
 
-      <p className="mt-2 text-xs text-slate-500">
+      <p className="relative mt-2 text-xs text-white/80">
         {description}
       </p>
     </div>
