@@ -89,9 +89,7 @@ export async function GET(request: NextRequest) {
         const { data, error: profileError } =
           await client
             .from("profiles")
-            .select(
-              "id, full_name, first_name, last_name, email, username, affiliate_id, application_status"
-            )
+            .select("*")
             .in("id", ids);
 
         if (profileError) {
