@@ -70,9 +70,12 @@ function applyFilters(
         '("converted","conversion","approved","paid")'
       );
   } else if (
-    ["unreviewed", "fraud", "investigate", "review-approved"].includes(
-      filter
-    )
+    [
+      "unreviewed",
+      "fraud",
+      "investigate",
+      "review-approved",
+    ].includes(filter)
   ) {
     const reviewStatus =
       filter === "review-approved" ? "approved" : filter;
@@ -84,7 +87,9 @@ function applyFilters(
 }
 
 function validateSearch(value: string) {
-  if (value.length > 200) return "Search value is too long.";
+  if (value.length > 200) {
+    return "Search value is too long.";
+  }
 
   if (value && !/^[a-zA-Z0-9_-]+$/.test(value)) {
     return "Search using a Click ID or Affiliate ID.";
@@ -120,8 +125,10 @@ export async function GET(request: NextRequest) {
       request.nextUrl.searchParams.get("search")?.trim() ?? "";
 
     const filter =
-      request.nextUrl.searchParams.get("filter")?.trim().toLowerCase() ??
-      "all";
+      request.nextUrl.searchParams
+        .get("filter")
+        ?.trim()
+        .toLowerCase() ?? "all";
 
     const validationError = validateSearch(search);
 
@@ -145,8 +152,7 @@ export async function GET(request: NextRequest) {
 
     let { data, error } = await query;
 
-    // Compatibility fallback for deployments where IP/UA columns
-    // are not available yet.
+    // Compatibility fallback if IP/User Agent columns are unavailable.
     if (
       error &&
       ["42703", "PGRST204"].includes(error.code) &&
@@ -168,12 +174,12 @@ export async function GET(request: NextRequest) {
 
       const fallback = await fallbackQuery;
 
-      data =
-        fallback.data?.map((click: Record<string, unknown>) => ({
-          ...click,
-          user_agent: null,
-          ip_address: null,
-        })) ?? null;
+      // FIX: Keep the result type consistent with the main query.
+      data = (fallback.data ?? []).map((click) => ({
+        ...click,
+        user_agent: null,
+        ip_address: null,
+      })) as typeof data;
 
       error = fallback.error;
     }
@@ -208,7 +214,7 @@ export async function GET(request: NextRequest) {
 }
 
 // POST: Review a lead OR approve a conversion.
-// Review actions do not change conversion status or payout.
+// Review actions update review metadata only.
 export async function POST(request: NextRequest) {
   try {
     if (!supabaseAdmin) {
@@ -269,7 +275,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Lead review: update review metadata only.
+    // Lead review: does not change conversion status or payout.
     if (body.action === "review") {
       const reviewStatus = String(
         body.review_status ?? ""
@@ -300,7 +306,8 @@ export async function POST(request: NextRequest) {
         return respond(
           {
             success: false,
-            error: "Review note must be 1000 characters or fewer.",
+            error:
+              "Review note must be 1000 characters or fewer.",
           },
           400
         );
@@ -349,7 +356,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Existing conversion approval flow starts here.
+    // Existing manual conversion approval flow.
     if (
       body.payout === undefined ||
       body.payout === null ||
