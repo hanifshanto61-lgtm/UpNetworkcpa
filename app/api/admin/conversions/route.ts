@@ -25,6 +25,13 @@ const CONVERTED_STATUSES = [
   "paid",
 ];
 
+const REVIEW_STATUSES = [
+  "unreviewed",
+  "approved",
+  "fraud",
+  "investigate",
+] as const;
+
 function respond(
   data: Record<string, unknown>,
   status = 200
@@ -41,7 +48,52 @@ async function verifyAdmin(request: NextRequest) {
   return Boolean(await getAdminSession(request));
 }
 
-// GET: View clicks and conversion history.
+function applyFilters(
+  query: any,
+  search: string,
+  filter: string
+) {
+  if (search) {
+    query = query.or(
+      `click_id.eq.${search},affiliate_id.eq.${search}`
+    );
+  }
+
+  if (filter === "converted") {
+    query = query.in("status", CONVERTED_STATUSES);
+  } else if (filter === "pending") {
+    query = query
+      .is("converted_at", null)
+      .not(
+        "status",
+        "in",
+        '("converted","conversion","approved","paid")'
+      );
+  } else if (
+    ["unreviewed", "fraud", "investigate", "review-approved"].includes(
+      filter
+    )
+  ) {
+    const reviewStatus =
+      filter === "review-approved" ? "approved" : filter;
+
+    query = query.eq("review_status", reviewStatus);
+  }
+
+  return query;
+}
+
+function validateSearch(value: string) {
+  if (value.length > 200) return "Search value is too long.";
+
+  if (value && !/^[a-zA-Z0-9_-]+$/.test(value)) {
+    return "Search using a Click ID or Affiliate ID.";
+  }
+
+  return null;
+}
+
+// GET: Load click/conversion history.
 export async function GET(request: NextRequest) {
   try {
     if (!supabaseAdmin) {
@@ -64,79 +116,65 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const search = request.nextUrl.searchParams
-      .get("search")
-      ?.trim();
+    const search =
+      request.nextUrl.searchParams.get("search")?.trim() ?? "";
 
-    const filter = request.nextUrl.searchParams
-      .get("filter")
-      ?.trim()
-      .toLowerCase();
+    const filter =
+      request.nextUrl.searchParams.get("filter")?.trim().toLowerCase() ??
+      "all";
 
-    let query = supabaseAdmin
-      .from("clicks")
-      .select(
-        "id, click_id, affiliate_id, offer_id, smartlink_id, status, payout, converted_at, created_at, traffic_source, referer, country, device, browser, operating_system, user_agent, ip_address"
-      )
-      .order("created_at", {
-        ascending: false,
-      })
-      .limit(200);
+    const validationError = validateSearch(search);
 
-    if (search) {
-      if (search.length > 200) {
-        return respond(
-          {
-            success: false,
-            error: "Search value is too long.",
-          },
-          400
-        );
-      }
-
-      if (!/^[a-zA-Z0-9_-]+$/.test(search)) {
-        return respond(
-          {
-            success: false,
-            error: "Search using a Click ID or Affiliate ID.",
-          },
-          400
-        );
-      }
-
-      query = query.or(
-        `click_id.eq.${search},affiliate_id.eq.${search}`
+    if (validationError) {
+      return respond(
+        { success: false, error: validationError },
+        400
       );
     }
 
-    if (filter === "converted") {
-      query = query.in("status", CONVERTED_STATUSES);
-    } else if (filter === "pending") {
-      query = query
-        .is("converted_at", null)
-        .not(
-          "status",
-          "in",
-          '("converted","conversion","approved","paid")'
-        );
-    }
+    const selectFields =
+      "id, click_id, affiliate_id, offer_id, smartlink_id, status, payout, converted_at, created_at, traffic_source, referer, country, device, browser, operating_system, user_agent, ip_address, review_status, review_note, reviewed_at, reviewed_by";
+
+    let query = supabaseAdmin
+      .from("clicks")
+      .select(selectFields)
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    query = applyFilters(query, search, filter);
 
     let { data, error } = await query;
 
-    // Keep history accessible while the user_agent migration is being applied.
+    // Compatibility fallback for deployments where IP/UA columns
+    // are not available yet.
     if (
       error &&
       ["42703", "PGRST204"].includes(error.code) &&
       /user_agent|ip_address/.test(error.message)
     ) {
-      const fallback = await query.select(
-        "id, click_id, affiliate_id, offer_id, smartlink_id, status, payout, converted_at, created_at, traffic_source, referer, country, device, browser, operating_system"
+      let fallbackQuery = supabaseAdmin
+        .from("clicks")
+        .select(
+          "id, click_id, affiliate_id, offer_id, smartlink_id, status, payout, converted_at, created_at, traffic_source, referer, country, device, browser, operating_system, review_status, review_note, reviewed_at, reviewed_by"
+        )
+        .order("created_at", { ascending: false })
+        .limit(200);
+
+      fallbackQuery = applyFilters(
+        fallbackQuery,
+        search,
+        filter
       );
-      data = fallback.data?.map((click) => ({
-        ...click,
-        user_agent: null,
-        ip_address: null,
-      })) ?? null;
+
+      const fallback = await fallbackQuery;
+
+      data =
+        fallback.data?.map((click: Record<string, unknown>) => ({
+          ...click,
+          user_agent: null,
+          ip_address: null,
+        })) ?? null;
+
       error = fallback.error;
     }
 
@@ -169,7 +207,8 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST: Approve a conversion and assign payout.
+// POST: Review a lead OR approve a conversion.
+// Review actions do not change conversion status or payout.
 export async function POST(request: NextRequest) {
   try {
     if (!supabaseAdmin) {
@@ -206,10 +245,7 @@ export async function POST(request: NextRequest) {
       }
     } catch {
       return respond(
-        {
-          success: false,
-          error: "Invalid request body.",
-        },
+        { success: false, error: "Invalid request body." },
         400
       );
     }
@@ -221,24 +257,99 @@ export async function POST(request: NextRequest) {
 
     if (!clickId) {
       return respond(
-        {
-          success: false,
-          error: "Click ID is required.",
-        },
+        { success: false, error: "Click ID is required." },
         400
       );
     }
 
     if (clickId.length > 200) {
       return respond(
-        {
-          success: false,
-          error: "Click ID is too long.",
-        },
+        { success: false, error: "Click ID is too long." },
         400
       );
     }
 
+    // Lead review: update review metadata only.
+    if (body.action === "review") {
+      const reviewStatus = String(
+        body.review_status ?? ""
+      )
+        .trim()
+        .toLowerCase();
+
+      if (
+        !REVIEW_STATUSES.includes(
+          reviewStatus as (typeof REVIEW_STATUSES)[number]
+        )
+      ) {
+        return respond(
+          {
+            success: false,
+            error: "Invalid lead review status.",
+          },
+          400
+        );
+      }
+
+      const reviewNote =
+        typeof body.review_note === "string"
+          ? body.review_note.trim()
+          : "";
+
+      if (reviewNote.length > 1000) {
+        return respond(
+          {
+            success: false,
+            error: "Review note must be 1000 characters or fewer.",
+          },
+          400
+        );
+      }
+
+      const { data: reviewed, error: reviewError } =
+        await supabaseAdmin
+          .from("clicks")
+          .update({
+            review_status: reviewStatus,
+            review_note: reviewNote || null,
+            reviewed_at: new Date().toISOString(),
+            reviewed_by: "admin",
+          })
+          .eq("click_id", clickId)
+          .select(
+            "click_id, affiliate_id, review_status, review_note, reviewed_at, reviewed_by"
+          );
+
+      if (reviewError) {
+        console.error("Lead review update error:", reviewError);
+
+        return respond(
+          {
+            success: false,
+            error: "Unable to update lead review.",
+          },
+          500
+        );
+      }
+
+      if (!reviewed || reviewed.length !== 1) {
+        return respond(
+          {
+            success: false,
+            error: "Lead not found or could not be updated.",
+          },
+          404
+        );
+      }
+
+      return respond({
+        success: true,
+        message: "Lead review saved successfully.",
+        lead: reviewed[0],
+      });
+    }
+
+    // Existing conversion approval flow starts here.
     if (
       body.payout === undefined ||
       body.payout === null ||
@@ -275,9 +386,7 @@ export async function POST(request: NextRequest) {
     const { data: click, error: lookupError } =
       await supabaseAdmin
         .from("clicks")
-        .select(
-          "click_id, affiliate_id, status, converted_at"
-        )
+        .select("click_id, affiliate_id, status, converted_at")
         .eq("click_id", clickId)
         .maybeSingle();
 
@@ -298,10 +407,7 @@ export async function POST(request: NextRequest) {
 
     if (!click) {
       return respond(
-        {
-          success: false,
-          error: "Click ID was not found.",
-        },
+        { success: false, error: "Click ID was not found." },
         404
       );
     }
@@ -426,7 +532,7 @@ export async function POST(request: NextRequest) {
     return respond(
       {
         success: false,
-        error: "Unable to approve conversion.",
+        error: "Unable to process the request.",
       },
       500
     );
