@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   Clock3,
+  Download,
   DollarSign,
   RefreshCw,
   Search,
@@ -19,6 +20,7 @@ type Click = {
   click_id: string | null;
   affiliate_id: string | null;
   offer_id: string | null;
+  smartlink_id?: string | null;
   traffic_source?: string | null;
   referer?: string | null;
   country?: string | null;
@@ -31,6 +33,10 @@ type Click = {
   payout: number | string | null;
   converted_at: string | null;
   created_at: string | null;
+  review_status?: string | null;
+  review_note?: string | null;
+  reviewed_at?: string | null;
+  reviewed_by?: string | null;
 };
 
 type IpCheck = {
@@ -49,7 +55,15 @@ type ApiResponse = {
   error?: string;
   message?: string;
   clicks?: Click[];
+  lead?: Partial<Click>;
 };
+
+const REVIEW_OPTIONS = [
+  { value: "unreviewed", label: "Unreviewed" },
+  { value: "approved", label: "Review Approved" },
+  { value: "investigate", label: "Investigate" },
+  { value: "fraud", label: "Fraud Suspected" },
+];
 
 function isConverted(click: Click) {
   return (
@@ -64,7 +78,7 @@ function money(value: number | string | null) {
   return `$${Number(value || 0).toFixed(2)}`;
 }
 
-function dateTime(value: string | null) {
+function dateTime(value: string | null | undefined) {
   if (!value) return "—";
 
   const date = new Date(value);
@@ -72,6 +86,11 @@ function dateTime(value: string | null) {
   return Number.isNaN(date.getTime())
     ? "—"
     : date.toLocaleString("en-US");
+}
+
+function csvCell(value: unknown) {
+  const text = value == null ? "" : String(value);
+  return `"${text.replace(/"/g, '""')}"`;
 }
 
 export default function AdminConversionsPage() {
@@ -84,9 +103,9 @@ export default function AdminConversionsPage() {
   const [clicks, setClicks] = useState<Click[]>([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
-  const [payouts, setPayouts] = useState<
-    Record<string, string>
-  >({});
+  const [payouts, setPayouts] = useState<Record<string, string>>({});
+  const [reviewStatuses, setReviewStatuses] = useState<Record<string, string>>({});
+  const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
 
   const [ipChecks, setIpChecks] = useState<Record<string, IpCheck>>({});
   const [checkingIps, setCheckingIps] = useState<Record<string, boolean>>({});
@@ -106,9 +125,7 @@ export default function AdminConversionsPage() {
     } = await supabase.auth.getSession();
 
     if (sessionError || !session?.access_token) {
-      throw new Error(
-        "Session expired. Please log in again."
-      );
+      throw new Error("Session expired. Please log in again.");
     }
 
     if (!(await verifyAdminAccess(session.access_token))) {
@@ -125,13 +142,9 @@ export default function AdminConversionsPage() {
 
       try {
         const token = await getToken();
-
         const params = new URLSearchParams();
 
-        if (query.trim()) {
-          params.set("search", query.trim());
-        }
-
+        if (query.trim()) params.set("search", query.trim());
         if (selectedFilter !== "all") {
           params.set("filter", selectedFilter);
         }
@@ -139,9 +152,7 @@ export default function AdminConversionsPage() {
         const response = await fetch(
           `/api/admin/conversions?${params.toString()}`,
           {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
+            headers: { Authorization: `Bearer ${token}` },
             cache: "no-store",
           }
         );
@@ -149,12 +160,31 @@ export default function AdminConversionsPage() {
         const result: ApiResponse = await response.json();
 
         if (!response.ok || !result.success) {
-          throw new Error(
-            result.error || "Unable to load conversions."
-          );
+          throw new Error(result.error || "Unable to load conversions.");
         }
 
-        setClicks(result.clicks || []);
+        const records = result.clicks || [];
+        setClicks(records);
+
+        setReviewStatuses((previous) => {
+          const next = { ...previous };
+          for (const click of records) {
+            if (click.click_id && next[click.click_id] === undefined) {
+              next[click.click_id] = click.review_status || "unreviewed";
+            }
+          }
+          return next;
+        });
+
+        setReviewNotes((previous) => {
+          const next = { ...previous };
+          for (const click of records) {
+            if (click.click_id && next[click.click_id] === undefined) {
+              next[click.click_id] = click.review_note || "";
+            }
+          }
+          return next;
+        });
       } catch (err) {
         setError(
           err instanceof Error
@@ -174,7 +204,6 @@ export default function AdminConversionsPage() {
     async function initialize() {
       try {
         await getToken();
-
         if (!active) return;
 
         setChecking(false);
@@ -193,6 +222,7 @@ export default function AdminConversionsPage() {
 
   async function checkIp(click: Click) {
     const clickId = click.click_id;
+
     if (!clickId || !click.ip_address || checkingIps[clickId]) return;
 
     setCheckingIps((previous) => ({ ...previous, [clickId]: true }));
@@ -209,30 +239,100 @@ export default function AdminConversionsPage() {
         body: JSON.stringify({ click_id: clickId }),
         cache: "no-store",
       });
+
       const result = await response.json();
+
       if (!response.ok || !result.success || !result.check) {
         throw new Error(result.error || "IP check unavailable.");
       }
-      setIpChecks((previous) => ({ ...previous, [clickId]: result.check }));
+
+      setIpChecks((previous) => ({
+        ...previous,
+        [clickId]: result.check,
+      }));
     } catch (err) {
       setIpErrors((previous) => ({
         ...previous,
-        [clickId]: err instanceof Error ? err.message : "IP check unavailable.",
+        [clickId]:
+          err instanceof Error ? err.message : "IP check unavailable.",
       }));
     } finally {
-      setCheckingIps((previous) => ({ ...previous, [clickId]: false }));
+      setCheckingIps((previous) => ({
+        ...previous,
+        [clickId]: false,
+      }));
+    }
+  }
+
+  async function saveReview(click: Click) {
+    const clickId = click.click_id;
+    if (!clickId || savingId) return;
+
+    const reviewStatus = reviewStatuses[clickId] || "unreviewed";
+    const reviewNote = reviewNotes[clickId] || "";
+
+    if (reviewNote.length > 1000) {
+      setError("Review note must be 1000 characters or fewer.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Save lead review?\n\nClick ID: ${clickId}\nAffiliate: ${click.affiliate_id || "Unknown"}\nReview: ${reviewStatus}`
+    );
+
+    if (!confirmed) return;
+
+    setSavingId(clickId);
+    setError("");
+    setSuccess("");
+
+    try {
+      const token = await getToken();
+      const response = await fetch("/api/admin/conversions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "review",
+          click_id: clickId,
+          review_status: reviewStatus,
+          review_note: reviewNote,
+        }),
+      });
+
+      const result: ApiResponse = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Unable to save lead review.");
+      }
+
+      setSuccess(`Review saved for Click ID ${clickId}.`);
+      await loadClicks(search, filter);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Unable to save lead review."
+      );
+    } finally {
+      setSavingId(null);
     }
   }
 
   async function approveConversion(click: Click) {
-    if (!click.click_id || savingId) return;
+    const clickId = click.click_id;
+    if (!clickId || savingId) return;
 
-    const rawPayout = payouts[click.click_id];
+    if ((reviewStatuses[clickId] || click.review_status) === "fraud") {
+      setError(
+        "This lead is marked as suspected fraud. Review it before approving."
+      );
+      return;
+    }
 
-    if (
-      rawPayout === undefined ||
-      rawPayout.trim() === ""
-    ) {
+    const rawPayout = payouts[clickId];
+
+    if (rawPayout === undefined || rawPayout.trim() === "") {
       setError("Please enter a payout amount.");
       return;
     }
@@ -252,39 +352,30 @@ export default function AdminConversionsPage() {
     }
 
     const confirmed = window.confirm(
-      `Approve conversion?\n\nClick ID: ${click.click_id}\nAffiliate: ${click.affiliate_id}\nPayout: ${money(payout)}\n\nThis action cannot be undone here.`
+      `Approve conversion?\n\nClick ID: ${clickId}\nAffiliate: ${click.affiliate_id}\nPayout: ${money(payout)}\n\nThis action cannot be undone here.`
     );
 
     if (!confirmed) return;
 
-    setSavingId(click.click_id);
+    setSavingId(clickId);
     setError("");
     setSuccess("");
 
     try {
       const token = await getToken();
-
-      const response = await fetch(
-        "/api/admin/conversions",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            click_id: click.click_id,
-            payout,
-          }),
-        }
-      );
+      const response = await fetch("/api/admin/conversions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ click_id: clickId, payout }),
+      });
 
       const result: ApiResponse = await response.json();
 
       if (!response.ok || !result.success) {
-        throw new Error(
-          result.error || "Conversion approval failed."
-        );
+        throw new Error(result.error || "Conversion approval failed.");
       }
 
       setSuccess(
@@ -294,23 +385,100 @@ export default function AdminConversionsPage() {
       await loadClicks(search, filter);
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "Conversion approval failed."
+        err instanceof Error ? err.message : "Conversion approval failed."
       );
     } finally {
       setSavingId(null);
     }
   }
 
+  function downloadCsv() {
+    if (!clicks.length) {
+      setError("There are no records to download.");
+      return;
+    }
+
+    const headers = [
+      "Click ID",
+      "Affiliate ID",
+      "Offer ID",
+      "Click Status",
+      "Payout",
+      "IP Address",
+      "User Agent",
+      "Country",
+      "Traffic Source",
+      "Referrer",
+      "Device",
+      "Browser",
+      "Operating System",
+      "Click Date",
+      "Converted At",
+      "Review Status",
+      "Review Note",
+      "Reviewed At",
+      "Reviewed By",
+    ];
+
+    const rows = clicks.map((click) => [
+      click.click_id,
+      click.affiliate_id,
+      click.offer_id,
+      click.status,
+      click.payout,
+      click.ip_address,
+      click.user_agent,
+      click.country,
+      click.traffic_source,
+      click.referer,
+      click.device,
+      click.browser,
+      click.operating_system,
+      click.created_at,
+      click.converted_at,
+      click.review_status || "unreviewed",
+      click.review_note,
+      click.reviewed_at,
+      click.reviewed_by,
+    ]);
+
+    const csv = [
+      headers.map(csvCell).join(","),
+      ...rows.map((row) => row.map(csvCell).join(",")),
+    ].join("\r\n");
+
+    const blob = new Blob(["\uFEFF" + csv], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    const safeAffiliate = search.trim()
+      ? search.trim().replace(/[^a-zA-Z0-9_-]/g, "_")
+      : "all";
+
+    anchor.href = url;
+    anchor.download = `upnetwork-lead-report-${safeAffiliate}-${new Date()
+      .toISOString()
+      .slice(0, 10)}.csv`;
+
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
   const totalConversions = clicks.filter(isConverted).length;
 
   const totalEarnings = clicks.reduce(
     (sum, click) =>
-      sum +
-      (isConverted(click) ? Number(click.payout || 0) : 0),
+      sum + (isConverted(click) ? Number(click.payout || 0) : 0),
     0
   );
+
+  const fraudCount = clicks.filter(
+    (click) => (click.review_status || "unreviewed") === "fraud"
+  ).length;
 
   if (checking) {
     return (
@@ -340,92 +508,92 @@ export default function AdminConversionsPage() {
               <ShieldCheck className="h-4 w-4" />
               UpNetwork CPA Admin
             </div>
-
             <h1 className="text-3xl font-extrabold tracking-tight">
               Manage Conversions
             </h1>
-
             <p className="mt-2 text-sm text-slate-500">
-              Review clicks, approve conversions, and manage affiliate payouts.
+              Review affiliate leads, inspect IP/User Agent, and export reports.
             </p>
           </div>
 
-          <button
-            onClick={() => loadClicks(search, filter)}
-            disabled={loading}
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            <RefreshCw
-              className={`h-4 w-4 ${
-                loading ? "animate-spin" : ""
-              }`}
-            />
-            Refresh
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={downloadCsv}
+              disabled={loading || clicks.length === 0}
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              <Download className="h-4 w-4" />
+              Download CSV
+            </button>
+            <button
+              onClick={() => void loadClicks(search, filter)}
+              disabled={loading}
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+              />
+              Refresh
+            </button>
+          </div>
         </div>
 
-        <div className="mb-7 grid gap-4 sm:grid-cols-3">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="mb-3 flex items-center gap-2 text-blue-600">
+        <div className="mb-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 shadow-sm">
+            <div className="mb-3 flex items-center gap-2 text-blue-700">
               <Search className="h-5 w-5" />
-              <span className="text-sm font-semibold">
-                Loaded Clicks
-              </span>
+              <span className="text-sm font-semibold">Loaded Clicks</span>
             </div>
-            <p className="text-3xl font-extrabold">
-              {clicks.length}
-            </p>
+            <p className="text-3xl font-extrabold">{clicks.length}</p>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="mb-3 flex items-center gap-2 text-emerald-600">
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
+            <div className="mb-3 flex items-center gap-2 text-emerald-700">
               <CheckCircle2 className="h-5 w-5" />
-              <span className="text-sm font-semibold">
-                Conversions
-              </span>
+              <span className="text-sm font-semibold">Conversions</span>
             </div>
-            <p className="text-3xl font-extrabold">
-              {totalConversions}
-            </p>
+            <p className="text-3xl font-extrabold">{totalConversions}</p>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="mb-3 flex items-center gap-2 text-violet-600">
+          <div className="rounded-2xl border border-violet-200 bg-violet-50 p-5 shadow-sm">
+            <div className="mb-3 flex items-center gap-2 text-violet-700">
               <DollarSign className="h-5 w-5" />
-              <span className="text-sm font-semibold">
-                Affiliate Earnings
-              </span>
+              <span className="text-sm font-semibold">Affiliate Earnings</span>
             </div>
-            <p className="text-3xl font-extrabold">
-              {money(totalEarnings)}
-            </p>
+            <p className="text-3xl font-extrabold">{money(totalEarnings)}</p>
+          </div>
+
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-5 shadow-sm">
+            <div className="mb-3 flex items-center gap-2 text-red-700">
+              <ShieldCheck className="h-5 w-5" />
+              <span className="text-sm font-semibold">Fraud Flagged</span>
+            </div>
+            <p className="text-3xl font-extrabold">{fraudCount}</p>
           </div>
         </div>
 
         <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="grid gap-4 md:grid-cols-[1fr_180px_auto]">
+          <div className="grid gap-4 md:grid-cols-[1fr_220px_auto_auto]">
             <div>
               <label className="mb-2 block text-sm font-bold">
                 Search Click ID or Affiliate ID
               </label>
               <input
                 value={search}
-                onChange={(event) =>
-                  setSearch(event.target.value)
-                }
+                onChange={(event) => setSearch(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
                     void loadClicks(search, filter);
                   }
                 }}
-                placeholder="Enter Click ID or Affiliate ID"
+                placeholder="Enter an Affiliate ID for its report"
                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500"
               />
             </div>
 
             <div>
               <label className="mb-2 block text-sm font-bold">
-                Status Filter
+                Filter
               </label>
               <select
                 value={filter}
@@ -437,18 +605,36 @@ export default function AdminConversionsPage() {
                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm"
               >
                 <option value="all">All Clicks</option>
-                <option value="pending">Pending</option>
+                <option value="pending">Pending Conversion</option>
                 <option value="converted">Converted</option>
+                <option value="unreviewed">Unreviewed Leads</option>
+                <option value="fraud">Fraud Suspected</option>
+                <option value="investigate">Investigate</option>
+                <option value="review-approved">Review Approved</option>
               </select>
             </div>
 
             <div className="flex items-end">
               <button
-                onClick={() => loadClicks(search, filter)}
+                onClick={() => void loadClicks(search, filter)}
                 disabled={loading}
                 className="w-full rounded-xl bg-slate-900 px-6 py-3 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50"
               >
                 Search
+              </button>
+            </div>
+
+            <div className="flex items-end">
+              <button
+                onClick={() => {
+                  setSearch("");
+                  setFilter("all");
+                  void loadClicks("", "all");
+                }}
+                disabled={loading}
+                className="w-full rounded-xl border border-slate-300 px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Clear
               </button>
             </div>
           </div>
@@ -474,11 +660,10 @@ export default function AdminConversionsPage() {
 
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 px-5 py-4">
-            <h2 className="text-lg font-bold">
-              Clicks & Conversion History
-            </h2>
+            <h2 className="text-lg font-bold">Affiliate Clicks & Leads</h2>
             <p className="mt-1 text-xs text-slate-500">
-              Showing up to 200 matching records. Summary cards reflect loaded records only.
+              Showing up to 200 matching records. CSV exports the records currently shown.
+              Review flags do not automatically change payouts or conversion status.
             </p>
           </div>
 
@@ -492,32 +677,32 @@ export default function AdminConversionsPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1850px] text-left text-sm">
+              <table className="w-full min-w-[2200px] text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase text-slate-500">
                   <tr>
-                    <th className="px-5 py-4">Click ID</th>
-                    <th className="px-5 py-4">Affiliate</th>
-                    <th className="px-5 py-4">IP Address / Check IP</th>
-                    <th className="px-5 py-4">Traffic</th>
-                    <th className="px-5 py-4">Device / Browser</th>
-                    <th className="px-5 py-4">User Agent</th>
-                    <th className="px-5 py-4">Status</th>
-                    <th className="px-5 py-4">Click Date</th>
-                    <th className="px-5 py-4">Converted</th>
-                    <th className="px-5 py-4">Payout</th>
-                    <th className="px-5 py-4">Action</th>
+                    <th className="px-4 py-4">Click ID</th>
+                    <th className="px-4 py-4">Affiliate ID</th>
+                    <th className="px-4 py-4">IP / Check IP</th>
+                    <th className="px-4 py-4">Traffic Details</th>
+                    <th className="px-4 py-4">User Agent</th>
+                    <th className="px-4 py-4">Conversion</th>
+                    <th className="px-4 py-4">Review Status</th>
+                    <th className="px-4 py-4">Review Note</th>
+                    <th className="px-4 py-4">Payout</th>
+                    <th className="px-4 py-4">Actions</th>
                   </tr>
                 </thead>
 
                 <tbody className="divide-y divide-slate-100">
                   {clicks.map((click, index) => {
-                    const converted = isConverted(click);
                     const clickId = click.click_id || "";
+                    const converted = isConverted(click);
                     const ipCheck = ipChecks[clickId];
-                    const flag = (value: boolean | null) => value === null ? "Unknown" : String(value);
-                    const status = (
-                      click.status || ""
-                    ).toLowerCase();
+                    const status = (click.status || "").toLowerCase();
+                    const reviewStatus =
+                      reviewStatuses[clickId] ||
+                      click.review_status ||
+                      "unreviewed";
 
                     const eligible =
                       !converted &&
@@ -525,23 +710,33 @@ export default function AdminConversionsPage() {
                       Boolean(click.affiliate_id) &&
                       ["", "click", "pending"].includes(status);
 
+                    const flag = (value: boolean | null) =>
+                      value === null ? "Unknown" : String(value);
+
                     return (
                       <tr
                         key={click.id || clickId || index}
-                        className="hover:bg-slate-50"
+                        className="align-top hover:bg-slate-50"
                       >
-                        <td className="max-w-[200px] break-all px-5 py-4 font-mono text-xs">
+                        <td className="max-w-[190px] break-all px-4 py-4 font-mono text-xs">
                           {clickId || "—"}
+                          <p className="mt-2 text-slate-400">
+                            {dateTime(click.created_at)}
+                          </p>
                         </td>
 
-                        <td className="px-5 py-4 font-semibold">
+                        <td className="px-4 py-4 font-semibold">
                           {click.affiliate_id || "—"}
+                          <p className="mt-2 text-xs font-normal text-slate-500">
+                            Offer: {click.offer_id || "—"}
+                          </p>
                         </td>
 
-                        <td className="min-w-[250px] max-w-[300px] px-5 py-4 text-xs">
+                        <td className="min-w-[230px] max-w-[280px] px-4 py-4 text-xs">
                           <p className="break-all font-mono font-semibold">
                             {click.ip_address || "Not recorded"}
                           </p>
+
                           {click.ip_address && clickId && (
                             <button
                               onClick={() => void checkIp(click)}
@@ -551,44 +746,58 @@ export default function AdminConversionsPage() {
                               {checkingIps[clickId] ? "Checking..." : "Check IP"}
                             </button>
                           )}
+
                           {ipErrors[clickId] && (
-                            <p role="alert" className="mt-2 text-red-600">{ipErrors[clickId]}</p>
+                            <p role="alert" className="mt-2 text-red-600">
+                              {ipErrors[clickId]}
+                            </p>
                           )}
+
                           {ipCheck && (
-                            <div className="mt-3 space-y-1 text-slate-600" role="status">
-                              <p className="font-semibold">Risk score: {ipCheck.risk === null ? "Unknown" : `${ipCheck.risk}/100`}</p>
+                            <div className="mt-3 space-y-1 text-slate-600">
+                              <p className="font-semibold">
+                                Risk: {ipCheck.risk === null ? "Unknown" : `${ipCheck.risk}/100`}
+                              </p>
                               <p>Proxy: {flag(ipCheck.proxy)} · VPN: {flag(ipCheck.vpn)}</p>
                               <p>Tor: {flag(ipCheck.tor)} · Hosting: {flag(ipCheck.hosting)}</p>
                               <p>Anonymous: {flag(ipCheck.anonymous)}</p>
-                              <p className="text-slate-400">Checked: {dateTime(ipCheck.checked_at)}</p>
-                              <p className="text-slate-400">proxycheck.io · Current reputation; not proof of fraud or a genuine visitor.</p>
+                              <p className="text-slate-400">
+                                Checked: {dateTime(ipCheck.checked_at)}
+                              </p>
+                              <p className="text-slate-400">
+                                IP reputation is a signal, not proof of fraud.
+                              </p>
                             </div>
                           )}
                         </td>
 
-                        <td className="min-w-[200px] max-w-[260px] px-5 py-4 text-xs">
-                          <p className="break-words font-semibold">
+                        <td className="min-w-[200px] max-w-[260px] px-4 py-4 text-xs">
+                          <p className="font-semibold">
                             {click.traffic_source || "Unknown"}
                           </p>
-                          <p className="mt-1 text-slate-500">
+                          <p className="mt-1">
                             Country: {click.country || "Unknown"}
                           </p>
-                          <details className="mt-2 text-slate-500">
-                            <summary className="cursor-pointer">Referrer</summary>
+                          <p className="mt-1">
+                            Device: {click.device || "Unknown"}
+                          </p>
+                          <p className="mt-1">
+                            Browser: {click.browser || "Unknown"}
+                          </p>
+                          <p className="mt-1">
+                            OS: {click.operating_system || "Unknown"}
+                          </p>
+                          <details className="mt-2">
+                            <summary className="cursor-pointer font-semibold">
+                              Referrer
+                            </summary>
                             <p className="mt-1 break-all">
                               {click.referer || "Not recorded"}
                             </p>
                           </details>
                         </td>
 
-                        <td className="min-w-[150px] px-5 py-4 text-xs">
-                          <p className="font-semibold">{click.device || "Unknown"}</p>
-                          <p className="mt-1 text-slate-500">
-                            {click.browser || "Unknown"} / {click.operating_system || "Unknown"}
-                          </p>
-                        </td>
-
-                        <td className="min-w-[240px] max-w-[320px] px-5 py-4 text-xs">
+                        <td className="min-w-[240px] max-w-[320px] px-4 py-4 text-xs">
                           {click.user_agent ? (
                             <details>
                               <summary className="cursor-pointer font-semibold text-blue-600">
@@ -603,7 +812,7 @@ export default function AdminConversionsPage() {
                           )}
                         </td>
 
-                        <td className="px-5 py-4">
+                        <td className="min-w-[150px] px-4 py-4">
                           {converted ? (
                             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
                               <CheckCircle2 className="h-3.5 w-3.5" />
@@ -615,17 +824,54 @@ export default function AdminConversionsPage() {
                               {click.status || "Pending"}
                             </span>
                           )}
+                          <p className="mt-2 text-xs text-slate-500">
+                            Converted: {dateTime(click.converted_at)}
+                          </p>
                         </td>
 
-                        <td className="px-5 py-4 text-xs text-slate-500">
-                          {dateTime(click.created_at)}
+                        <td className="min-w-[190px] px-4 py-4">
+                          <select
+                            value={reviewStatus}
+                            onChange={(event) =>
+                              setReviewStatuses((previous) => ({
+                                ...previous,
+                                [clickId]: event.target.value,
+                              }))
+                            }
+                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold"
+                          >
+                            {REVIEW_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+
+                          <p className="mt-2 text-xs text-slate-500">
+                            Saved: {dateTime(click.reviewed_at)}
+                          </p>
                         </td>
 
-                        <td className="px-5 py-4 text-xs text-slate-500">
-                          {dateTime(click.converted_at)}
+                        <td className="min-w-[230px] px-4 py-4">
+                          <textarea
+                            value={reviewNotes[clickId] ?? click.review_note ?? ""}
+                            maxLength={1000}
+                            rows={3}
+                            placeholder="Reason / investigation notes..."
+                            onChange={(event) =>
+                              setReviewNotes((previous) => ({
+                                ...previous,
+                                [clickId]: event.target.value,
+                              }))
+                            }
+                            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs outline-none focus:border-blue-500"
+                          />
+                          <p className="mt-1 text-right text-xs text-slate-400">
+                            {(reviewNotes[clickId] ?? click.review_note ?? "").length}/1000
+                          </p>
                         </td>
 
-                        <td className="px-5 py-4">
+                        <td className="min-w-[130px] px-4 py-4">
                           {converted ? (
                             <span className="font-bold text-emerald-700">
                               {money(click.payout)}
@@ -651,25 +897,33 @@ export default function AdminConversionsPage() {
                           )}
                         </td>
 
-                        <td className="px-5 py-4">
+                        <td className="min-w-[170px] px-4 py-4">
+                          <button
+                            onClick={() => void saveReview(click)}
+                            disabled={savingId !== null || !clickId}
+                            className="mb-2 w-full rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700 disabled:opacity-50"
+                          >
+                            {savingId === clickId ? "Saving..." : "Save Review"}
+                          </button>
+
                           {eligible ? (
                             <button
-                              onClick={() =>
-                                approveConversion(click)
-                              }
-                              disabled={savingId !== null}
-                              className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+                              onClick={() => void approveConversion(click)}
+                              disabled={savingId !== null || reviewStatus === "fraud"}
+                              className="w-full rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
                             >
-                              {savingId === clickId
-                                ? "Approving..."
-                                : "Approve"}
+                              {savingId === clickId ? "Processing..." : "Approve Conversion"}
                             </button>
                           ) : (
                             <span className="text-xs text-slate-400">
-                              {converted
-                                ? "Completed"
-                                : "Unavailable"}
+                              {converted ? "Completed" : "Unavailable"}
                             </span>
+                          )}
+
+                          {reviewStatus === "fraud" && (
+                            <p className="mt-2 text-xs font-semibold text-red-600">
+                              Fraud flag blocks approval in this page.
+                            </p>
                           )}
                         </td>
                       </tr>
