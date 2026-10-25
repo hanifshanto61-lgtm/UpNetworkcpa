@@ -88,6 +88,12 @@ const menuItems: MenuItem[] = [
     available: true,
   },
   {
+    label: "Affiliate Messages",
+    icon: MessageCircle,
+    action: "/admin/affiliate-messages",
+    available: true,
+  },
+  {
     label: "Smart Links",
     icon: Link2,
     action: "/admin/smart-links",
