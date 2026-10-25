@@ -154,7 +154,13 @@ const mainMenu = [
     action: "payments",
     feature: "payments",
   },
-];
+  {
+  label: "Messages",
+  icon: MessageCircle,
+  action: "messages",
+  feature: "messages",
+  },
+  ];
 
 export default function AffiliatePage() {
   const router = useRouter();
@@ -385,6 +391,7 @@ export default function AffiliatePage() {
       postback: "/affiliate/postback",
       referrals: "/affiliate/referrals",
       payments: "/affiliate/payments",
+      messages: "/affiliate/messages",
     };
 
     const route = routes[action];
