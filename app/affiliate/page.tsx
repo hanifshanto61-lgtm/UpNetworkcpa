@@ -214,7 +214,44 @@ const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
   useEffect(() => {
     loadDashboard();
   }, []);
+ useEffect(() => {
+    let active = true;
 
+    async function loadUnreadMessages() {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+
+        if (!token) return;
+
+        const response = await fetch("/api/affiliate/admin-messages", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          cache: "no-store",
+        });
+
+        const result = await response.json();
+
+        if (active && response.ok && result.success) {
+          setUnreadMessagesCount(Number(result.unreadCount) || 0);
+        }
+      } catch (error) {
+        console.error("Unread messages check failed:", error);
+      }
+    }
+
+    void loadUnreadMessages();
+
+    const timer = setInterval(() => {
+      void loadUnreadMessages();
+    }, 10000);
+
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, []);
   // Refresh data every 10 seconds without reloading the page.
   useAutoRefresh(() => loadDashboard(false), 10000);
 
