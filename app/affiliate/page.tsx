@@ -1446,11 +1446,15 @@ const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
                           <Icon
                             size={18}
                           />
-
+       
                           <span className="flex-1">
                             {item.label}
                           </span>
-
+      {item.action === "messages" && unreadMessagesCount > 0 && (
+  <span className="flex min-h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-xs font-bold text-white shadow-md">
+    {unreadMessagesCount > 99 ? "99+" : unreadMessagesCount}
+  </span>
+)}
                           {!active && (
                             <ChevronRight
                               size={15}
