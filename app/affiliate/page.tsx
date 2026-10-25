@@ -204,7 +204,7 @@ export default function AffiliatePage() {
 
   const [panelSettings, setPanelSettings] =
     useState<PanelSettings>(DEFAULT_PANEL_SETTINGS);
-
+const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
   const dark = theme === "dark";
 
   function featureEnabled(feature: string): boolean {
