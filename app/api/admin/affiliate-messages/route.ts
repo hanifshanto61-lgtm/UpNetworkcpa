@@ -27,36 +27,45 @@ function reply(
   });
 }
 
-// Load affiliates for the admin message composer.
+// Load affiliates or sent messages for the admin panel.
 export async function GET(request: NextRequest) {
   try {
     const admin = await getAdminSession(request);
 
     if (!admin) {
-      return reply({ success: false, error: "Unauthorized." }, 401);
+      return reply(
+        { success: false, error: "Unauthorized." },
+        401
+      );
     }
 
     if (!db) {
       return reply(
-        { success: false, error: "Supabase server configuration missing." },
+        {
+          success: false,
+          error: "Supabase server configuration missing.",
+        },
         500
       );
     }
-// Load sent messages when requested by the admin message manager.
+
+    // Load sent messages when requested by the admin message manager.
     if (request.nextUrl.searchParams.get("view") === "messages") {
-      const { data: messages, error: messagesError } = await db
+      const { data: messages, error } = await db
         .from("affiliate_admin_messages")
         .select("id, subject, message, recipient_type, created_at")
         .order("created_at", { ascending: false })
         .limit(500);
 
-      if (messagesError) throw messagesError;
+      if (error) throw error;
 
       return reply({
         success: true,
         messages: messages || [],
       });
     }
+
+    // Keep the existing affiliate list behavior.
     const { data: profiles, error } = await db
       .from("profiles")
       .select("*")
@@ -71,32 +80,41 @@ export async function GET(request: NextRequest) {
     if (rolesError) throw rolesError;
 
     const adminIds = new Set(
-      (adminRoles || []).map((row: any) => String(row.user_id))
+      (adminRoles || []).map((row: any) =>
+        String(row.user_id)
+      )
     );
 
     const affiliates = (profiles || [])
-      .filter((profile: any) => profile.id && !adminIds.has(String(profile.id)))
+      .filter(
+        (profile: any) =>
+          profile.id &&
+          !adminIds.has(String(profile.id))
+      )
       .map((profile: any) => ({
         id: String(profile.id),
         affiliateId: String(profile.affiliate_id || ""),
         name: String(
           profile.full_name ||
-          profile.name ||
-          profile.username ||
-          "Affiliate"
+            profile.name ||
+            profile.username ||
+            "Affiliate"
         ),
         email: String(profile.email || ""),
         status: String(profile.status || ""),
       }));
 
-    return reply({ success: true, affiliates });
+    return reply({
+      success: true,
+      affiliates,
+    });
   } catch (error: any) {
     console.error("Admin affiliate messages GET:", error);
 
     return reply(
       {
         success: false,
-        error: error?.message || "Unable to load affiliates.",
+        error: error?.message || "Unable to load data.",
       },
       500
     );
@@ -109,12 +127,18 @@ export async function POST(request: NextRequest) {
     const admin = await getAdminSession(request);
 
     if (!admin) {
-      return reply({ success: false, error: "Unauthorized." }, 401);
+      return reply(
+        { success: false, error: "Unauthorized." },
+        401
+      );
     }
 
     if (!db) {
       return reply(
-        { success: false, error: "Supabase server configuration missing." },
+        {
+          success: false,
+          error: "Supabase server configuration missing.",
+        },
         500
       );
     }
@@ -122,13 +146,18 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     const subject =
-      typeof body.subject === "string" ? body.subject.trim() : "";
+      typeof body.subject === "string"
+        ? body.subject.trim()
+        : "";
 
     const message =
-      typeof body.message === "string" ? body.message.trim() : "";
+      typeof body.message === "string"
+        ? body.message.trim()
+        : "";
 
     const recipientType =
-      body.recipientType === "single" || body.recipientType === "all"
+      body.recipientType === "single" ||
+      body.recipientType === "all"
         ? body.recipientType
         : "";
 
@@ -139,21 +168,32 @@ export async function POST(request: NextRequest) {
 
     if (!subject || subject.length > 160) {
       return reply(
-        { success: false, error: "Subject is required (maximum 160 characters)." },
+        {
+          success: false,
+          error:
+            "Subject is required (maximum 160 characters).",
+        },
         400
       );
     }
 
     if (!message || message.length > 10000) {
       return reply(
-        { success: false, error: "Message is required (maximum 10,000 characters)." },
+        {
+          success: false,
+          error:
+            "Message is required (maximum 10,000 characters).",
+        },
         400
       );
     }
 
     if (!recipientType) {
       return reply(
-        { success: false, error: "Choose all affiliates or one affiliate." },
+        {
+          success: false,
+          error: "Choose all affiliates or one affiliate.",
+        },
         400
       );
     }
@@ -163,7 +203,10 @@ export async function POST(request: NextRequest) {
     if (recipientType === "single") {
       if (!affiliateUserId) {
         return reply(
-          { success: false, error: "Select an affiliate." },
+          {
+            success: false,
+            error: "Select an affiliate.",
+          },
           400
         );
       }
@@ -177,20 +220,28 @@ export async function POST(request: NextRequest) {
       if (error) throw error;
 
       if (!profile) {
-        return reply({ success: false, error: "Affiliate not found." }, 404);
+        return reply(
+          { success: false, error: "Affiliate not found." },
+          404
+        );
       }
 
-      const { data: adminRole, error: adminRoleError } = await db
-        .from("admin_roles")
-        .select("user_id")
-        .eq("user_id", affiliateUserId)
-        .maybeSingle();
+      const { data: adminRole, error: adminRoleError } =
+        await db
+          .from("admin_roles")
+          .select("user_id")
+          .eq("user_id", affiliateUserId)
+          .maybeSingle();
 
       if (adminRoleError) throw adminRoleError;
 
       if (adminRole) {
         return reply(
-          { success: false, error: "Admin accounts cannot be message recipients." },
+          {
+            success: false,
+            error:
+              "Admin accounts cannot be message recipients.",
+          },
           400
         );
       }
@@ -204,23 +255,33 @@ export async function POST(request: NextRequest) {
 
       if (error) throw error;
 
-      const { data: adminRoles, error: rolesError } = await db
-        .from("admin_roles")
-        .select("user_id");
+      const { data: adminRoles, error: rolesError } =
+        await db
+          .from("admin_roles")
+          .select("user_id");
 
       if (rolesError) throw rolesError;
 
       const adminIds = new Set(
-        (adminRoles || []).map((row: any) => String(row.user_id))
+        (adminRoles || []).map((row: any) =>
+          String(row.user_id)
+        )
       );
 
       recipientIds = (profiles || [])
-        .filter((profile: any) => profile.id && !adminIds.has(String(profile.id)))
+        .filter(
+          (profile: any) =>
+            profile.id &&
+            !adminIds.has(String(profile.id))
+        )
         .map((profile: any) => String(profile.id));
     }
 
     if (!recipientIds.length) {
-      return reply({ success: false, error: "No recipients found." }, 400);
+      return reply(
+        { success: false, error: "No recipients found." },
+        400
+      );
     }
 
     const { data: created, error: createError } = await db
@@ -261,6 +322,91 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         error: error?.message || "Unable to send message.",
+      },
+      500
+    );
+  }
+}
+
+// Delete an admin message for all affiliates.
+export async function DELETE(request: NextRequest) {
+  try {
+    const admin = await getAdminSession(request);
+
+    if (!admin) {
+      return reply(
+        { success: false, error: "Unauthorized." },
+        401
+      );
+    }
+
+    if (!db) {
+      return reply(
+        {
+          success: false,
+          error: "Supabase server configuration missing.",
+        },
+        500
+      );
+    }
+
+    const body = await request.json();
+
+    const messageId =
+      typeof body.messageId === "string"
+        ? body.messageId.trim()
+        : "";
+
+    if (!messageId) {
+      return reply(
+        {
+          success: false,
+          error: "Message ID is required.",
+        },
+        400
+      );
+    }
+
+    // Verify the message exists before deleting recipients.
+    const { data: existing, error: lookupError } = await db
+      .from("affiliate_admin_messages")
+      .select("id")
+      .eq("id", messageId)
+      .maybeSingle();
+
+    if (lookupError) throw lookupError;
+
+    if (!existing) {
+      return reply(
+        { success: false, error: "Message not found." },
+        404
+      );
+    }
+
+    // Remove recipient records for every affiliate.
+    const { error: recipientsError } = await db
+      .from("affiliate_admin_message_recipients")
+      .delete()
+      .eq("message_id", messageId);
+
+    if (recipientsError) throw recipientsError;
+
+    // Delete the original admin message.
+    const { error: deleteError } = await db
+      .from("affiliate_admin_messages")
+      .delete()
+      .eq("id", messageId);
+
+    if (deleteError) throw deleteError;
+
+    return reply({ success: true });
+  } catch (error: any) {
+    console.error("Admin affiliate messages DELETE:", error);
+
+    return reply(
+      {
+        success: false,
+        error: error?.message || "Unable to delete message.",
       },
       500
     );
