@@ -121,7 +121,6 @@ export async function PATCH(request: NextRequest) {
     }
 
     const body = await request.json();
-
     const recipientId =
       typeof body.recipientId === "string"
         ? body.recipientId.trim()
@@ -139,6 +138,7 @@ export async function PATCH(request: NextRequest) {
       .update({ read_at: new Date().toISOString() })
       .eq("id", recipientId)
       .eq("affiliate_user_id", auth.userId)
+      .is("dismissed_at", null)
       .select("id")
       .maybeSingle();
 
@@ -159,6 +159,64 @@ export async function PATCH(request: NextRequest) {
       {
         success: false,
         error: error?.message || "Unable to mark message as read.",
+      },
+      500
+    );
+  }
+}
+
+// DELETE: Hide only this message recipient's notification.
+// The original admin message and other recipients remain untouched.
+export async function DELETE(request: NextRequest) {
+  try {
+    const auth = await authenticate(request);
+
+    if (!auth) {
+      return reply(
+        { success: false, error: "Authentication required." },
+        401
+      );
+    }
+
+    const body = await request.json();
+    const recipientId =
+      typeof body.recipientId === "string"
+        ? body.recipientId.trim()
+        : "";
+
+    if (!recipientId) {
+      return reply(
+        { success: false, error: "Message recipient ID is required." },
+        400
+      );
+    }
+
+    const { data, error } = await auth.client
+      .from("affiliate_admin_message_recipients")
+      .update({ dismissed_at: new Date().toISOString() })
+      .eq("id", recipientId)
+      .eq("affiliate_user_id", auth.userId)
+      .is("dismissed_at", null)
+      .select("id")
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (!data) {
+      return reply(
+        { success: false, error: "Notification not found or already removed." },
+        404
+      );
+    }
+
+    return reply({ success: true });
+  } catch (error: any) {
+    console.error("Affiliate admin messages DELETE:", error);
+
+    return reply(
+      {
+        success: false,
+        error: error?.message || "Unable to remove notification.",
       },
       500
     );
