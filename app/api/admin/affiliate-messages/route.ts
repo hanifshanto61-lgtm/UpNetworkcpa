@@ -42,7 +42,21 @@ export async function GET(request: NextRequest) {
         500
       );
     }
+// Load sent messages when requested by the admin message manager.
+    if (request.nextUrl.searchParams.get("view") === "messages") {
+      const { data: messages, error: messagesError } = await db
+        .from("affiliate_admin_messages")
+        .select("id, subject, message, recipient_type, created_at")
+        .order("created_at", { ascending: false })
+        .limit(500);
 
+      if (messagesError) throw messagesError;
+
+      return reply({
+        success: true,
+        messages: messages || [],
+      });
+    }
     const { data: profiles, error } = await db
       .from("profiles")
       .select("*")
