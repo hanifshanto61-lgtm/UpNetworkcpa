@@ -1521,22 +1521,185 @@ export default function AffiliatePaymentsPage() {
                         <td className={`px-5 py-4 ${muted}`}>
                           {payment.adminNote || "-"}
                         </td>
-                      </tr>
-                    ))}
+<section
+              className={`overflow-hidden rounded-2xl border ${cardBg}`}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3 p-5 sm:p-6">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <History
+                      size={21}
+                      className="text-cyan-400"
+                    />
+                    <h3 className="text-lg font-bold">
+                      Payment History
+                    </h3>
+                  </div>
 
-                    {payments.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan={5}
-                          className={`px-5 py-12 text-center ${muted}`}
-                        >
-                          No payment requests yet.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                  <p className={`mt-1 text-xs ${muted}`}>
+                    Track withdrawal requests, fees, payment details and status.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => void loadPayments()}
+                  disabled={loading}
+                  className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition hover:opacity-80 disabled:opacity-50 ${inputBg}`}
+                >
+                  <RefreshCw
+                    size={16}
+                    className={loading ? "animate-spin" : ""}
+                  />
+                  Refresh
+                </button>
               </div>
+
+              {payments.length === 0 ? (
+                <div className={`border-t px-5 py-14 text-center ${dark ? "border-white/10" : "border-slate-200"}`}>
+                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400">
+                    <Wallet size={27} />
+                  </div>
+                  <h4 className="font-bold">
+                    No payment requests yet
+                  </h4>
+                  <p className={`mt-2 text-sm ${muted}`}>
+                    Your withdrawal requests will appear here after you submit one.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4 p-4 sm:p-5">
+                  {payments.map((payment) => (
+                    <details
+                      key={payment.id}
+                      className={`group overflow-hidden rounded-2xl border transition ${
+                        dark
+                          ? "border-white/10 bg-[#080c17]"
+                          : "border-slate-200 bg-white"
+                      }`}
+                    >
+                      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-4 p-4 sm:p-5 [&::-webkit-details-marker]:hidden">
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-400">
+                            <CreditCard size={21} />
+                          </div>
+
+                          <div className="min-w-0">
+                            <p className="font-bold">
+                              {money(payment.amount)}
+                            </p>
+                            <p className={`mt-1 truncate text-xs ${muted}`}>
+                              {payment.paymentMethod}
+                            </p>
+                            <p className={`mt-1 text-xs ${muted}`}>
+                              Requested: {formatDate(payment.requestedAt)}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`inline-flex rounded-full px-3 py-1.5 text-xs font-bold capitalize ${statusStyle(payment.status)}`}
+                          >
+                            {payment.status || "Pending"}
+                          </span>
+                          <span className={`text-xs transition-transform group-open:rotate-180 ${muted}`}>
+                            ▼
+                          </span>
+                        </div>
+                      </summary>
+
+                      <div className={`space-y-4 border-t p-4 sm:p-5 ${dark ? "border-white/10" : "border-slate-200"}`}>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          <div className={`rounded-xl border p-3 ${inputBg}`}>
+                            <p className={`text-xs ${muted}`}>
+                              Payout amount
+                            </p>
+                            <p className="mt-1 text-lg font-bold">
+                              {money(payment.amount)}
+                            </p>
+                          </div>
+
+                          <div className={`rounded-xl border p-3 ${inputBg}`}>
+                            <p className={`text-xs ${muted}`}>
+                              Withdrawal fee
+                            </p>
+                            <p className="mt-1 text-lg font-bold">
+                              {money(payment.withdrawalFee ?? 0)}
+                            </p>
+                          </div>
+
+                          <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3">
+                            <p className="text-xs text-amber-500">
+                              Total balance deduction
+                            </p>
+                            <p className="mt-1 text-lg font-bold">
+                              {money(
+                                payment.totalDebit ??
+                                  payment.amount +
+                                    (payment.withdrawalFee ?? 0)
+                              )}
+                            </p>
+                          </div>
+
+                          <div className={`rounded-xl border p-3 ${inputBg}`}>
+                            <p className={`text-xs ${muted}`}>
+                              Payment method
+                            </p>
+                            <p className="mt-1 break-words font-semibold">
+                              {payment.paymentMethod || "-"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className={`rounded-xl border p-3 ${inputBg}`}>
+                          <p className={`text-xs ${muted}`}>
+                            Payment address / account
+                          </p>
+                          <p className="mt-2 break-all text-sm">
+                            {payment.paymentAddress || "-"}
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          <div className={`rounded-xl border p-3 ${inputBg}`}>
+                            <p className={`text-xs ${muted}`}>
+                              Request date
+                            </p>
+                            <p className="mt-1 text-sm font-medium">
+                              {formatDate(payment.requestedAt)}
+                            </p>
+                          </div>
+
+                          <div className={`rounded-xl border p-3 ${inputBg}`}>
+                            <p className={`text-xs ${muted}`}>
+                              Processed date
+                            </p>
+                            <p className="mt-1 text-sm font-medium">
+                              {payment.processedAt
+                                ? formatDate(payment.processedAt)
+                                : "Not processed yet"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className={`rounded-xl border p-3 ${inputBg}`}>
+                          <p className={`text-xs ${muted}`}>
+                            Admin note
+                          </p>
+                          <p className="mt-2 whitespace-pre-wrap break-words text-sm">
+                            {payment.adminNote || "No admin note available."}
+                          </p>
+                        </div>
+
+                        <p className={`text-xs ${muted}`}>
+                          Request ID: {payment.id}
+                        </p>
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              )}
             </section>
           </>
         )}
