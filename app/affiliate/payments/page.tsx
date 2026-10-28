@@ -1431,111 +1431,18 @@ export default function AffiliatePaymentsPage() {
               </div>
             </section>
 
+            
             <section
-              className={`overflow-hidden rounded-2xl border ${cardBg}`}
-            >
-              <div className="flex flex-wrap items-center justify-between gap-3 p-5">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <History
-                      size={20}
-                      className="text-cyan-400"
-                    />
-                    <h3 className="text-lg font-bold">
-                      Payment History
-                    </h3>
-                  </div>
-
-                  <p className={`mt-1 text-xs ${muted}`}>
-                    Your withdrawal requests and their current status
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => void loadPayments()}
-                  className={`flex items-center gap-2 rounded-xl border px-4 py-2 text-sm ${inputBg}`}
-                >
-                  <RefreshCw size={16} />
-                  Refresh
-                </button>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[760px] text-left text-sm">
-                  <thead
-                    className={
-                      dark
-                        ? "bg-white/5 text-slate-400"
-                        : "bg-slate-50 text-slate-600"
-                    }
-                  >
-                    <tr>
-                      <th className="px-5 py-4">Date</th>
-                      <th className="px-5 py-4">Amount</th>
-                      <th className="px-5 py-4">Method</th>
-                      <th className="px-5 py-4">Status</th>
-                      <th className="px-5 py-4">Admin Note</th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {payments.map((payment) => (
-                      <tr
-                        key={payment.id}
-                        className={
-                          dark
-                            ? "border-t border-white/10"
-                            : "border-t border-slate-200"
-                        }
-                      >
-                        <td className="px-5 py-4">
-                          {formatDate(payment.requestedAt)}
-                        </td>
-
-                        <td className="px-5 py-4 font-bold">
-                          {money(payment.amount)}
-                          <p className={`mt-1 text-xs font-normal ${muted}`}>
-                            Fee: {money(payment.withdrawalFee)}
-                          </p>
-                          <p className={`mt-1 text-xs font-normal ${muted}`}>
-                            Total debit:{" "}
-                            {money(
-                              payment.totalDebit ?? payment.amount
-                            )}
-                          </p>
-                        </td>
-
-                        <td className="px-5 py-4">
-                          {payment.paymentMethod}
-                        </td>
-
-                        <td className="px-5 py-4">
-                          <span
-                            className={`inline-flex rounded-full px-3 py-1 text-xs font-bold capitalize ${statusStyle(payment.status)}`}
-                          >
-                            {payment.status}
-                          </span>
-                        </td>
-
-                        <td className={`px-5 py-4 ${muted}`}>
-                          {payment.adminNote || "-"}
-                        </td>
-<section
               className={`overflow-hidden rounded-2xl border ${cardBg}`}
             >
               <div className="flex flex-wrap items-center justify-between gap-3 p-5 sm:p-6">
                 <div>
                   <div className="flex items-center gap-2">
-                    <History
-                      size={21}
-                      className="text-cyan-400"
-                    />
+                    <History size={21} className="text-cyan-400" />
                     <h3 className="text-lg font-bold">
                       Payment History
                     </h3>
                   </div>
-
                   <p className={`mt-1 text-xs ${muted}`}>
                     Track withdrawal requests, fees, payment details and status.
                   </p>
@@ -1556,7 +1463,11 @@ export default function AffiliatePaymentsPage() {
               </div>
 
               {payments.length === 0 ? (
-                <div className={`border-t px-5 py-14 text-center ${dark ? "border-white/10" : "border-slate-200"}`}>
+                <div
+                  className={`border-t px-5 py-14 text-center ${
+                    dark ? "border-white/10" : "border-slate-200"
+                  }`}
+                >
                   <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-400">
                     <Wallet size={27} />
                   </div>
@@ -1589,7 +1500,7 @@ export default function AffiliatePaymentsPage() {
                               {money(payment.amount)}
                             </p>
                             <p className={`mt-1 truncate text-xs ${muted}`}>
-                              {payment.paymentMethod}
+                              {payment.paymentMethod || "-"}
                             </p>
                             <p className={`mt-1 text-xs ${muted}`}>
                               Requested: {formatDate(payment.requestedAt)}
@@ -1599,17 +1510,24 @@ export default function AffiliatePaymentsPage() {
 
                         <div className="flex items-center gap-3">
                           <span
-                            className={`inline-flex rounded-full px-3 py-1.5 text-xs font-bold capitalize ${statusStyle(payment.status)}`}
+                            className={`inline-flex rounded-full px-3 py-1.5 text-xs font-bold capitalize ${statusStyle(payment.status || "pending")}`}
                           >
                             {payment.status || "Pending"}
                           </span>
-                          <span className={`text-xs transition-transform group-open:rotate-180 ${muted}`}>
+                          <span
+                            aria-hidden="true"
+                            className={`text-xs transition-transform group-open:rotate-180 ${muted}`}
+                          >
                             ▼
                           </span>
                         </div>
                       </summary>
 
-                      <div className={`space-y-4 border-t p-4 sm:p-5 ${dark ? "border-white/10" : "border-slate-200"}`}>
+                      <div
+                        className={`space-y-4 border-t p-4 sm:p-5 ${
+                          dark ? "border-white/10" : "border-slate-200"
+                        }`}
+                      >
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                           <div className={`rounded-xl border p-3 ${inputBg}`}>
                             <p className={`text-xs ${muted}`}>
