@@ -113,9 +113,13 @@ export default function Home() {
       <header className="sticky top-0 z-50 border-b border-white/10 bg-[#080d1c]/95 backdrop-blur-xl">
         <nav className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 lg:px-8">
           <Link href="/" className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-violet-600 shadow-lg shadow-blue-500/20">
-              <TrendingUp size={25} />
-            </div>
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white shadow-lg shadow-black/20">
+    <img
+      src="/file_0000000013688207a03d42a2550c1954.png"
+      alt="UpNetwork CPA logo"
+      className="h-full w-full object-contain"
+     />
+   </div>
             <div>
               <div className="text-xl font-black tracking-tight">
                 UpNetwork <span className="text-cyan-400">CPA</span>
