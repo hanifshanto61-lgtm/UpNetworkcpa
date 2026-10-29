@@ -16,7 +16,6 @@ import {
   MousePointerClick,
   ShieldCheck,
   Target,
-  TrendingUp,
   Users,
   Wallet,
   X,
