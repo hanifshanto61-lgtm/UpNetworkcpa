@@ -422,7 +422,7 @@ export default function Home() {
               className="flex min-h-40 items-center justify-center overflow-hidden rounded-xl bg-white p-4 transition hover:opacity-90"
             >
               <img
-                src="/images/IMG_20261029_103353_337.png"
+                src="/images/IMG_20261029_104140_864.png"
                 alt="Affiliate resource"
                 className="h-auto max-h-48 w-full object-contain"
               />
@@ -435,7 +435,7 @@ export default function Home() {
               className="flex min-h-40 items-center justify-center overflow-hidden rounded-xl bg-white p-4 transition hover:opacity-90"
             >
               <img
-                src="/images/IMG_20261029_104140_864.png"
+                src="/images/IMG_20261029_103353_337.png"
                 alt="Affpaying"
                 className="h-auto max-h-48 w-full object-contain"
               />
