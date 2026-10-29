@@ -31,8 +31,11 @@ function BrandLogo({ light = false }: { light?: boolean }) {
 return (
 <div className="flex items-center gap-3">
 <div
-className={"flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl ${ light ? "bg-white/10 ring-1 ring-white/15" : "bg-white shadow-lg shadow-blue-600/20" }"}
->
+className={`flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl ${
+  light
+    ? "bg-white/10 ring-1 ring-white/15"
+    : "bg-white shadow-lg shadow-blue-600/20"
+}`}
 <img
 src="/file_0000000013688207a03d42a2550c1954.png"
 alt="UpNetwork CPA logo"
