@@ -411,7 +411,42 @@ export default function Home() {
           </Link>
         </div>
       </section>
+{/* Affiliate Industry Resources */}
+      <section className="border-t border-white/10 bg-[#0c1428] px-5 py-12 lg:px-8">
+        <div className="mx-auto max-w-5xl text-center">
+          <p className="mb-2 text-xs font-bold uppercase tracking-[0.22em] text-cyan-400">
+            Affiliate Industry Resources
+          </p>
+          <h2 className="mb-8 text-2xl font-black sm:text-3xl">
+            Find Us on Affiliate Directories
+          </h2>
 
+          <div className="mx-auto grid max-w-3xl grid-cols-1 gap-5 sm:grid-cols-2">
+            <a
+              href="https://www.affpaying.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex min-h-28 items-center justify-center rounded-2xl border border-white/10 bg-white p-6 transition hover:-translate-y-1"
+            >
+              <span className="text-3xl font-black text-[#1c2740] sm:text-4xl">
+                AFF<span className="text-[#e7a51a]">PAYING</span>
+                <span className="ml-1 text-amber-500">★</span>
+              </span>
+            </a>
+
+            <a
+              href="https://www.affplus.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex min-h-28 items-center justify-center rounded-2xl border border-white/10 bg-[#111d35] p-6 transition hover:-translate-y-1"
+            >
+              <span className="text-3xl font-black text-white sm:text-4xl">
+                AFF<span className="text-blue-400">PLUS</span>
+              </span>
+            </a>
+          </div>
+        </div>
+      </section>
       {/* Footer */}
       <footer className="border-t border-white/10 bg-[#060a15] px-5 py-12 lg:px-8">
         <div className="mx-auto grid max-w-7xl gap-10 md:grid-cols-3">
