@@ -28,55 +28,37 @@ import { supabase } from "@/lib/supabase";
 import ContactManagersPreview from "@/components/contact-managers-preview";
 
 function BrandLogo({ light = false }: { light?: boolean }) {
-  return (
-    <div className="flex items-center gap-3">
-      <div
-        className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${
-          light
-            ? "bg-white/10 ring-1 ring-white/15"
-            : "bg-gradient-to-br from-cyan-400 to-blue-700 shadow-lg shadow-blue-600/20"
-        }`}
-      >
-        <svg
-          viewBox="0 0 48 48"
-          className="h-10 w-10"
-          fill="none"
-          aria-label="UpNetworkCpa logo"
-          role="img"
-        >
-          <path
-            d="M35 5L46 16L34 19L35 5Z"
-            fill={light ? "#22D3EE" : "#FFFFFF"}
-          />
-          <path
-            d="M32 17L25 34C21 43 12 44 6 39C1 35 2 28 5 21L10 11C12 7 17 8 18 12C19 14 18 16 17 18L12 29C11 32 13 34 16 32L22 19L32 17Z"
-            fill={light ? "#06B6D4" : "#FFFFFF"}
-          />
-          <path
-            d="M24 15L34 12L29 24L21 27L24 15Z"
-            fill={light ? "#60A5FA" : "#DBEAFE"}
-          />
-        </svg>
-      </div>
+return (
+<div className="flex items-center gap-3">
+<div
+className={"flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl ${ light ? "bg-white/10 ring-1 ring-white/15" : "bg-white shadow-lg shadow-blue-600/20" }"}
+>
+<img
+src="/file_0000000013688207a03d42a2550c1954.png"
+alt="UpNetwork CPA logo"
+className="h-full w-full object-contain"
+/>
+</div>
 
-      <div>
-        <div
-          className={`text-xl font-black tracking-tight sm:text-2xl ${
-            light ? "text-white" : "text-slate-950"
-          }`}
-        >
-          UpNetwork<span className="text-cyan-500">Cpa</span>
-        </div>
-        <div
-          className={`text-[10px] font-bold uppercase tracking-[0.22em] ${
-            light ? "text-blue-200" : "text-slate-600"
-          }`}
-        >
-          Best CPA Network
-        </div>
-      </div>
+  <div>
+    <div
+      className={`text-xl font-black tracking-tight sm:text-2xl ${
+        light ? "text-white" : "text-slate-950"
+      }`}
+    >
+      UpNetwork<span className="text-cyan-500">Cpa</span>
     </div>
-  );
+    <div
+      className={`text-[10px] font-bold uppercase tracking-[0.22em] ${
+        light ? "text-blue-200" : "text-slate-600"
+      }`}
+    >
+      Best CPA Network
+    </div>
+  </div>
+</div>
+
+);
 }
 
 export default function LoginPage() {
