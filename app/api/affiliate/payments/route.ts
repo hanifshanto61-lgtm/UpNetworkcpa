@@ -281,8 +281,12 @@ export async function GET(request: NextRequest) {
       readAllPayments(supabase, affiliateId),
     ]);
 
-    let totalEarnings = 0;
+        let totalEarnings = 0;
     let maturedEarnings = 0;
+    let approvedLeadEarnings = 0;
+    let pendingLeadEarnings = 0;
+    let leadHoldBalance = 0;
+    let rejectedLeadCount = 0;
     let pendingLeadCount = 0;
     let nextReleaseAt: number | null = null;
 
@@ -292,47 +296,78 @@ export async function GET(request: NextRequest) {
     let eligibleConversions = 0;
 
     for (const click of clicks) {
-      if (
-        CONVERTED_STATUSES.has(
-          String(click.status || "").trim().toLowerCase()
-        )
-      ) {
+      const status = String(click.status || "")
+        .trim()
+        .toLowerCase();
+
+      const leadStatus = String(click.lead_status || "pending")
+        .trim()
+        .toLowerCase();
+
+      if (CONVERTED_STATUSES.has(status)) {
         eligibleConversions++;
       }
 
-      if (isConverted(click)) {
-        conversions++;
+      if (!isConverted(click)) {
+        continue;
+      }
 
-        const payout = amount(click.payout);
-        totalEarnings += payout;
+      conversions++;
 
-        const conversionTime = Date.parse(
-          click.converted_at || click.created_at || ""
-        );
+      const payout = amount(click.payout);
 
-        const releaseTime = nextDhakaDailyRelease(conversionTime);
+      // All converted payouts remain visible in total earnings.
+      totalEarnings += payout;
 
-        if (
-          Number.isFinite(releaseTime) &&
-          releaseTime <= nowMs
-        ) {
-          maturedEarnings += payout;
-        } else {
-          pendingLeadCount++;
+      if (leadStatus === "pending") {
+        pendingLeadEarnings += payout;
+        pendingLeadCount++;
+        continue;
+      }
 
-          if (
-            payout > 0 &&
-            Number.isFinite(releaseTime) &&
-            (
-              nextReleaseAt === null ||
-              releaseTime < nextReleaseAt
-            )
-          ) {
-            nextReleaseAt = releaseTime;
-          }
-        }
+      if (leadStatus === "hold") {
+        leadHoldBalance += payout;
+        continue;
+      }
+
+      if (leadStatus === "rejected") {
+        rejectedLeadCount++;
+        continue;
+      }
+
+      if (leadStatus !== "approved") {
+        continue;
+      }
+
+      approvedLeadEarnings += payout;
+
+      const conversionTime = Date.parse(
+        click.converted_at || click.created_at || ""
+      );
+
+      const releaseTime = nextDhakaDailyRelease(conversionTime);
+
+      if (
+        Number.isFinite(releaseTime) &&
+        releaseTime <= nowMs
+      ) {
+        maturedEarnings += payout;
+      } else if (
+        payout > 0 &&
+        Number.isFinite(releaseTime) &&
+        (
+          nextReleaseAt === null ||
+          releaseTime < nextReleaseAt
+        )
+      ) {
+        nextReleaseAt = releaseTime;
       }
     }
+
+    const approvedNotReleasedEarnings = Math.max(
+      0,
+      roundMoney(approvedLeadEarnings - maturedEarnings)
+    );
 
     let pendingAmount = 0;
     let approvedAmount = 0;
