@@ -37,6 +37,10 @@ type Click = {
   review_note?: string | null;
   reviewed_at?: string | null;
   reviewed_by?: string | null;
+  lead_status?: string | null;
+  lead_status_note?: string | null;
+  lead_status_updated_at?: string | null;
+  lead_status_updated_by?: string | null;
 };
 
 type IpCheck = {
@@ -102,6 +106,8 @@ export default function AdminConversionsPage() {
 
   const [clicks, setClicks] = useState<Click[]>([]);
   const [search, setSearch] = useState("");
+  const [leadStatuses, setLeadStatuses] = useState<Record<string, string>>({});
+  const [leadNotes, setLeadNotes] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState("all");
   const [payouts, setPayouts] = useState<Record<string, string>>({});
   const [reviewStatuses, setReviewStatuses] = useState<Record<string, string>>({});
