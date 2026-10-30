@@ -647,3 +647,7 @@ function getCommissionStatus(status?: string) {
             </div>
           )}
         </section>
+      </div>
+    </main>
+  );
+}
