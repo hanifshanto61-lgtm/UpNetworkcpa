@@ -304,9 +304,12 @@ export async function GET(request: NextRequest) {
         .trim()
         .toLowerCase();
 
-      if (CONVERTED_STATUSES.has(status)) {
-        eligibleConversions++;
-      }
+      if (
+  CONVERTED_STATUSES.has(status) &&
+  leadStatus !== "rejected"
+) {
+  eligibleConversions++;
+}
 
       if (!isConverted(click)) {
         continue;
@@ -628,7 +631,7 @@ export async function POST(request: NextRequest) {
 
       if (
         message.includes("Minimum withdrawal") ||
-        message.includes("At least 50 approved conversions") ||
+        message.includes("At least 50 leads excluding rejected/fraud leads") ||
         message.includes("Unsupported payment method") ||
         message.includes("Invalid payment address")
       ) {
