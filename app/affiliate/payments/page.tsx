@@ -858,6 +858,43 @@ export default function AffiliatePaymentsPage() {
               <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-5">
                 <div className="mb-3 flex items-center justify-between text-emerald-400">
                   <span className="text-sm font-semibold">
+                               <section className="mb-7 grid grid-flow-col auto-cols-[88%] gap-4 overflow-x-auto snap-x snap-mandatory pb-3 sm:grid-flow-row sm:auto-cols-auto sm:grid-cols-2 lg:grid-cols-4">
+              <div className="snap-start rounded-2xl border border-amber-500/20 bg-amber-500/10 p-5">
+                <div className="mb-3 flex items-center justify-between text-amber-400">
+                  <span className="text-sm font-semibold">Pending Earnings</span>
+                  <Clock3 size={20} />
+                </div>
+                <p className="text-3xl font-black">{money(stats.pendingLeadEarnings)}</p>
+                <p className={`mt-2 text-xs ${muted}`}>Awaiting lead review</p>
+              </div>
+
+              <div className="snap-start rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-5">
+                <div className="mb-3 flex items-center justify-between text-emerald-400">
+                  <span className="text-sm font-semibold">Approved Earnings</span>
+                  <CheckCircle2 size={20} />
+                </div>
+                <p className="text-3xl font-black">{money(stats.approvedLeadEarnings)}</p>
+                <p className={`mt-2 text-xs ${muted}`}>Approved lead payouts</p>
+              </div>
+
+              <div className="snap-start rounded-2xl border border-orange-500/20 bg-orange-500/10 p-5">
+                <div className="mb-3 flex items-center justify-between text-orange-400">
+                  <span className="text-sm font-semibold">Hold Balance</span>
+                  <ShieldCheck size={20} />
+                </div>
+                <p className="text-3xl font-black">{money(stats.leadHoldBalance)}</p>
+                <p className={`mt-2 text-xs ${muted}`}>Leads under hold</p>
+              </div>
+
+              <div className="snap-start rounded-2xl border border-red-500/20 bg-red-500/10 p-5">
+                <div className="mb-3 flex items-center justify-between text-red-400">
+                  <span className="text-sm font-semibold">Rejected Leads</span>
+                  <AlertCircle size={20} />
+                </div>
+                <p className="text-3xl font-black">{stats.rejectedLeadCount}</p>
+                <p className={`mt-2 text-xs ${muted}`}>Rejected or fraud leads</p>
+              </div>
+            </section> 
                     Available Balance
                   </span>
                   <Wallet size={20} />
