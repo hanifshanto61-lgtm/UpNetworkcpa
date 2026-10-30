@@ -758,6 +758,7 @@ export default function AdminConversionsPage() {
                     <th className="px-4 py-4">Review Status</th>
                     <th className="px-4 py-4">Review Note</th>
                     <th className="px-4 py-4">Payout</th>
+                    <th className="px-4 py-4">Lead Status</th>
                     <th className="px-4 py-4">Actions</th>
                   </tr>
                 </thead>
@@ -940,6 +941,52 @@ export default function AdminConversionsPage() {
                           </p>
                         </td>
 
+                        <td className="min-w-[220px] px-4 py-4">
+               {converted ? (
+                          <>
+                   <select
+                  value={leadStatuses[clickId] ?? click.lead_status ?? "pending"}
+        onChange={(event) =>
+          setLeadStatuses((previous) => ({
+            ...previous,
+            [clickId]: event.target.value,
+          }))
+        }
+        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold"
+      >
+        <option value="pending">Pending</option>
+        <option value="approved">Approved</option>
+        <option value="hold">Hold</option>
+        <option value="rejected">Rejected / Fraud</option>
+      </select>
+
+      <textarea
+        value={leadNotes[clickId] ?? click.lead_status_note ?? ""}
+        onChange={(event) =>
+          setLeadNotes((previous) => ({
+            ...previous,
+            [clickId]: event.target.value,
+          }))
+        }
+        maxLength={1000}
+        rows={2}
+        placeholder="Lead status note..."
+        className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-xs"
+      />
+
+      <button
+        onClick={() => void saveLeadStatus(click)}
+        disabled={savingId !== null}
+        className="mt-2 w-full rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+      >
+        {savingId === clickId ? "Saving..." : "Save Lead Status"}
+      </button>
+    </>
+  ) : (
+    <span className="text-xs text-slate-400">Not converted</span>
+  )}
+</td>
+                      
                         <td className="min-w-[130px] px-4 py-4">
                           {converted ? (
                             <span className="font-bold text-emerald-700">
