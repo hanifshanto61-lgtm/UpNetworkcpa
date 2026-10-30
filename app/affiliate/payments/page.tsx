@@ -854,102 +854,94 @@ export default function AffiliatePaymentsPage() {
           </div>
         ) : (
           <>
-            <section className="mb-7 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-5">
-                <div className="mb-3 flex items-center justify-between text-emerald-400">
-                  <span className="text-sm font-semibold">
-                               <section className="mb-7 grid grid-flow-col auto-cols-[88%] gap-4 overflow-x-auto snap-x snap-mandatory pb-3 sm:grid-flow-row sm:auto-cols-auto sm:grid-cols-2 lg:grid-cols-4">
-              <div className="snap-start rounded-2xl border border-amber-500/20 bg-amber-500/10 p-5">
-                <div className="mb-3 flex items-center justify-between text-amber-400">
+            
+            <section className="mb-7 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="min-w-0 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-5">
+                <div className="mb-3 flex items-center justify-between gap-2 text-emerald-400">
+                  <span className="text-sm font-semibold">Available Balance</span>
+                  <Wallet size={20} />
+                </div>
+                <p className="break-words text-2xl font-black sm:text-3xl">
+                  {money(stats.availableBalance)}
+                </p>
+                <p className={`mt-2 text-xs ${muted}`}>Available for withdrawal</p>
+              </div>
+
+              <div className="min-w-0 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-5">
+                <div className="mb-3 flex items-center justify-between gap-2 text-amber-400">
                   <span className="text-sm font-semibold">Pending Earnings</span>
                   <Clock3 size={20} />
                 </div>
-                <p className="text-3xl font-black">{money(stats.pendingLeadEarnings)}</p>
+                <p className="break-words text-2xl font-black sm:text-3xl">
+                  {money(stats.pendingLeadEarnings)}
+                </p>
                 <p className={`mt-2 text-xs ${muted}`}>Awaiting lead review</p>
               </div>
 
-              <div className="snap-start rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-5">
-                <div className="mb-3 flex items-center justify-between text-emerald-400">
+              <div className="min-w-0 rounded-2xl border border-green-500/20 bg-green-500/10 p-5">
+                <div className="mb-3 flex items-center justify-between gap-2 text-green-400">
                   <span className="text-sm font-semibold">Approved Earnings</span>
                   <CheckCircle2 size={20} />
                 </div>
-                <p className="text-3xl font-black">{money(stats.approvedLeadEarnings)}</p>
+                <p className="break-words text-2xl font-black sm:text-3xl">
+                  {money(stats.approvedLeadEarnings)}
+                </p>
                 <p className={`mt-2 text-xs ${muted}`}>Approved lead payouts</p>
               </div>
 
-              <div className="snap-start rounded-2xl border border-orange-500/20 bg-orange-500/10 p-5">
-                <div className="mb-3 flex items-center justify-between text-orange-400">
+              <div className="min-w-0 rounded-2xl border border-orange-500/20 bg-orange-500/10 p-5">
+                <div className="mb-3 flex items-center justify-between gap-2 text-orange-400">
                   <span className="text-sm font-semibold">Hold Balance</span>
                   <ShieldCheck size={20} />
                 </div>
-                <p className="text-3xl font-black">{money(stats.leadHoldBalance)}</p>
+                <p className="break-words text-2xl font-black sm:text-3xl">
+                  {money(stats.leadHoldBalance)}
+                </p>
                 <p className={`mt-2 text-xs ${muted}`}>Leads under hold</p>
               </div>
 
-              <div className="snap-start rounded-2xl border border-red-500/20 bg-red-500/10 p-5">
-                <div className="mb-3 flex items-center justify-between text-red-400">
+              <div className="min-w-0 rounded-2xl border border-red-500/20 bg-red-500/10 p-5">
+                <div className="mb-3 flex items-center justify-between gap-2 text-red-400">
                   <span className="text-sm font-semibold">Rejected Leads</span>
                   <AlertCircle size={20} />
                 </div>
-                <p className="text-3xl font-black">{stats.rejectedLeadCount}</p>
+                <p className="break-words text-2xl font-black sm:text-3xl">
+                  {stats.rejectedLeadCount}
+                </p>
                 <p className={`mt-2 text-xs ${muted}`}>Rejected or fraud leads</p>
               </div>
-            </section> 
-                    Available Balance
-                  </span>
-                  <Wallet size={20} />
-                </div>
-                <p className="text-3xl font-black">
-                  {money(stats.availableBalance)}
-                </p>
-                <p className={`mt-2 text-xs ${muted}`}>
-                  Available for withdrawal
-                </p>
-              </div>
 
-              <div className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-5">
-                <div className="mb-3 flex items-center justify-between text-blue-400">
-                  <span className="text-sm font-semibold">
-                    Total Earnings
-                  </span>
+              <div className="min-w-0 rounded-2xl border border-blue-500/20 bg-blue-500/10 p-5">
+                <div className="mb-3 flex items-center justify-between gap-2 text-blue-400">
+                  <span className="text-sm font-semibold">Total Earnings</span>
                   <DollarSign size={20} />
                 </div>
-                <p className="text-3xl font-black">
+                <p className="break-words text-2xl font-black sm:text-3xl">
                   {money(stats.totalEarnings)}
                 </p>
-                <p className={`mt-2 text-xs ${muted}`}>
-                  Recorded affiliate earnings
-                </p>
+                <p className={`mt-2 text-xs ${muted}`}>Recorded affiliate earnings</p>
               </div>
 
-              <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-5">
-                <div className="mb-3 flex items-center justify-between text-amber-400">
-                  <span className="text-sm font-semibold">
-                    Pending Payments
-                  </span>
+              <div className="min-w-0 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-5">
+                <div className="mb-3 flex items-center justify-between gap-2 text-amber-400">
+                  <span className="text-sm font-semibold">Pending Payments</span>
                   <Clock3 size={20} />
                 </div>
-                <p className="text-3xl font-black">
+                <p className="break-words text-2xl font-black sm:text-3xl">
                   {money(stats.pendingAmount)}
                 </p>
-                <p className={`mt-2 text-xs ${muted}`}>
-                  Awaiting admin review
-                </p>
+                <p className={`mt-2 text-xs ${muted}`}>Awaiting admin review</p>
               </div>
 
-              <div className="rounded-2xl border border-purple-500/20 bg-purple-500/10 p-5">
-                <div className="mb-3 flex items-center justify-between text-purple-400">
-                  <span className="text-sm font-semibold">
-                    Total Paid
-                  </span>
+              <div className="min-w-0 rounded-2xl border border-purple-500/20 bg-purple-500/10 p-5">
+                <div className="mb-3 flex items-center justify-between gap-2 text-purple-400">
+                  <span className="text-sm font-semibold">Total Paid</span>
                   <CreditCard size={20} />
                 </div>
-                <p className="text-3xl font-black">
+                <p className="break-words text-2xl font-black sm:text-3xl">
                   {money(stats.paidAmount)}
                 </p>
-                <p className={`mt-2 text-xs ${muted}`}>
-                  Marked paid by admin
-                </p>
+                <p className={`mt-2 text-xs ${muted}`}>Marked paid by admin</p>
               </div>
             </section>
 
