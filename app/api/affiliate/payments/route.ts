@@ -416,29 +416,41 @@ export async function GET(request: NextRequest) {
         affiliateId,
         currency: "USD",
 
-                stats: {
+        stats: {
           totalEarnings: roundMoney(totalEarnings),
-
-          // Only approved leads can enter the release balance.
           maturedEarnings: roundMoney(maturedEarnings),
           heldEarnings: approvedNotReleasedEarnings,
 
-          // Lead review balances.
           pendingLeadEarnings: roundMoney(pendingLeadEarnings),
           approvedLeadEarnings: roundMoney(approvedLeadEarnings),
           leadHoldBalance: roundMoney(leadHoldBalance),
           rejectedLeadCount,
-
           pendingLeadCount,
 
           nextReleaseAt:
             nextReleaseAt === null
               ? null
               : new Date(nextReleaseAt).toISOString(),
-          nextReleaseAt:
-            nextReleaseAt === null
-              ? null
-              : new Date(nextReleaseAt).toISOString(),
+
+          releaseTimezone: PAYMENT_RELEASE_TIMEZONE,
+          releasePolicy: "midnight_cutoff_3am_release",
+          conversions,
+          eligibleConversions,
+
+          firstWithdrawalCompleted: payments.some(
+            (payment) =>
+              String(payment.status).trim().toLowerCase() === "paid"
+          ),
+
+          reservedFees: roundMoney(reservedFees),
+          pendingAmount: roundMoney(pendingAmount),
+          approvedAmount: roundMoney(approvedAmount),
+          paidAmount: roundMoney(paidAmount),
+          rejectedAmount: roundMoney(rejectedAmount),
+          reservedAmount: roundMoney(reservedAmount),
+          availableBalance,
+          totalRequests: payments.length,
+        },
 
           releaseTimezone: PAYMENT_RELEASE_TIMEZONE,
           releasePolicy: "midnight_cutoff_3am_release",
