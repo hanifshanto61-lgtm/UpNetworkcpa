@@ -197,6 +197,7 @@ export async function GET(request: NextRequest) {
 
       existingReferredIds.add(referredId);
     }
+        offset = 0;
     // Load referral commissions.
     while (true) {
       const { data, error } = await db
