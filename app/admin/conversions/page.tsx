@@ -324,7 +324,70 @@ export default function AdminConversionsPage() {
       setSavingId(null);
     }
   }
+  async function saveLeadStatus(click: Click) {
+    const clickId = click.click_id;
+    if (!clickId || savingId) return;
 
+    if (!isConverted(click)) {
+      setError("Only converted leads can have their lead status changed.");
+      return;
+    }
+
+    const leadStatus = leadStatuses[clickId] || click.lead_status || "pending";
+    const leadNote = leadNotes[clickId] ?? click.lead_status_note ?? "";
+
+    if (!["pending", "approved", "hold", "rejected"].includes(leadStatus)) {
+      setError("Invalid lead status.");
+      return;
+    }
+
+    if (leadNote.length > 1000) {
+      setError("Lead note must be 1000 characters or fewer.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Update lead status?\n\nClick ID: ${clickId}\nAffiliate: ${click.affiliate_id || "Unknown"}\nNew status: ${leadStatus.toUpperCase()}`
+    );
+
+    if (!confirmed) return;
+
+    setSavingId(clickId);
+    setError("");
+    setSuccess("");
+
+    try {
+      const token = await getToken();
+      const response = await fetch("/api/admin/conversions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "lead_status",
+          click_id: clickId,
+          lead_status: leadStatus,
+          note: leadNote,
+        }),
+      });
+
+      const result: ApiResponse = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Unable to update lead status.");
+      }
+
+      setSuccess(`Lead status updated to ${leadStatus.toUpperCase()} for ${clickId}.`);
+      await loadClicks(search, filter);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Unable to update lead status."
+      );
+    } finally {
+      setSavingId(null);
+    }
+  }
   async function approveConversion(click: Click) {
     const clickId = click.click_id;
     if (!clickId || savingId) return;
