@@ -651,3 +651,40 @@ function getCommissionStatus(status?: string) {
     </main>
   );
 }
+function StatCard({
+  title,
+  value,
+  subtitle,
+  icon,
+  iconClass,
+}: {
+  title: string;
+  value: string;
+  subtitle: string;
+  icon: React.ReactNode;
+  iconClass: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-5">
+      <div className="flex items-center justify-between gap-3">
+        <div
+          className={`flex h-10 w-10 items-center justify-center rounded-xl ${iconClass}`}
+        >
+          {icon}
+        </div>
+
+        <span className="text-[10px] uppercase tracking-wider text-slate-600">
+          {title}
+        </span>
+      </div>
+
+      <p className="mt-5 text-2xl font-extrabold">
+        {value}
+      </p>
+
+      <p className="mt-2 text-xs text-slate-600">
+        {subtitle}
+      </p>
+    </div>
+  );
+}
