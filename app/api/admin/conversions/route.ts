@@ -274,7 +274,68 @@ export async function POST(request: NextRequest) {
         400
       );
     }
+    // Lead Status: Approved / Hold / Rejected / Pending.
+    // This is separate from the existing review_status workflow.
+    if (body.action === "lead_status") {
+      const leadStatus = String(body.lead_status ?? "")
+        .trim()
+        .toLowerCase();
 
+      if (
+        !["pending", "approved", "hold", "rejected"].includes(
+          leadStatus
+        )
+      ) {
+        return respond(
+          {
+            success: false,
+            error: "Invalid lead status.",
+          },
+          400
+        );
+      }
+
+      const leadNote =
+        typeof body.note === "string"
+          ? body.note.trim()
+          : "";
+
+      if (leadNote.length > 1000) {
+        return respond(
+          {
+            success: false,
+            error: "Lead note must be 1000 characters or fewer.",
+          },
+          400
+        );
+      }
+
+      const { data: result, error: rpcError } =
+        await supabaseAdmin.rpc("admin_update_lead_status", {
+          p_click_id: clickId,
+          p_lead_status: leadStatus,
+          p_note: leadNote || null,
+          p_admin_id: "admin",
+        });
+
+      if (rpcError) {
+        console.error("Lead status update error:", rpcError);
+
+        return respond(
+          {
+            success: false,
+            error: "Unable to update lead status.",
+          },
+          500
+        );
+      }
+
+      return respond({
+        success: true,
+        message: "Lead status updated successfully.",
+        result,
+      });
+    }
     // Lead review: does not change conversion status or payout.
     if (body.action === "review") {
       const reviewStatus = String(
