@@ -170,6 +170,33 @@ export async function GET(request: NextRequest) {
 
       offset += PAGE_SIZE;
     }
+        // Merge profile referrals without duplicating existing records.
+    const existingReferredIds = new Set(
+      referrals.map((row) => row.referred_affiliate_id)
+    );
+
+    for (const profile of profileReferrals) {
+      const referredId = profile.affiliate_id?.trim();
+      const referrerId = profile.referred_by?.trim();
+
+      if (
+        !referredId ||
+        !referrerId ||
+        existingReferredIds.has(referredId)
+      ) {
+        continue;
+      }
+
+      referrals.push({
+        id: `profile-${referredId}`,
+        referrer_affiliate_id: referrerId,
+        referred_affiliate_id: referredId,
+        status: profile.application_status || "pending",
+        created_at: null,
+      });
+
+      existingReferredIds.add(referredId);
+    }
     // Load referral commissions.
     while (true) {
       const { data, error } = await db
