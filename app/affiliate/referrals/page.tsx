@@ -208,7 +208,22 @@ export default function ReferralsPage() {
       minute: "2-digit",
     });
   }
+function getCommissionStatus(status?: string) {
+  const normalized = (status || "pending").toLowerCase();
 
+  const styles: Record<string, string> = {
+    pending: "bg-amber-400/10 text-amber-400",
+    approved: "bg-cyan-400/10 text-cyan-400",
+    paid: "bg-emerald-400/10 text-emerald-400",
+    rejected: "bg-red-400/10 text-red-400",
+    hold: "bg-orange-400/10 text-orange-400",
+  };
+
+  return {
+    label: normalized.charAt(0).toUpperCase() + normalized.slice(1),
+    className: styles[normalized] || "bg-slate-400/10 text-slate-400",
+  };
+}
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#05070c] text-white">
