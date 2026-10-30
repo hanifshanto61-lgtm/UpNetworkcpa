@@ -587,7 +587,9 @@ function getCommissionStatus(status?: string) {
                     <th className="px-3 py-3 font-medium">
                       Rate
                     </th>
-
+            <th className="px-3 py-3 font-medium">
+                   Status
+                    </th>
                     <th className="px-3 py-3 text-right font-medium">
                       Commission
                     </th>
