@@ -46,6 +46,7 @@ const PAYMENT_METHODS = [
 
 type ClickRow = {
   status: string | null;
+  lead_status: string | null;
   payout: number | string | null;
   converted_at: string | null;
   created_at: string | null;
@@ -207,7 +208,7 @@ async function readAllClicks(
   while (true) {
     const { data, error } = await supabase
       .from("clicks")
-      .select("status, payout, converted_at, created_at")
+      .select("status, lead_status, payout, converted_at, created_at")
       .eq("affiliate_id", affiliateId)
       .order("created_at", { ascending: false })
       .order("click_id", { ascending: false })
