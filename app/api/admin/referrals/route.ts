@@ -129,7 +129,47 @@ export async function GET(request: NextRequest) {
     }
 
     offset = 0;
+    const profileReferrals: ProfileReferralRow[] = [];
+    offset = 0;
 
+    // Load referral relationships from profiles.
+    while (true) {
+      const { data, error } = await db
+        .from("profiles")
+        .select("affiliate_id,referred_by,application_status")
+        .not("referred_by", "is", null)
+        .range(offset, offset + PAGE_SIZE - 1);
+
+      if (error) {
+        console.error("Admin profile referrals query:", error);
+
+        return respond(
+          {
+            success: false,
+            error: "Unable to load profile referrals.",
+          },
+          500
+        );
+      }
+
+      const page = (data || []) as ProfileReferralRow[];
+
+      if (profileReferrals.length + page.length > MAX_ROWS) {
+        return respond(
+          {
+            success: false,
+            error: "Profile referral report exceeds record limit.",
+          },
+          413
+        );
+      }
+
+      profileReferrals.push(...page);
+
+      if (page.length < PAGE_SIZE) break;
+
+      offset += PAGE_SIZE;
+    }
     // Load referral commissions.
     while (true) {
       const { data, error } = await db
