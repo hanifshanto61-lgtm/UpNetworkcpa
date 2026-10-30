@@ -44,6 +44,10 @@ type PaymentStats = {
   totalEarnings: number;
   maturedEarnings: number;
   heldEarnings: number;
+  pendingLeadEarnings: number;
+  approvedLeadEarnings: number;
+  leadHoldBalance: number;
+  rejectedLeadCount: number;
   pendingLeadCount: number;
   nextReleaseAt: string | null;
   releaseTimezone: string;
@@ -111,9 +115,14 @@ function withdrawalQuote(value: number) {
 }
 
 const emptyStats: PaymentStats = {
+
   totalEarnings: 0,
   maturedEarnings: 0,
   heldEarnings: 0,
+  pendingLeadEarnings: 0,
+  approvedLeadEarnings: 0,
+  leadHoldBalance: 0,
+  rejectedLeadCount: 0,
   pendingLeadCount: 0,
   nextReleaseAt: null,
   releaseTimezone: "Asia/Dhaka",
