@@ -416,14 +416,25 @@ export async function GET(request: NextRequest) {
         affiliateId,
         currency: "USD",
 
-        stats: {
+                stats: {
           totalEarnings: roundMoney(totalEarnings),
+
+          // Only approved leads can enter the release balance.
           maturedEarnings: roundMoney(maturedEarnings),
-          heldEarnings: roundMoney(
-            totalEarnings - maturedEarnings
-          ),
+          heldEarnings: approvedNotReleasedEarnings,
+
+          // Lead review balances.
+          pendingLeadEarnings: roundMoney(pendingLeadEarnings),
+          approvedLeadEarnings: roundMoney(approvedLeadEarnings),
+          leadHoldBalance: roundMoney(leadHoldBalance),
+          rejectedLeadCount,
+
           pendingLeadCount,
 
+          nextReleaseAt:
+            nextReleaseAt === null
+              ? null
+              : new Date(nextReleaseAt).toISOString(),
           nextReleaseAt:
             nextReleaseAt === null
               ? null
