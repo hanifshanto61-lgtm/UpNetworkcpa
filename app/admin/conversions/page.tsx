@@ -757,8 +757,8 @@ export default function AdminConversionsPage() {
                     <th className="px-4 py-4">Conversion</th>
                     <th className="px-4 py-4">Review Status</th>
                     <th className="px-4 py-4">Review Note</th>
-                    <th className="px-4 py-4">Payout</th>
                     <th className="px-4 py-4">Lead Status</th>
+                    <th className="px-4 py-4">Payout</th>
                     <th className="px-4 py-4">Actions</th>
                   </tr>
                 </thead>
