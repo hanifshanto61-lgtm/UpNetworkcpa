@@ -140,7 +140,7 @@ export async function GET(request: NextRequest) {
     }
 
     const selectFields =
-      "id, click_id, affiliate_id, offer_id, smartlink_id, status, payout, converted_at, created_at, traffic_source, referer, country, device, browser, operating_system, user_agent, ip_address, review_status, review_note, reviewed_at, reviewed_by";
+      "id, click_id, affiliate_id, offer_id, smartlink_id, status, payout, converted_at, created_at, traffic_source, referer, country, device, browser, operating_system, user_agent, ip_address, review_status, review_note, reviewed_at, reviewed_by, lead_status, lead_status_note, lead_status_updated_at, lead_status_updated_by";
 
     let query = supabaseAdmin
       .from("clicks")
@@ -161,7 +161,7 @@ export async function GET(request: NextRequest) {
       let fallbackQuery = supabaseAdmin
         .from("clicks")
         .select(
-          "id, click_id, affiliate_id, offer_id, smartlink_id, status, payout, converted_at, created_at, traffic_source, referer, country, device, browser, operating_system, review_status, review_note, reviewed_at, reviewed_by"
+          "id, click_id, affiliate_id, offer_id, smartlink_id, status, payout, converted_at, created_at, traffic_source, referer, country, device, browser, operating_system, review_status, review_note, reviewed_at, reviewed_by, lead_status, lead_status_note, lead_status_updated_at, lead_status_updated_by"
         )
         .order("created_at", { ascending: false })
         .limit(200);
