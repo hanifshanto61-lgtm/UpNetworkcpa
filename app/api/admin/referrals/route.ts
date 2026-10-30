@@ -14,7 +14,11 @@ type ReferralRow = {
   status: string | null;
   created_at: string | null;
 };
-
+type ProfileReferralRow = {
+  affiliate_id: string | null;
+  referred_by: string | null;
+  application_status: string | null;
+};
 type CommissionRow = {
   id: string;
   referrer_affiliate_id: string;
