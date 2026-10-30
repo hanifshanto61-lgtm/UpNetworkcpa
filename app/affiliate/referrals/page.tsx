@@ -530,11 +530,10 @@ function getCommissionStatus(status?: string) {
 
         </section>
 
-        {/* Commission History */}
+                {/* Commission History */}
         <section className="rounded-2xl border border-white/10 bg-white/[0.025] p-5 sm:p-6">
 
           <div className="mb-5 flex items-center justify-between gap-4">
-
             <div>
               <h2 className="text-lg font-bold">
                 Commission History
@@ -548,12 +547,10 @@ function getCommissionStatus(status?: string) {
             <span className="rounded-lg bg-white/5 px-3 py-1.5 text-xs text-slate-500">
               {commissions.length} records
             </span>
-
           </div>
 
           {commissions.length === 0 ? (
             <div className="rounded-xl border border-dashed border-white/10 py-12 text-center">
-
               <DollarSign
                 size={30}
                 className="mx-auto mb-3 text-slate-700"
@@ -562,16 +559,12 @@ function getCommissionStatus(status?: string) {
               <p className="text-sm text-slate-500">
                 No commission records yet
               </p>
-
             </div>
           ) : (
             <div className="overflow-x-auto">
-
-              <table className="w-full min-w-[760px] text-left text-sm">
-
+              <table className="w-full min-w-[900px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-white/10 text-xs text-slate-600">
-
                     <th className="px-3 py-3 font-medium">
                       Date
                     </th>
@@ -587,43 +580,40 @@ function getCommissionStatus(status?: string) {
                     <th className="px-3 py-3 font-medium">
                       Rate
                     </th>
-            <th className="px-3 py-3 font-medium">
-                   Status
+
+                    <th className="px-3 py-3 font-medium">
+                      Status
                     </th>
+
                     <th className="px-3 py-3 text-right font-medium">
                       Commission
                     </th>
-
                   </tr>
                 </thead>
 
                 <tbody>
-                  {commissions.map(
-                    (commission, index) => (
+                  {commissions.map((commission, index) => {
+                    const status = getCommissionStatus(
+                      commission.status
+                    );
+
+                    return (
                       <tr
-                        key={
-                          commission.id ||
-                          index
-                        }
+                        key={commission.id || index}
                         className="border-b border-white/5 last:border-0"
                       >
-
                         <td className="px-3 py-4 text-slate-500">
-                          {formatDate(
-                            commission.createdAt
-                          )}
+                          {formatDate(commission.createdAt)}
                         </td>
 
                         <td className="px-3 py-4 font-mono text-xs text-cyan-500">
-                          {commission.referredAffiliateId ||
-                            "-"}
+                          {commission.referredAffiliateId || "-"}
                         </td>
 
                         <td className="px-3 py-4 text-slate-500">
                           $
                           {Number(
-                            commission.sourceEarnings ||
-                              0
+                            commission.sourceEarnings || 0
                           ).toFixed(2)}
                         </td>
 
@@ -635,73 +625,25 @@ function getCommissionStatus(status?: string) {
                           %
                         </td>
 
+                        <td className="px-3 py-4">
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${status.className}`}
+                          >
+                            {status.label}
+                          </span>
+                        </td>
+
                         <td className="px-3 py-4 text-right font-bold text-emerald-400">
                           $
                           {Number(
-                            commission.commissionAmount ||
-                              0
+                            commission.commissionAmount || 0
                           ).toFixed(2)}
                         </td>
-
                       </tr>
-                    )
-                  )}
+                    );
+                  })}
                 </tbody>
-
               </table>
-
             </div>
           )}
-
         </section>
-
-        <div className="py-8 text-center text-xs text-slate-700">
-          UpNetworkCPA • Referrals Dashboard
-        </div>
-
-      </div>
-    </main>
-  );
-}
-
-function StatCard({
-  title,
-  value,
-  subtitle,
-  icon,
-  iconClass,
-}: {
-  title: string;
-  value: string;
-  subtitle: string;
-  icon: React.ReactNode;
-  iconClass: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-5">
-
-      <div className="flex items-center justify-between gap-3">
-
-        <div
-          className={`flex h-10 w-10 items-center justify-center rounded-xl ${iconClass}`}
-        >
-          {icon}
-        </div>
-
-        <span className="text-[10px] uppercase tracking-wider text-slate-600">
-          {title}
-        </span>
-
-      </div>
-
-      <p className="mt-5 text-2xl font-extrabold">
-        {value}
-      </p>
-
-      <p className="mt-2 text-xs text-slate-600">
-        {subtitle}
-      </p>
-
-    </div>
-  );
-              }
