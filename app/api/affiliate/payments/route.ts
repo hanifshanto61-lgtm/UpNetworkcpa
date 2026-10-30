@@ -452,26 +452,6 @@ export async function GET(request: NextRequest) {
           totalRequests: payments.length,
         },
 
-          releaseTimezone: PAYMENT_RELEASE_TIMEZONE,
-          releasePolicy: "midnight_cutoff_3am_release",
-          conversions,
-          eligibleConversions,
-
-          firstWithdrawalCompleted: payments.some(
-            (payment) =>
-              String(payment.status).trim().toLowerCase() === "paid"
-          ),
-
-          reservedFees: roundMoney(reservedFees),
-          pendingAmount: roundMoney(pendingAmount),
-          approvedAmount: roundMoney(approvedAmount),
-          paidAmount: roundMoney(paidAmount),
-          rejectedAmount: roundMoney(rejectedAmount),
-          reservedAmount: roundMoney(reservedAmount),
-          availableBalance,
-          totalRequests: payments.length,
-        },
-
         payments: payments.map((payment) => ({
           id: payment.id,
           amount: amount(payment.amount),
