@@ -6,6 +6,7 @@ export const runtime = "nodejs";
 
 const PAGE_SIZE = 1000;
 const MAX_ROWS = 100000;
+const DEFAULT_COMMISSION_RATE = 5;
 
 type ReferralRow = {
   id: string;
@@ -14,11 +15,13 @@ type ReferralRow = {
   status: string | null;
   created_at: string | null;
 };
+
 type ProfileReferralRow = {
   affiliate_id: string | null;
   referred_by: string | null;
   application_status: string | null;
 };
+
 type CommissionRow = {
   id: string;
   referrer_affiliate_id: string;
@@ -35,9 +38,11 @@ type CommissionRow = {
 type ReferrerReport = {
   affiliateId: string;
   referrals: number;
+  sourceEarnings: number;
   total: number;
   pending: number;
   paid: number;
+  commissionRates: number[];
 };
 
 function safeNumber(value: unknown): number {
@@ -56,7 +61,8 @@ function respond(
   return NextResponse.json(data, {
     status,
     headers: {
-      "Cache-Control": "no-store",
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+      Pragma: "no-cache",
     },
   });
 }
@@ -79,22 +85,19 @@ export async function GET(request: NextRequest) {
 
     const referrals: ReferralRow[] = [];
     const commissions: CommissionRow[] = [];
+    const profileReferrals: ProfileReferralRow[] = [];
 
     let offset = 0;
 
-    // Load referral records.
+    // 1. Load referral records.
     while (true) {
       const { data, error } = await db
         .from("referrals")
         .select(
           "id,referrer_affiliate_id,referred_affiliate_id,status,created_at"
         )
-        .order("created_at", {
-          ascending: false,
-        })
-        .order("id", {
-          ascending: false,
-        })
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
         .range(offset, offset + PAGE_SIZE - 1);
 
       if (error) {
@@ -111,7 +114,7 @@ export async function GET(request: NextRequest) {
 
       const page = (data || []) as ReferralRow[];
 
-      if (offset + page.length > MAX_ROWS) {
+      if (referrals.length + page.length > MAX_ROWS) {
         return respond(
           {
             success: false,
@@ -128,11 +131,9 @@ export async function GET(request: NextRequest) {
       offset += PAGE_SIZE;
     }
 
-    offset = 0;
-    const profileReferrals: ProfileReferralRow[] = [];
+    // 2. Load referral relationships from profiles.
     offset = 0;
 
-    // Load referral relationships from profiles.
     while (true) {
       const { data, error } = await db
         .from("profiles")
@@ -170,7 +171,8 @@ export async function GET(request: NextRequest) {
 
       offset += PAGE_SIZE;
     }
-        // Merge profile referrals without duplicating existing records.
+
+    // 3. Merge profile referrals without duplicates.
     const existingReferredIds = new Set(
       referrals.map((row) => row.referred_affiliate_id)
     );
@@ -197,27 +199,22 @@ export async function GET(request: NextRequest) {
 
       existingReferredIds.add(referredId);
     }
-        offset = 0;
-    // Load referral commissions.
+
+    // 4. Load referral commissions.
+    offset = 0;
+
     while (true) {
       const { data, error } = await db
         .from("referral_commissions")
         .select(
           "id,referrer_affiliate_id,referred_affiliate_id,click_id,source_earnings,commission_rate,commission_amount,status,created_at,paid_at"
         )
-        .order("created_at", {
-          ascending: false,
-        })
-        .order("id", {
-          ascending: false,
-        })
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
         .range(offset, offset + PAGE_SIZE - 1);
 
       if (error) {
-        console.error(
-          "Admin referral commissions query:",
-          error
-        );
+        console.error("Admin referral commissions query:", error);
 
         return respond(
           {
@@ -230,7 +227,7 @@ export async function GET(request: NextRequest) {
 
       const page = (data || []) as CommissionRow[];
 
-      if (offset + page.length > MAX_ROWS) {
+      if (commissions.length + page.length > MAX_ROWS) {
         return respond(
           {
             success: false,
@@ -247,30 +244,27 @@ export async function GET(request: NextRequest) {
       offset += PAGE_SIZE;
     }
 
+    // 5. Calculate referral performance.
     let totalCommission = 0;
     let pendingCommission = 0;
     let paidCommission = 0;
+    let totalSourceEarnings = 0;
 
-    const referrerMap = new Map<
-      string,
-      ReferrerReport
-    >();
+    const referrerMap = new Map<string, ReferrerReport>();
 
-    const getReferrer = (
-      affiliateId: string
-    ): ReferrerReport => {
+    const getReferrer = (affiliateId: string): ReferrerReport => {
       const existing = referrerMap.get(affiliateId);
 
-      if (existing) {
-        return existing;
-      }
+      if (existing) return existing;
 
       const report: ReferrerReport = {
         affiliateId,
         referrals: 0,
+        sourceEarnings: 0,
         total: 0,
         pending: 0,
         paid: 0,
+        commissionRates: [],
       };
 
       referrerMap.set(affiliateId, report);
@@ -278,24 +272,26 @@ export async function GET(request: NextRequest) {
       return report;
     };
 
+    // Count referred affiliates.
     for (const referral of referrals) {
       const affiliateId =
         referral.referrer_affiliate_id || "Unassigned";
 
-      const report = getReferrer(affiliateId);
-
-      report.referrals += 1;
+      getReferrer(affiliateId).referrals += 1;
     }
 
+    // Calculate actual earnings and commission rates.
     for (const commission of commissions) {
       const affiliateId =
-        commission.referrer_affiliate_id ||
-        "Unassigned";
+        commission.referrer_affiliate_id || "Unassigned";
 
       const report = getReferrer(affiliateId);
 
-      const amount = safeNumber(
-        commission.commission_amount
+      const amount = safeNumber(commission.commission_amount);
+      const source = safeNumber(commission.source_earnings);
+
+      const rate = safeNumber(
+        commission.commission_rate ?? DEFAULT_COMMISSION_RATE
       );
 
       const status = String(
@@ -303,7 +299,14 @@ export async function GET(request: NextRequest) {
       ).toLowerCase();
 
       report.total += amount;
+      report.sourceEarnings += source;
+
       totalCommission += amount;
+      totalSourceEarnings += source;
+
+      if (!report.commissionRates.includes(rate)) {
+        report.commissionRates.push(rate);
+      }
 
       if (status === "paid") {
         report.paid += amount;
@@ -317,17 +320,21 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const referrers = Array.from(
-      referrerMap.values()
-    )
+    // 6. Build referrer report.
+    const referrers = Array.from(referrerMap.values())
       .map((item) => ({
         ...item,
         total: money(item.total),
+        sourceEarnings: money(item.sourceEarnings),
         pending: money(item.pending),
         paid: money(item.paid),
+        commissionRates: item.commissionRates.sort(
+          (a, b) => a - b
+        ),
       }))
       .sort((a, b) => b.total - a.total);
 
+    // 7. Referral history.
     const referralHistory = referrals.map((row) => ({
       id: row.id,
       referrerId: row.referrer_affiliate_id,
@@ -336,34 +343,37 @@ export async function GET(request: NextRequest) {
       createdAt: row.created_at,
     }));
 
+    // 8. Commission history.
     const commissionHistory = commissions.map((row) => ({
       id: row.id,
       referrerId: row.referrer_affiliate_id,
       referredId: row.referred_affiliate_id,
       clickId: row.click_id,
-      sourceEarnings: money(
-        safeNumber(row.source_earnings)
+      sourceEarnings: money(safeNumber(row.source_earnings)),
+      rate: safeNumber(
+        row.commission_rate ?? DEFAULT_COMMISSION_RATE
       ),
-      rate: safeNumber(row.commission_rate ?? 5),
-      amount: money(
-        safeNumber(row.commission_amount)
-      ),
+      amount: money(safeNumber(row.commission_amount)),
       status: row.status || "pending",
       createdAt: row.created_at,
       paidAt: row.paid_at,
     }));
 
+    // 9. Return complete admin report.
     return respond({
       success: true,
       currency: "USD",
-      defaultCommissionRate: 5,
+      defaultCommissionRate: DEFAULT_COMMISSION_RATE,
+
       stats: {
         totalReferrals: referrals.length,
         totalCommissions: commissions.length,
+        totalSourceEarnings: money(totalSourceEarnings),
         totalCommission: money(totalCommission),
         pendingCommission: money(pendingCommission),
         paidCommission: money(paidCommission),
       },
+
       referrers,
       referrals: referralHistory,
       commissions: commissionHistory,
