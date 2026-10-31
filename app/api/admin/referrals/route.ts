@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/admin-auth";
 
@@ -131,7 +132,7 @@ export async function GET(request: NextRequest) {
       offset += PAGE_SIZE;
     }
 
-    // 2. Load referral relationships from profiles.
+    // 2. Load referral relationships and current account statuses.
     offset = 0;
 
     while (true) {
@@ -172,7 +173,57 @@ export async function GET(request: NextRequest) {
       offset += PAGE_SIZE;
     }
 
-    // 3. Merge profile referrals without duplicates.
+    // 3. Build a map of the latest affiliate application statuses.
+    const applicationStatusMap = new Map<string, string>();
+
+    for (const profile of profileReferrals) {
+      const affiliateId = profile.affiliate_id?.trim();
+      const status = profile.application_status?.trim().toLowerCase();
+
+      if (affiliateId && status) {
+        applicationStatusMap.set(affiliateId, status);
+      }
+    }
+
+    // Also load profiles for referred affiliates whose profile
+    // relationship may not have a referred_by value.
+    const referredIds = Array.from(
+      new Set(referrals.map((row) => row.referred_affiliate_id).filter(Boolean))
+    );
+
+    for (let i = 0; i < referredIds.length; i += PAGE_SIZE) {
+      const batch = referredIds.slice(i, i + PAGE_SIZE);
+
+      const { data, error } = await db
+        .from("profiles")
+        .select("affiliate_id,application_status")
+        .in("affiliate_id", batch);
+
+      if (error) {
+        console.error("Admin referral status lookup:", error);
+
+        return respond(
+          {
+            success: false,
+            error: "Unable to load referred affiliate statuses.",
+          },
+          500
+        );
+      }
+
+      for (const profile of data || []) {
+        const affiliateId = String(profile.affiliate_id || "").trim();
+        const status = String(profile.application_status || "")
+          .trim()
+          .toLowerCase();
+
+        if (affiliateId && status) {
+          applicationStatusMap.set(affiliateId, status);
+        }
+      }
+    }
+
+    // 4. Merge profile referrals without duplicates.
     const existingReferredIds = new Set(
       referrals.map((row) => row.referred_affiliate_id)
     );
@@ -200,7 +251,7 @@ export async function GET(request: NextRequest) {
       existingReferredIds.add(referredId);
     }
 
-    // 4. Load referral commissions.
+    // 5. Load referral commissions.
     offset = 0;
 
     while (true) {
@@ -244,7 +295,7 @@ export async function GET(request: NextRequest) {
       offset += PAGE_SIZE;
     }
 
-    // 5. Calculate referral performance.
+    // 6. Calculate referral performance.
     let totalCommission = 0;
     let pendingCommission = 0;
     let paidCommission = 0;
@@ -320,7 +371,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 6. Build referrer report.
+    // 7. Build referrer report.
     const referrers = Array.from(referrerMap.values())
       .map((item) => ({
         ...item,
@@ -334,16 +385,21 @@ export async function GET(request: NextRequest) {
       }))
       .sort((a, b) => b.total - a.total);
 
-    // 7. Referral history.
+    // 8. Referral history.
+    // Current profile application status takes priority over
+    // the older referrals table status.
     const referralHistory = referrals.map((row) => ({
       id: row.id,
       referrerId: row.referrer_affiliate_id,
       referredId: row.referred_affiliate_id,
-      status: row.status || "pending",
+      status:
+        applicationStatusMap.get(row.referred_affiliate_id) ||
+        row.status ||
+        "pending",
       createdAt: row.created_at,
     }));
 
-    // 8. Commission history.
+    // 9. Commission history.
     const commissionHistory = commissions.map((row) => ({
       id: row.id,
       referrerId: row.referrer_affiliate_id,
@@ -359,7 +415,7 @@ export async function GET(request: NextRequest) {
       paidAt: row.paid_at,
     }));
 
-    // 9. Return complete admin report.
+    // 10. Return complete admin report.
     return respond({
       success: true,
       currency: "USD",
