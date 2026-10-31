@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Percent,
   History,
+  TrendingUp,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { verifyAdminAccess } from "@/lib/admin-access";
@@ -19,6 +20,7 @@ type Stats = {
   totalReferrals: number;
   totalCommissions: number;
   totalCommission: number;
+  totalSourceEarnings: number;
   pendingCommission: number;
   paidCommission: number;
 };
@@ -26,9 +28,11 @@ type Stats = {
 type Referrer = {
   affiliateId: string;
   referrals: number;
+  sourceEarnings: number;
   total: number;
   pending: number;
   paid: number;
+  commissionRates: number[];
 };
 
 type Referral = {
@@ -67,6 +71,7 @@ const EMPTY_STATS: Stats = {
   totalReferrals: 0,
   totalCommissions: 0,
   totalCommission: 0,
+  totalSourceEarnings: 0,
   pendingCommission: 0,
   paidCommission: 0,
 };
@@ -137,9 +142,7 @@ export default function AdminReferralsPage() {
   const [stats, setStats] = useState<Stats>(EMPTY_STATS);
   const [referrers, setReferrers] = useState<Referrer[]>([]);
   const [referrals, setReferrals] = useState<Referral[]>([]);
-  const [commissions, setCommissions] = useState<
-    Commission[]
-  >([]);
+  const [commissions, setCommissions] = useState<Commission[]>([]);
   const [rate, setRate] = useState(5);
 
   const loadReferrals = useCallback(async () => {
@@ -189,7 +192,10 @@ export default function AdminReferralsPage() {
         );
       }
 
-      setStats(result.stats || EMPTY_STATS);
+      setStats({
+        ...EMPTY_STATS,
+        ...(result.stats || {}),
+      });
 
       setReferrers(
         Array.isArray(result.referrers)
@@ -238,6 +244,13 @@ export default function AdminReferralsPage() {
       background: "bg-violet-500/10",
     },
     {
+      title: "Total Source Earnings",
+      value: usd(stats.totalSourceEarnings),
+      icon: TrendingUp,
+      color: "text-blue-400",
+      background: "bg-blue-500/10",
+    },
+    {
       title: "Total Commission",
       value: usd(stats.totalCommission),
       icon: DollarSign,
@@ -283,6 +296,7 @@ export default function AdminReferralsPage() {
   return (
     <main className="min-h-screen bg-slate-950 text-white">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+
         <button
           type="button"
           onClick={() => router.push("/admin")}
@@ -330,7 +344,8 @@ export default function AdminReferralsPage() {
           </div>
         )}
 
-        <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Summary Cards */}
+        <section className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {cards.map((card) => {
             const Icon = card.icon;
 
@@ -349,7 +364,7 @@ export default function AdminReferralsPage() {
                   {card.title}
                 </p>
 
-                <p className="mt-2 text-3xl font-black">
+                <p className="mt-2 text-2xl font-black">
                   {loading ? "..." : card.value}
                 </p>
               </div>
@@ -357,6 +372,7 @@ export default function AdminReferralsPage() {
           })}
         </section>
 
+        {/* Referral Settings Information */}
         <section className="mb-8 grid gap-4 sm:grid-cols-2">
           <div className="rounded-2xl border border-cyan-500/20 bg-slate-900/60 p-5">
             <div className="flex items-center gap-3">
@@ -395,6 +411,7 @@ export default function AdminReferralsPage() {
           </div>
         </section>
 
+        {/* Referrer Performance */}
         <section className="mb-8 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60">
           <div className="border-b border-slate-800 p-5">
             <h2 className="text-lg font-bold">
@@ -402,17 +419,19 @@ export default function AdminReferralsPage() {
             </h2>
 
             <p className="mt-1 text-xs text-slate-500">
-              Commission and referral totals by affiliate.
+              Individual referral rate, source earnings and commission breakdown by affiliate.
             </p>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[750px] text-left text-sm">
+            <table className="w-full min-w-[1150px] text-left text-sm">
               <thead className="bg-slate-800/70 text-slate-400">
                 <tr>
                   <th className="px-5 py-4">Referrer ID</th>
                   <th className="px-5 py-4">Referrals</th>
-                  <th className="px-5 py-4">Total</th>
+                  <th className="px-5 py-4">Commission Rate</th>
+                  <th className="px-5 py-4">Source Earnings</th>
+                  <th className="px-5 py-4">Total Commission</th>
                   <th className="px-5 py-4">Pending</th>
                   <th className="px-5 py-4">Paid</th>
                 </tr>
@@ -430,6 +449,30 @@ export default function AdminReferralsPage() {
                     </td>
 
                     <td className="px-5 py-4">
+                      {Array.isArray(item.commissionRates) &&
+                      item.commissionRates.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {item.commissionRates.map((commissionRate) => (
+                            <span
+                              key={commissionRate}
+                              className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 text-xs font-bold text-cyan-400"
+                            >
+                              {commissionRate}%
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-slate-500">
+                          No commission yet
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="px-5 py-4 font-semibold text-blue-400">
+                      {usd(item.sourceEarnings)}
+                    </td>
+
+                    <td className="px-5 py-4 font-bold text-white">
                       {usd(item.total)}
                     </td>
 
@@ -455,6 +498,7 @@ export default function AdminReferralsPage() {
           </div>
         </section>
 
+        {/* Referred Affiliates */}
         <section className="mb-8 overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60">
           <div className="border-b border-slate-800 p-5">
             <h2 className="text-lg font-bold">
@@ -514,6 +558,7 @@ export default function AdminReferralsPage() {
           </div>
         </section>
 
+        {/* Commission History */}
         <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60">
           <div className="border-b border-slate-800 p-5">
             <h2 className="text-lg font-bold">
@@ -556,7 +601,7 @@ export default function AdminReferralsPage() {
                       {item.referredId || "-"}
                     </td>
 
-                    <td className="px-5 py-4">
+                    <td className="px-5 py-4 text-blue-400">
                       {usd(item.sourceEarnings)}
                     </td>
 
