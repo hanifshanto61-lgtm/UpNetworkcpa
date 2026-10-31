@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -145,9 +145,19 @@ export default function AdminReferralsPage() {
   const [commissions, setCommissions] = useState<Commission[]>([]);
   const [rate, setRate] = useState(5);
 
-  const loadReferrals = useCallback(async () => {
+  // Prevent overlapping API requests.
+  const isLoadingRef = useRef(false);
+
+  const loadReferrals = useCallback(async (silent = false) => {
+    if (isLoadingRef.current) return;
+
+    isLoadingRef.current = true;
+
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
+
       setError("");
 
       const {
@@ -227,12 +237,27 @@ export default function AdminReferralsPage() {
           : "Unable to load referral report."
       );
     } finally {
-      setLoading(false);
+      isLoadingRef.current = false;
+
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [router]);
 
+  // Initial load and automatic refresh every 10 seconds.
   useEffect(() => {
     void loadReferrals();
+
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void loadReferrals(true);
+      }
+    }, 10000);
+
+    return () => {
+      window.clearInterval(interval);
+    };
   }, [loadReferrals]);
 
   const cards = [
