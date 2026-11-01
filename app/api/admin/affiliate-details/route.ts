@@ -145,7 +145,8 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Read tracking and financial history without modifying records.
+    // Read existing tracking and financial history only.
+    // This endpoint does not insert, update, or delete database records.
     const [clicks, payments, referrals, commissions] =
       await Promise.all([
         readAll(
@@ -177,15 +178,44 @@ export async function GET(request: NextRequest) {
         (row: any) => String(row.affiliate_id || "").trim() === id
       );
 
-      // Use the same conversion rules as the Admin Earnings report.
+      // Keep the existing conversion identification rules.
+      // Return available conversion tracking fields for the admin report.
       const affiliateConversions = affiliateClicks
         .filter((row: any) => isConverted(row))
         .map((row: any) => ({
           id: row.id,
           click_id: row.click_id,
           affiliate_id: row.affiliate_id,
+          offer_id: row.offer_id,
+          smartlink_id: row.smartlink_id,
+          country: row.country,
+          city: row.city,
+          region: row.region,
+          postal_code: row.postal_code,
+          timezone: row.timezone,
+          ip_address: row.ip_address,
+          isp: row.isp,
+          asn: row.asn,
+          device: row.device,
+          browser: row.browser,
+          operating_system: row.operating_system,
+          user_agent: row.user_agent,
+          referer: row.referer,
+          traffic_source: row.traffic_source,
+          campaign: row.campaign,
+          worker_sub_id: row.worker_sub_id,
+          gross_revenue: row.gross_revenue,
+          network_profit: row.network_profit,
           payout: row.payout,
           status: row.status || "converted",
+          lead_status: row.lead_status,
+          review_status: row.review_status,
+          review_note: row.review_note,
+          reviewed_at: row.reviewed_at,
+          reviewed_by: row.reviewed_by,
+          lead_status_note: row.lead_status_note,
+          lead_status_updated_at: row.lead_status_updated_at,
+          lead_status_updated_by: row.lead_status_updated_by,
           converted_at: row.converted_at,
           created_at: row.created_at,
         }));
@@ -234,11 +264,9 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Earnings use the same payout calculation as Admin Earnings.
+      // Preserve the existing conversion payout calculation.
       const conversionEarnings = affiliateConversions.reduce(
-        (sum: number, row: any) => {
-          return sum + safeNumber(row.payout);
-        },
+        (sum: number, row: any) => sum + safeNumber(row.payout),
         0
       );
 
@@ -287,8 +315,7 @@ export async function GET(request: NextRequest) {
           conversionRate:
             affiliateClicks.length > 0
               ? money(
-                  (affiliateConversions.length /
-                    affiliateClicks.length) *
+                  (affiliateConversions.length / affiliateClicks.length) *
                     100
                 )
               : 0,
@@ -340,4 +367,4 @@ export async function GET(request: NextRequest) {
       500
     );
   }
-}
+      }
