@@ -1129,7 +1129,7 @@ async function deleteAffiliate() {
 >
   {deleteLoading ? "Deleting..." : "Confirm Delete"}
 </button>
-    
+     </div>
           </div>
         </div>
       )}
