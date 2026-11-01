@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -68,6 +67,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: "Password must be at least 6 characters." },
         { status: 400 }
+      );
+    }
+
+    // BLOCK EMAILS THAT WERE PERMANENTLY DELETED
+    const { data: blockedEmail, error: blocklistError } =
+      await supabase
+        .from("affiliate_email_blocklist")
+        .select("id")
+        .eq("email", email)
+        .maybeSingle();
+
+    if (blocklistError) {
+      console.error("Registration email blocklist lookup:", blocklistError);
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Unable to verify email eligibility. Please try again later.",
+        },
+        { status: 500 }
+      );
+    }
+
+    if (blockedEmail) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "This email address is not eligible for registration. Please contact the network administrator.",
+        },
+        { status: 403 }
       );
     }
 
