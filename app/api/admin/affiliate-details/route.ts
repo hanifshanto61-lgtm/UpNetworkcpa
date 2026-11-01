@@ -30,6 +30,15 @@ function normalize(value: unknown): string {
   return String(value ?? "").trim().toLowerCase();
 }
 
+function isConverted(row: any): boolean {
+  return (
+    Boolean(row.converted_at) ||
+    ["converted", "conversion", "approved", "paid"].includes(
+      normalize(row.status)
+    )
+  );
+}
+
 async function readAll(
   db: any,
   table: string,
@@ -85,8 +94,6 @@ export async function GET(request: NextRequest) {
     const search = normalize(params.get("search"));
     const statusFilter = normalize(params.get("status"));
 
-    // Load profiles. Historical archived affiliates are handled
-    // separately and are not mixed into the active profile list.
     let profileQuery = db
       .from("profiles")
       .select("*")
@@ -138,18 +145,13 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Read tracking and financial history without modifying it.
-    const [clicks, conversions, payments, referrals, commissions] =
+    // Read tracking and financial history without modifying records.
+    const [clicks, payments, referrals, commissions] =
       await Promise.all([
         readAll(
           db,
           "clicks",
           "id,click_id,affiliate_id,offer_id,smartlink_id,country,city,region,postal_code,timezone,device,browser,operating_system,referer,created_at,payout,status,converted_at,gross_revenue,network_profit,traffic_source,campaign,visitor_hash,is_suspicious,user_agent,ip_address,isp,asn,worker_sub_id,review_status,review_note,reviewed_at,reviewed_by,lead_status,lead_status_note,lead_status_updated_at,lead_status_updated_by"
-        ),
-        readAll(
-          db,
-          "conversions",
-          "id,click_id,affiliate_id,payout,status,converted_at,created_at,updated_at"
         ),
         readAll(
           db,
@@ -175,9 +177,18 @@ export async function GET(request: NextRequest) {
         (row: any) => String(row.affiliate_id || "").trim() === id
       );
 
-      const affiliateConversions = conversions.filter(
-        (row: any) => String(row.affiliate_id || "").trim() === id
-      );
+      // Use the same conversion rules as the Admin Earnings report.
+      const affiliateConversions = affiliateClicks
+        .filter((row: any) => isConverted(row))
+        .map((row: any) => ({
+          id: row.id,
+          click_id: row.click_id,
+          affiliate_id: row.affiliate_id,
+          payout: row.payout,
+          status: row.status || "converted",
+          converted_at: row.converted_at,
+          created_at: row.created_at,
+        }));
 
       const affiliatePayments = payments.filter(
         (row: any) => String(row.affiliate_id || "").trim() === id
@@ -223,13 +234,10 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      // Earnings use the same payout calculation as Admin Earnings.
       const conversionEarnings = affiliateConversions.reduce(
         (sum: number, row: any) => {
-          const status = normalize(row.status);
-          if (status === "approved" || status === "paid") {
-            return sum + safeNumber(row.payout);
-          }
-          return sum;
+          return sum + safeNumber(row.payout);
         },
         0
       );
@@ -243,6 +251,7 @@ export async function GET(request: NextRequest) {
 
       for (const payment of affiliatePayments) {
         const status = normalize(payment.status);
+
         if (status in paymentTotals) {
           paymentTotals[status as keyof typeof paymentTotals] +=
             safeNumber(payment.amount);
