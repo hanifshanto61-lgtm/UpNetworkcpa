@@ -1199,3 +1199,275 @@ export async function PATCH(request: NextRequest) {
     );
   }
 }
+
+/* =========================================
+   DELETE - ARCHIVE AND PERMANENTLY DELETE AFFILIATE
+========================================= */
+
+export async function DELETE(request: NextRequest) {
+  try {
+    if (!supabaseAdmin) {
+      return jsonError(
+        "Supabase server configuration is missing."
+      );
+    }
+
+    const admin = await getAdminUser(request);
+
+    if (!admin) {
+      return jsonError("Unauthorized.", 401);
+    }
+
+    let body: any;
+
+    try {
+      body = await request.json();
+    } catch {
+      return jsonError("Invalid JSON body.", 400);
+    }
+
+    const userId = clean(body?.user_id);
+    const confirmAffiliateId = clean(
+      body?.confirm_affiliate_id
+    );
+
+    if (!userId || !confirmAffiliateId) {
+      return jsonError(
+        "Affiliate user ID and confirmation Affiliate ID are required.",
+        400
+      );
+    }
+
+    // Protect every administrator account
+    const protectedAdminIds =
+      await getProtectedAdminIds();
+
+    if (protectedAdminIds.has(userId)) {
+      return jsonError(
+        "Administrator accounts can never be deleted.",
+        403
+      );
+    }
+
+    // Load Auth user
+    const {
+      data: userData,
+      error: userError,
+    } = await supabaseAdmin.auth.admin.getUserById(
+      userId
+    );
+
+    if (userError || !userData?.user) {
+      return jsonError(
+        "Affiliate Auth account not found.",
+        404
+      );
+    }
+
+    const authUser = userData.user;
+    const email = clean(authUser.email).toLowerCase();
+
+    // Load profile
+    const {
+      profile,
+      error: profileError,
+    } = await getAffiliateProfile(userId);
+
+    if (profileError) {
+      return jsonError(
+        "Unable to verify affiliate profile.",
+        500,
+        profileError
+      );
+    }
+
+    if (!profile) {
+      return jsonError(
+        "Affiliate profile not found. Manual review is required.",
+        404
+      );
+    }
+
+    const affiliateId = clean(profile.affiliate_id);
+
+    if (!affiliateId || affiliateId !== confirmAffiliateId) {
+      return jsonError(
+        "Affiliate ID confirmation does not match.",
+        400
+      );
+    }
+
+    if (
+      !email ||
+      email !== clean(profile.email).toLowerCase()
+    ) {
+      return jsonError(
+        "Auth email and profile email do not match. Deletion stopped for safety.",
+        409
+      );
+    }
+
+    const accountType = clean(
+      authUser.user_metadata?.account_type ||
+      profile.account_type
+    ).toLowerCase();
+
+    if (accountType !== "affiliate") {
+      return jsonError(
+        "Selected account is not verified as an affiliate.",
+        403
+      );
+    }
+
+    // Check whether this affiliate was already archived.
+    // This permits a safe retry if Auth deletion previously failed.
+    const {
+      data: existingArchive,
+      error: archiveLookupError,
+    } = await supabaseAdmin
+      .from("deleted_affiliate_archive")
+      .select("id, affiliate_id, email")
+      .eq("original_user_id", userId)
+      .maybeSingle();
+
+    if (archiveLookupError) {
+      return jsonError(
+        "Unable to verify deletion archive.",
+        500,
+        archiveLookupError.message
+      );
+    }
+
+    if (existingArchive) {
+      if (
+        existingArchive.affiliate_id !== affiliateId ||
+        clean(existingArchive.email).toLowerCase() !== email
+      ) {
+        return jsonError(
+          "Existing archive does not match this affiliate. Deletion stopped.",
+          409
+        );
+      }
+
+      // Ensure email remains blocked
+      const { error: blockError } = await supabaseAdmin
+        .from("affiliate_email_blocklist")
+        .upsert(
+          {
+            email,
+            affiliate_id: affiliateId,
+            reason: "Affiliate account scheduled for permanent deletion",
+            blocked_by: admin.id,
+          },
+          { onConflict: "email" }
+        );
+
+      if (blockError) {
+        return jsonError(
+          "Unable to verify email blocklist.",
+          500,
+          blockError.message
+        );
+      }
+    } else {
+      // Archive all related records before any deletion
+      const { error: archiveError } =
+        await supabaseAdmin.rpc(
+          "archive_affiliate_before_delete",
+          {
+            p_user_id: userId,
+            p_admin_id: admin.id,
+            p_confirm_affiliate_id: confirmAffiliateId,
+            p_auth_user: {
+              id: authUser.id,
+              email: authUser.email,
+              created_at: authUser.created_at,
+              user_metadata: authUser.user_metadata || {},
+              app_metadata: authUser.app_metadata || {},
+              email_confirmed_at:
+                authUser.email_confirmed_at || null,
+              last_sign_in_at:
+                authUser.last_sign_in_at || null,
+            },
+          }
+        );
+
+      if (archiveError) {
+        console.error(
+          "Affiliate archive failed:",
+          archiveError
+        );
+
+        return jsonError(
+          "Affiliate archive failed. No account was deleted.",
+          500,
+          archiveError.message
+        );
+      }
+    }
+
+    // Delete Auth account only after archive and blocklist succeed
+    const {
+      error: authDeleteError,
+    } = await supabaseAdmin.auth.admin.deleteUser(
+      userId
+    );
+
+    if (authDeleteError) {
+      console.error(
+        "Affiliate Auth deletion failed:",
+        authDeleteError
+      );
+
+      return jsonError(
+        "Affiliate was archived and email blocked, but Auth deletion failed. You can safely retry.",
+        500,
+        authDeleteError.message
+      );
+    }
+
+    // Delete profile after Auth account deletion.
+    // Only the known profile-linked tables cascade.
+    const {
+      error: profileDeleteError,
+    } = await supabaseAdmin
+      .from("profiles")
+      .delete()
+      .eq("id", userId);
+
+    if (profileDeleteError) {
+      console.error(
+        "Affiliate profile cleanup failed:",
+        profileDeleteError
+      );
+
+      return jsonError(
+        "Auth account was deleted and archive is safe, but profile cleanup needs administrator review.",
+        500,
+        profileDeleteError.message
+      );
+    }
+
+    return NextResponse.json(
+      {
+        success: true,
+        message:
+          "Affiliate permanently deleted. Historical tracking, conversions, earnings, payments and referral records were preserved.",
+        affiliate_id: affiliateId,
+        email,
+      },
+      { status: 200 }
+    );
+  } catch (error: any) {
+    console.error(
+      "Admin affiliate DELETE error:",
+      error
+    );
+
+    return jsonError(
+      "Unexpected server error.",
+      500,
+      error?.message || "Unknown error."
+    );
+  }
+}
