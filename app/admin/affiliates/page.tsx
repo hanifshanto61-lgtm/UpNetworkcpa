@@ -1095,7 +1095,12 @@ async function deleteAffiliate() {
               disabled={deleteLoading}
               className="mt-2 h-11 w-full rounded-xl border border-slate-300 px-4 text-sm outline-none focus:border-red-500"
             />
-
+{error && (
+  <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">
+    {error}
+  </div>
+)}
+            
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button
                 type="button"
@@ -1110,12 +1115,20 @@ async function deleteAffiliate() {
               </button>
 
               <button
-                type="button"
-                disabled={
-                  deleteLoading ||
-                  deleteConfirmId.trim() !==
-                    deleteTarget.affiliate_id.trim()
-                }
+  type="button"
+  disabled={
+    deleteLoading ||
+    deleteConfirmId.trim() !==
+      deleteTarget.affiliate_id.trim()
+  }
+  onClick={() => {
+    setError("Delete request started...");
+    void deleteAffiliate();
+  }}
+  className="w-full rounded-xl bg-red-600 px-5 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
+>
+  {deleteLoading ? "Deleting..." : "Confirm Delete"}
+</button>
                 onClick={deleteAffiliate}
                 className="rounded-xl bg-red-600 px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
               >
