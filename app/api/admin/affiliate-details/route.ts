@@ -61,11 +61,12 @@ async function readAll(
 ): Promise<any[]> {
   const rows: any[] = [];
   let offset = 0;
+  let totalCount: number | null = null;
 
   while (true) {
-    const { data, error } = await db
+    const { data, error, count } = await db
       .from(table)
-      .select(select)
+      .select(select, { count: "exact" })
       .order(orderColumn, { ascending: false })
       .range(offset, offset + PAGE_SIZE - 1);
 
@@ -73,16 +74,35 @@ async function readAll(
       throw new Error(`${table}: ${error.message}`);
     }
 
+    if (totalCount === null && count !== null) {
+      totalCount = count;
+    }
+
     const page = data || [];
+
+    if (page.length === 0) {
+      break;
+    }
+
     rows.push(...page);
 
     if (rows.length > MAX_ROWS) {
       throw new Error(`${table} report exceeds the supported limit.`);
     }
 
-    if (page.length < PAGE_SIZE) break;
+    // Move by the actual number of rows returned.
+    // This also handles Supabase returning fewer rows than requested.
+    offset += page.length;
 
-    offset += PAGE_SIZE;
+    // Stop only after reading the exact total count.
+    if (totalCount !== null && offset >= totalCount) {
+      break;
+    }
+
+    // Safety fallback if the database does not return an exact count.
+    if (totalCount === null && page.length < PAGE_SIZE) {
+      break;
+    }
   }
 
   return rows;
