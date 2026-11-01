@@ -57,6 +57,14 @@ const emptyApplication = {
   promotion_url: "",
   note: "",
 };
+function getOfferNumber(offerId: string) {
+  const shortId = offerId
+    .replace(/-/g, "")
+    .slice(0, 8)
+    .toUpperCase();
+
+  return `OFF-${shortId}`;
+}
 
 export default function AffiliateOffersPage() {
   const router = useRouter();
@@ -179,27 +187,33 @@ export default function AffiliateOffersPage() {
   );
 
   const filteredOffers = useMemo(() => {
-    const query = search.trim().toLowerCase();
+  const query = search.trim().toLowerCase();
 
-    return offers.filter((offer) => {
-      const matchesSearch =
-        !query ||
-        [
-          offer.name,
-          offer.advertiser,
-          offer.category,
-          offer.country,
-        ].some((value) =>
-          (value || "").toLowerCase().includes(query)
-        );
+  return offers.filter((offer) => {
+    const offerNumber = getOfferNumber(offer.id).toLowerCase();
 
-      return (
-        matchesSearch &&
-        (category === "All" || offer.category === category)
+    const searchableValues = [
+      offerNumber,
+      offer.id,
+      offer.name,
+      offer.advertiser,
+      offer.category,
+      offer.country,
+      offer.device,
+    ];
+
+    const matchesSearch =
+      !query ||
+      searchableValues.some((value) =>
+        (value || "").toLowerCase().includes(query)
       );
-    });
-  }, [offers, search, category]);
 
+    return (
+      matchesSearch &&
+      (category === "All" || offer.category === category)
+    );
+  });
+}, [offers, search, category]);
   function getTrackingLink(offer: Offer) {
     if (
       offer.access_status !== "approved" ||
@@ -444,7 +458,7 @@ export default function AffiliateOffersPage() {
               type="text"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search offers, advertiser, country..."
+              placeholder="Search by Offer No. (OFF-...), offer name, country..."
               aria-label="Search offers"
               className="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-600"
             />
@@ -482,7 +496,7 @@ export default function AffiliateOffersPage() {
             </p>
           </div>
         ) : (
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          <div className="space-y-4">
             {filteredOffers.map((offer) => {
               const accessStatus =
                 offer.access_status || "not_requested";
@@ -522,7 +536,17 @@ export default function AffiliateOffersPage() {
                   </div>
 
                   <div className="p-5">
-                    <div className="flex items-start justify-between gap-4">
+  <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+    <span className="inline-flex items-center rounded-lg border border-cyan-400/20 bg-cyan-400/10 px-3 py-1.5 text-xs font-black tracking-wide text-cyan-300">
+      {getOfferNumber(offer.id)}
+    </span>
+
+    <span className="text-xs text-slate-500">
+      Offer ID: {offer.id}
+    </span>
+  </div>
+
+  <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
                         <h2 className="truncate text-xl font-black">
                           {offer.name}
@@ -687,6 +711,9 @@ export default function AffiliateOffersPage() {
             </div>
 
             <div className="mt-4 rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-4 text-sm">
+              <p className="mb-2 inline-flex rounded-lg border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-black text-cyan-300">
+  {getOfferNumber(selectedOffer.id)}
+</p>
               <p className="font-bold text-cyan-300">
                 {selectedOffer.name}
               </p>
