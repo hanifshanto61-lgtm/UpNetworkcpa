@@ -391,17 +391,90 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // No worker lookup or new click column is used for existing links without sub_id.
-    const workerSubId = params.has("sub_id") ? clean(params.get("sub_id")) : null;
-    if (workerSubId !== null) {
-      if (!SUB_ID_PATTERN.test(workerSubId)) return errorResponse("Invalid worker Sub ID.", 400);
-      const { data: worker, error: workerError } = await supabase
-        .from("affiliate_sub_ids").select("id")
-        .eq("affiliate_id", affiliateId).eq("user_id", affiliate.id)
-        .eq("sub_id", workerSubId).maybeSingle();
-      if (workerError) return errorResponse("Worker tracking is unavailable. Please contact support.", 503);
-      if (!worker) return errorResponse("Worker Sub ID does not belong to this affiliate.", 404);
+    // Validate Sub ID against the selected Offer.
+// Legacy/global Sub IDs remain supported for old tracking links
+// and existing SmartLink tracking.
+const workerSubId = params.has("sub_id")
+  ? clean(params.get("sub_id")).toLowerCase()
+  : null;
+
+if (workerSubId !== null) {
+  if (!SUB_ID_PATTERN.test(workerSubId)) {
+    return errorResponse(
+      "Invalid worker Sub ID.",
+      400
+    );
+  }
+
+  // First check the exact Offer-specific Sub ID.
+  let workerQuery = supabase
+    .from("affiliate_sub_ids")
+    .select("id, offer_id")
+    .eq("affiliate_id", affiliateId)
+    .eq("user_id", affiliate.id)
+    .eq("sub_id", workerSubId);
+
+  if (offerId) {
+    workerQuery = workerQuery.eq(
+      "offer_id",
+      offerId
+    );
+  } else {
+    // SmartLinks use legacy/global Sub IDs only.
+    workerQuery = workerQuery.is(
+      "offer_id",
+      null
+    );
+  }
+
+  const {
+    data: exactWorker,
+    error: workerError,
+  } = await workerQuery.maybeSingle();
+
+  if (workerError) {
+    return errorResponse(
+      "Worker tracking is unavailable. Please contact support.",
+      503
+    );
+  }
+
+  let worker = exactWorker;
+
+  // Backward compatibility:
+  // Old offer tracking links may still use a Global Sub ID.
+  if (!worker && offerId) {
+    const {
+      data: legacyWorker,
+      error: legacyError,
+    } = await supabase
+      .from("affiliate_sub_ids")
+      .select("id, offer_id")
+      .eq("affiliate_id", affiliateId)
+      .eq("user_id", affiliate.id)
+      .eq("sub_id", workerSubId)
+      .is("offer_id", null)
+      .maybeSingle();
+
+    if (legacyError) {
+      return errorResponse(
+        "Worker tracking is unavailable. Please contact support.",
+        503
+      );
     }
+
+    worker = legacyWorker;
+  }
+
+  if (!worker) {
+    return errorResponse(
+      offerId
+        ? "This Sub ID does not belong to this offer or affiliate."
+        : "Global Sub ID does not belong to this affiliate.",
+      404
+    );
+  }
+}
 
     const clickId = randomUUID();
 
