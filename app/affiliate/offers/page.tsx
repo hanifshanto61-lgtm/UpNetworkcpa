@@ -810,7 +810,7 @@ export default function AffiliateOffersPage() {
                             onClick={() => openOffer(offer)}
                             className="rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-3 text-sm font-black text-slate-950"
                           >
-                            Open Offer &rarr;
+                            Offer Details & Sub IDs &rarr;
                           </button>
                         </div>
                       </>
