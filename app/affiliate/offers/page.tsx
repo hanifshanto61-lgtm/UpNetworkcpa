@@ -1031,6 +1031,263 @@ export default function AffiliateOffersPage() {
           </section>
         </div>
       )}
+      {detailsOffer && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-3 backdrop-blur-sm">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="offer-details-title"
+            className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-cyan-400/20 bg-slate-900 p-5"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold text-cyan-400">
+                  {getOfferNumber(detailsOffer.id)}
+                </p>
+                <h2
+                  id="offer-details-title"
+                  className="mt-1 text-xl font-black text-white"
+                >
+                  {detailsOffer.name}
+                </h2>
+                <p className="mt-1 break-all text-xs text-slate-500">
+                  Offer ID: {detailsOffer.id}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                aria-label="Close offer details"
+                onClick={() => setDetailsOffer(null)}
+                className="rounded-lg bg-white/10 px-3 py-2 text-white"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                <p className="text-xs text-slate-400">Payout</p>
+                <p className="mt-1 font-bold text-emerald-400">
+                  {detailsOffer.currency || "USD"}{" "}
+                  {Number(detailsOffer.payout || 0).toFixed(2)}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                <p className="text-xs text-slate-400">Country</p>
+                <p className="mt-1 font-bold text-white">
+                  {detailsOffer.country || "Worldwide"}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                <p className="text-xs text-slate-400">Category</p>
+                <p className="mt-1 font-bold text-white">
+                  {detailsOffer.category || "General"}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-4">
+              <h3 className="font-bold text-cyan-300">
+                Create New Sub ID
+              </h3>
+
+              <p className="mt-1 text-xs text-slate-400">
+                Create separate tracking IDs for different traffic sources.
+              </p>
+
+              <form
+                className="mt-4 grid gap-3 sm:grid-cols-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void createOfferSubId();
+                }}
+              >
+                <input
+                  required
+                  maxLength={80}
+                  value={workerName}
+                  onChange={(event) => setWorkerName(event.target.value)}
+                  placeholder="Sub ID Name (e.g. Facebook Ads)"
+                  className={formInput}
+                />
+
+                <input
+                  required
+                  maxLength={100}
+                  value={workerSubId}
+                  onChange={(event) => setWorkerSubId(event.target.value)}
+                  placeholder="Sub ID (e.g. facebook01)"
+                  className={formInput}
+                />
+
+                <button
+                  type="submit"
+                  disabled={workerCreating}
+                  className="rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-3 text-sm font-black text-slate-950 disabled:opacity-50 sm:col-span-2"
+                >
+                  {workerCreating ? "Creating..." : "+ Create Sub ID"}
+                </button>
+              </form>
+
+              {workerMessage && (
+                <p
+                  role="status"
+                  className="mt-3 break-words text-sm text-cyan-300"
+                >
+                  {workerMessage}
+                </p>
+              )}
+            </div>
+
+            <div className="mt-6">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="font-bold text-white">
+                  Sub ID Performance Report
+                </h3>
+
+                <button
+                  type="button"
+                  onClick={() => void loadOfferSubIds(detailsOffer)}
+                  disabled={workersLoading}
+                  className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-cyan-300 disabled:opacity-50"
+                >
+                  {workersLoading ? "Loading..." : "Refresh"}
+                </button>
+              </div>
+
+              {workersLoading ? (
+                <p className="py-8 text-center text-sm text-slate-400">
+                  Loading Sub ID report...
+                </p>
+              ) : offerWorkers.length === 0 ? (
+                <div className="mt-4 rounded-xl border border-dashed border-white/10 p-6 text-center">
+                  <p className="font-bold text-slate-300">
+                    No Sub IDs created yet
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Create your first Sub ID using the form above.
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-4 space-y-4">
+                  {offerWorkers.map((worker) => {
+                    const report = offerWorkerRows.find(
+                      (row) => row.sub_id === worker.sub_id
+                    );
+
+                    const clicks = Number(report?.clicks || 0);
+                    const conversions = Number(
+                      report?.conversions || 0
+                    );
+                    const earnings = Number(report?.earnings || 0);
+
+                    const conversionRate =
+                      clicks > 0
+                        ? (conversions / clicks) * 100
+                        : 0;
+
+                    const trackingLink = getWorkerTrackingLink(
+                      detailsOffer,
+                      worker.sub_id
+                    );
+
+                    return (
+                      <div
+                        key={worker.id}
+                        className="rounded-xl border border-white/10 bg-slate-950/60 p-4"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="font-bold text-white">
+                              {worker.name}
+                            </p>
+                            <p className="mt-1 text-xs text-cyan-400">
+                              Sub ID: {worker.sub_id}
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void copyWorkerLink(
+                                detailsOffer,
+                                worker.sub_id
+                              )
+                            }
+                            className="rounded-lg bg-cyan-500 px-3 py-2 text-xs font-black text-slate-950"
+                          >
+                            {copiedWorkerId === worker.sub_id
+                              ? "Copied!"
+                              : "Copy Tracking Link"}
+                          </button>
+                        </div>
+
+                        <input
+                          readOnly
+                          aria-label={`Tracking link for ${worker.sub_id}`}
+                          value={trackingLink}
+                          onFocus={(event) => event.currentTarget.select()}
+                          className="mt-3 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-slate-400 outline-none"
+                        />
+
+                        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                          <div className="rounded-lg bg-white/5 p-3">
+                            <p className="text-[10px] text-slate-500">
+                              Clicks
+                            </p>
+                            <p className="mt-1 font-bold text-white">
+                              {clicks}
+                            </p>
+                          </div>
+
+                          <div className="rounded-lg bg-white/5 p-3">
+                            <p className="text-[10px] text-slate-500">
+                              Unique Clicks
+                            </p>
+                            <p className="mt-1 font-bold text-white">
+                              {Number(report?.unique_clicks || 0)}
+                            </p>
+                          </div>
+
+                          <div className="rounded-lg bg-white/5 p-3">
+                            <p className="text-[10px] text-slate-500">
+                              Conversions
+                            </p>
+                            <p className="mt-1 font-bold text-emerald-400">
+                              {conversions}
+                            </p>
+                          </div>
+
+                          <div className="rounded-lg bg-white/5 p-3">
+                            <p className="text-[10px] text-slate-500">
+                              Earnings
+                            </p>
+                            <p className="mt-1 font-bold text-emerald-400">
+                              ${earnings.toFixed(2)}
+                            </p>
+                          </div>
+
+                          <div className="rounded-lg bg-white/5 p-3">
+                            <p className="text-[10px] text-slate-500">
+                              Conv. Rate
+                            </p>
+                            <p className="mt-1 font-bold text-cyan-400">
+                              {conversionRate.toFixed(2)}%
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
