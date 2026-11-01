@@ -48,6 +48,9 @@ export async function GET(request: NextRequest) {
     const to =
       request.nextUrl.searchParams.get("to") || "";
 
+    const offerId =
+      request.nextUrl.searchParams.get("offer_id")?.trim() || "";
+
     if (
       !validReportDate(from) ||
       !validReportDate(to) ||
@@ -59,13 +62,56 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Offer-specific reports are available only
+    // for active offers approved for this affiliate.
+    if (offerId) {
+      const {
+        data: offer,
+        error: offerError,
+      } = await auth.client
+        .from("offers")
+        .select("id,status")
+        .eq("id", offerId)
+        .maybeSingle();
+
+      if (offerError) {
+        throw new Error(
+          "Unable to verify the selected offer."
+        );
+      }
+
+      if (
+        !offer ||
+        String(offer.status).toLowerCase() !== "active"
+      ) {
+        throw new OfferAccessError(
+          "This offer is unavailable or paused.",
+          404
+        );
+      }
+
+      const approved = await hasOfferApproval(
+        auth.client,
+        auth.user.id,
+        offerId
+      );
+
+      if (!approved) {
+        throw new OfferAccessError(
+          "You do not have approved access to this offer.",
+          403
+        );
+      }
+    }
+
     return offerReply(
       await workerReport(
         auth.client,
         auth.profile.affiliate_id,
         from,
         to,
-        false
+        false,
+        offerId || null
       )
     );
   } catch (error) {
