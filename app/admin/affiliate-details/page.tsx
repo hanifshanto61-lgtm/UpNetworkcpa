@@ -615,7 +615,36 @@ export default function AffiliateDetailsPage() {
       void loadAffiliates();
     }
   }, [checking, selectedId, loadAffiliates]);
+// Auto-refresh affiliate list and selected affiliate report every 10 seconds.
+useEffect(() => {
+  if (checking) return;
 
+  const refreshData = () => {
+    // Do not refresh while the browser tab is in the background.
+    if (document.visibilityState !== "visible") return;
+
+    // Avoid overlapping requests.
+    if (loading || detailLoading) return;
+
+    if (selectedId) {
+      void loadReport(selectedId);
+    } else {
+      void loadAffiliates();
+    }
+  };
+
+  const interval = window.setInterval(refreshData, 10000);
+
+  return () => window.clearInterval(interval);
+}, [
+  checking,
+  selectedId,
+  loading,
+  detailLoading,
+  loadReport,
+  loadAffiliates,
+]);
+  
   const summary = useMemo(() => {
     return affiliates.reduce(
       (total, item) => {
