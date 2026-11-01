@@ -511,7 +511,9 @@ async function deleteAffiliate() {
     } finally {
       setDeleteLoading(false);
     }
-const  if (checking) {
+}
+
+  if (checking) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
         <div className="text-center">
