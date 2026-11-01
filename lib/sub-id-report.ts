@@ -8,6 +8,7 @@ import {
 export const SUB_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,39}$/;
 
 export type Worker = {
+  id: string;
   sub_id: string;
   name: string;
   created_at: string;
