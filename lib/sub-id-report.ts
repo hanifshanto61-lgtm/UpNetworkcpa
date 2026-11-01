@@ -138,7 +138,7 @@ export async function workerReport(
   for (let offset = 0; ; offset += 1000) {
     let query = client
       .from('affiliate_sub_ids')
-      .select('sub_id,name,created_at,offer_id')
+      .select('id,sub_id,name,created_at,offer_id')
       .eq('affiliate_id', affiliateId);
 
     if (offerId) {
