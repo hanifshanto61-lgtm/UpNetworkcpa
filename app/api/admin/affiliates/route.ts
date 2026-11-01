@@ -663,7 +663,34 @@ export async function POST(request: NextRequest) {
         400
       );
     }
+/* CHECK DELETED AFFILIATE EMAIL BLOCKLIST */
 
+    const { data: blockedEmail, error: blocklistError } =
+      await supabaseAdmin
+        .from("affiliate_email_blocklist")
+        .select("id")
+        .eq("email", email)
+        .maybeSingle();
+
+    if (blocklistError) {
+      console.error(
+        "Admin affiliate blocklist lookup error:",
+        blocklistError
+      );
+
+      return jsonError(
+        "Unable to verify email eligibility.",
+        500,
+        blocklistError.message
+      );
+    }
+
+    if (blockedEmail) {
+      return jsonError(
+        "This email address is permanently blocked and cannot be registered again.",
+        403
+      );
+    }
     /* CHECK AFFILIATE ID */
 
     if (requestedAffiliateId) {
