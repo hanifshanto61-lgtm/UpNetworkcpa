@@ -1129,9 +1129,6 @@ async function deleteAffiliate() {
 >
   {deleteLoading ? "Deleting..." : "Confirm Delete"}
 </button>
-<button
-  type="button"
-  disabled={
     
           </div>
         </div>
