@@ -278,15 +278,153 @@ export default function AffiliateOffersPage() {
     }
   }
 
-  function openOffer(offer: Offer) {
-    const link = getTrackingLink(offer);
+  function getWorkerTrackingLink(offer: Offer, subId: string) {
+    if (
+      offer.access_status !== "approved" ||
+      !profile?.affiliate_id ||
+      typeof window === "undefined"
+    ) {
+      return "";
+    }
+
+    const params = new URLSearchParams({
+      aid: profile.affiliate_id,
+      offerId: offer.id,
+      sub_id: subId,
+    });
+
+    return `${window.location.origin}/api/track?${params.toString()}`;
+  }
+
+  async function loadOfferSubIds(offer: Offer) {
+    setDetailsOffer(offer);
+    setOfferWorkers([]);
+    setOfferWorkerRows([]);
+    setWorkerMessage("");
+    setWorkersLoading(true);
+
+    try {
+      const accessToken = await token();
+
+      const response = await fetch(
+        `/api/affiliate/sub-ids?offer_id=${encodeURIComponent(offer.id)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+          cache: "no-store",
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(
+          result.error || result.message || "Unable to load Sub IDs."
+        );
+      }
+
+      setOfferWorkers(
+        Array.isArray(result.workers) ? result.workers : []
+      );
+
+      setOfferWorkerRows(
+        Array.isArray(result.rows) ? result.rows : []
+      );
+    } catch (err) {
+      setWorkerMessage(
+        err instanceof Error
+          ? err.message
+          : "Unable to load Sub IDs."
+      );
+    } finally {
+      setWorkersLoading(false);
+    }
+  }
+
+  async function createOfferSubId() {
+    if (!detailsOffer || workerCreating) return;
+
+    if (!workerName.trim() || !workerSubId.trim()) {
+      setWorkerMessage("Please enter both Sub ID name and Sub ID.");
+      return;
+    }
+
+    setWorkerCreating(true);
+    setWorkerMessage("");
+
+    try {
+      const accessToken = await token();
+
+      const response = await fetch("/api/affiliate/sub-ids", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          offer_id: detailsOffer.id,
+          name: workerName.trim(),
+          sub_id: workerSubId.trim().toLowerCase(),
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(
+          result.error || result.message || "Unable to create Sub ID."
+        );
+      }
+
+      setWorkerName("");
+      setWorkerSubId("");
+      setWorkerMessage("Sub ID created successfully.");
+
+      await loadOfferSubIds(detailsOffer);
+    } catch (err) {
+      setWorkerMessage(
+        err instanceof Error
+          ? err.message
+          : "Unable to create Sub ID."
+      );
+    } finally {
+      setWorkerCreating(false);
+    }
+  }
+
+  async function copyWorkerLink(offer: Offer, subId: string) {
+    const link = getWorkerTrackingLink(offer, subId);
 
     if (!link) {
+      setWorkerMessage("Offer approval and Affiliate ID are required.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopiedWorkerId(subId);
+
+      window.setTimeout(() => {
+        setCopiedWorkerId((current) =>
+          current === subId ? null : current
+        );
+      }, 2000);
+    } catch {
+      setWorkerMessage("Unable to copy the Sub ID tracking link.");
+    }
+  }
+
+  function openOffer(offer: Offer) {
+    if (
+      offer.access_status !== "approved" ||
+      !profile?.affiliate_id
+    ) {
       setError("Offer approval and an Affiliate ID are required.");
       return;
     }
 
-    window.open(link, "_blank", "noopener,noreferrer");
+    void loadOfferSubIds(offer);
   }
 
   function openRequestForm(offer: Offer) {
