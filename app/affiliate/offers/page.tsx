@@ -41,6 +41,23 @@ type Profile = {
   affiliate_id: string;
   full_name: string | null;
 };
+type OfferSubId = {
+  id: string;
+  offer_id: string | null;
+  sub_id: string;
+  name: string;
+  created_at: string;
+};
+
+type OfferSubIdReport = {
+  sub_id: string;
+  source_id: string;
+  source_name: string;
+  clicks: number;
+  unique_clicks: number;
+  conversions: number;
+  earnings: number;
+};
 
 const accessLabels: Record<AccessStatus, string> = {
   not_requested: "Request Required",
@@ -81,7 +98,15 @@ export default function AffiliateOffersPage() {
   const [requestingId, setRequestingId] = useState<string | null>(null);
   const [selectedOffer, setSelectedOffer] = useState<Offer | null>(null);
   const [application, setApplication] = useState(emptyApplication);
-
+  const [detailsOffer, setDetailsOffer] = useState<Offer | null>(null);
+  const [offerWorkers, setOfferWorkers] = useState<OfferSubId[]>([]);
+  const [offerWorkerRows, setOfferWorkerRows] = useState<OfferSubIdReport[]>([]);
+  const [workerName, setWorkerName] = useState("");
+  const [workerSubId, setWorkerSubId] = useState("");
+  const [workersLoading, setWorkersLoading] = useState(false);
+  const [workerCreating, setWorkerCreating] = useState(false);
+  const [workerMessage, setWorkerMessage] = useState("");
+  const [copiedWorkerId, setCopiedWorkerId] = useState<string | null>(null);
   const requestPending = useRef(false);
   const loadPending = useRef(false);
 
