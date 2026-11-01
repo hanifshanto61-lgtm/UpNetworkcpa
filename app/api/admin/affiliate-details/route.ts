@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { getAdminSession } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
@@ -6,6 +7,19 @@ export const runtime = "nodejs";
 
 const PAGE_SIZE = 1000;
 const MAX_ROWS = 50000;
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+const supabaseAdmin =
+  supabaseUrl && serviceRoleKey
+    ? createClient(supabaseUrl, serviceRoleKey, {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      })
+    : null;
 
 function response(data: Record<string, unknown>, status = 200) {
   return NextResponse.json(data, {
@@ -67,6 +81,7 @@ async function readAll(
     }
 
     if (page.length < PAGE_SIZE) break;
+
     offset += PAGE_SIZE;
   }
 
@@ -75,6 +90,7 @@ async function readAll(
 
 export async function GET(request: NextRequest) {
   try {
+    // Keep existing admin authorization.
     const session = await getAdminSession(request);
 
     if (!session) {
@@ -84,7 +100,18 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const db = session.client;
+    // Use service-role client only after admin verification.
+    if (!supabaseAdmin) {
+      return response(
+        {
+          success: false,
+          error: "Supabase server configuration is missing.",
+        },
+        500
+      );
+    }
+
+    const db = supabaseAdmin;
     const params = request.nextUrl.searchParams;
 
     const affiliateId = String(
@@ -133,7 +160,9 @@ export async function GET(request: NextRequest) {
     }
 
     const ids = profileRows
-      .map((profile: any) => String(profile.affiliate_id || "").trim())
+      .map((profile: any) =>
+        String(profile.affiliate_id || "").trim()
+      )
       .filter(Boolean);
 
     if (ids.length === 0) {
@@ -145,8 +174,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Read existing tracking and financial history only.
-    // This endpoint does not insert, update, or delete database records.
+    // Read existing records only. No database writes are performed.
     const [clicks, payments, referrals, commissions] =
       await Promise.all([
         readAll(
@@ -175,11 +203,11 @@ export async function GET(request: NextRequest) {
       const id = String(profile.affiliate_id || "").trim();
 
       const affiliateClicks = clicks.filter(
-        (row: any) => String(row.affiliate_id || "").trim() === id
+        (row: any) =>
+          String(row.affiliate_id || "").trim() === id
       );
 
-      // Keep the existing conversion identification rules.
-      // Return available conversion tracking fields for the admin report.
+      // Preserve existing conversion identification rules.
       const affiliateConversions = affiliateClicks
         .filter((row: any) => isConverted(row))
         .map((row: any) => ({
@@ -221,7 +249,8 @@ export async function GET(request: NextRequest) {
         }));
 
       const affiliatePayments = payments.filter(
-        (row: any) => String(row.affiliate_id || "").trim() === id
+        (row: any) =>
+          String(row.affiliate_id || "").trim() === id
       );
 
       const affiliateReferrals = referrals.filter(
@@ -264,9 +293,10 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Preserve the existing conversion payout calculation.
+      // Preserve existing conversion payout calculation.
       const conversionEarnings = affiliateConversions.reduce(
-        (sum: number, row: any) => sum + safeNumber(row.payout),
+        (sum: number, row: any) =>
+          sum + safeNumber(row.payout),
         0
       );
 
@@ -315,7 +345,8 @@ export async function GET(request: NextRequest) {
           conversionRate:
             affiliateClicks.length > 0
               ? money(
-                  (affiliateConversions.length / affiliateClicks.length) *
+                  (affiliateConversions.length /
+                    affiliateClicks.length) *
                     100
                 )
               : 0,
@@ -367,4 +398,4 @@ export async function GET(request: NextRequest) {
       500
     );
   }
-      }
+}
