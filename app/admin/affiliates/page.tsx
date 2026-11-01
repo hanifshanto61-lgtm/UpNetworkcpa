@@ -1129,11 +1129,22 @@ async function deleteAffiliate() {
 >
   {deleteLoading ? "Deleting..." : "Confirm Delete"}
 </button>
-                onClick={deleteAffiliate}
-                className="rounded-xl bg-red-600 px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {deleteLoading ? "Deleting..." : "Confirm Delete"}
-              </button>
+<button
+  type="button"
+  disabled={
+    deleteLoading ||
+    deleteConfirmId.trim() !==
+      deleteTarget.affiliate_id.trim()
+  }
+  onClick={() => {
+    setError("Delete request started...");
+    void deleteAffiliate();
+  }}
+  className="w-full rounded-xl bg-red-600 px-5 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
+>
+  {deleteLoading ? "Deleting..." : "Confirm Delete"}
+</button>
+              
             </div>
           </div>
         </div>
