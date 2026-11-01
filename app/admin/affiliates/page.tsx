@@ -19,6 +19,7 @@ import {
   UserRound,
   UserPlus,
   X,
+  Trash2,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { verifyAdminAccess } from "@/lib/admin-access";
@@ -138,7 +139,13 @@ export default function AdminAffiliatesPage() {
   const [checking, setChecking] = useState(true);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
-
+const [deleteTarget, setDeleteTarget] =
+    useState<Affiliate | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] =
+    useState("");
+  const [deleteLoading, setDeleteLoading] =
+    useState(false);
+  
   const [addOpen, setAddOpen] = useState(false);
   const [addLoading, setAddLoading] = useState(false);
 
@@ -442,8 +449,69 @@ export default function AdminAffiliatesPage() {
     setAddAffiliateId("");
     setAddReferralRate("5");
   }
+async function deleteAffiliate() {
+    if (!deleteTarget) return;
 
-  if (checking) {
+    if (
+      deleteConfirmId.trim() !==
+      deleteTarget.affiliate_id.trim()
+    ) {
+      setError("Affiliate ID confirmation does not match.");
+      return;
+    }
+
+    try {
+      setDeleteLoading(true);
+      setError("");
+      setSuccess("");
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        router.replace("/login");
+        return;
+      }
+
+      const response = await fetch("/api/admin/affiliates", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          user_id: deleteTarget.id,
+          confirm_affiliate_id: deleteConfirmId.trim(),
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(
+          result.message || "Unable to delete affiliate."
+        );
+      }
+
+      setSuccess(
+        `Affiliate ${result.affiliate_id} was permanently deleted.`
+      );
+
+      setDeleteTarget(null);
+      setDeleteConfirmId("");
+
+      await loadAffiliates();
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to delete affiliate."
+      );
+    } finally {
+      setDeleteLoading(false);
+    }
+const  if (checking) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
         <div className="text-center">
@@ -753,6 +821,20 @@ export default function AdminAffiliatesPage() {
                               Pending
                             </button>
                           )}
+                          <button
+                            type="button"
+                            disabled={updating || deleteLoading}
+                            onClick={() => {
+                              setError("");
+                              setSuccess("");
+                              setDeleteConfirmId("");
+                              setDeleteTarget(affiliate);
+                            }}
+                            className="flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Delete
+                          </button>
                         </div>
                       </div>
 
@@ -961,7 +1043,87 @@ export default function AdminAffiliatesPage() {
           </div>
         </div>
       </div>
+{deleteTarget && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-100 text-red-600">
+                <Trash2 className="h-6 w-6" />
+              </div>
 
+              <div>
+                <h2 className="text-lg font-extrabold text-slate-900">
+                  Delete Affiliate Permanently?
+                </h2>
+                <p className="text-xs text-red-600">
+                  This action cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-2 rounded-xl bg-slate-50 p-4 text-sm">
+              <p>
+                **Name:** {deleteTarget.name}
+              </p>
+              <p className="break-all">
+                **Email:** {deleteTarget.email}
+              </p>
+              <p className="break-all">
+                **Affiliate ID:** {deleteTarget.affiliate_id}
+              </p>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
+              Historical clicks, conversions, earnings, payments
+              and referral records will be archived and preserved.
+              The email will be blocked from registering again.
+            </div>
+
+            <label className="mt-5 block text-sm font-bold text-slate-700">
+              Type the exact Affiliate ID to confirm
+            </label>
+
+            <input
+              type="text"
+              value={deleteConfirmId}
+              onChange={(e) =>
+                setDeleteConfirmId(e.target.value)
+              }
+              placeholder={deleteTarget.affiliate_id}
+              disabled={deleteLoading}
+              className="mt-2 h-11 w-full rounded-xl border border-slate-300 px-4 text-sm outline-none focus:border-red-500"
+            />
+
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                disabled={deleteLoading}
+                onClick={() => {
+                  setDeleteTarget(null);
+                  setDeleteConfirmId("");
+                }}
+                className="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-bold text-slate-700"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                disabled={
+                  deleteLoading ||
+                  deleteConfirmId.trim() !==
+                    deleteTarget.affiliate_id.trim()
+                }
+                onClick={deleteAffiliate}
+                className="rounded-xl bg-red-600 px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {deleteLoading ? "Deleting..." : "Confirm Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {addOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
           <div className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl">
