@@ -82,6 +82,12 @@ const menuItems: MenuItem[] = [
     available: true,
   },
   {
+    label: "Affiliate Details",
+    icon: UserCheck,
+    action: "/admin/affiliate-details",
+    available: true,
+  },
+  {
     label: "Application Chats",
     icon: MessageCircle,
     action: "/admin/application-chats",
