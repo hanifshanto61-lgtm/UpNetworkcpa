@@ -90,6 +90,25 @@ type ClickRow = {
 type ConversionRow = {
   id: string;
   click_id?: string;
+  affiliate_id?: string;
+  offer_id?: string;
+  country?: string;
+  city?: string;
+  region?: string;
+  postal_code?: string;
+  timezone?: string;
+  ip_address?: string;
+  isp?: string;
+  asn?: string;
+  device?: string;
+  browser?: string;
+  operating_system?: string;
+  user_agent?: string;
+  worker_sub_id?: string;
+  traffic_source?: string;
+  campaign?: string;
+  gross_revenue?: number;
+  network_profit?: number;
   payout?: number;
   status?: string;
   created_at?: string;
@@ -365,7 +384,27 @@ function makeConversionRows(rows: ConversionRow[]) {
   return rows.map((row) => ({
     Date: formatDate(row.converted_at || row.created_at),
     Conversion_ID: row.id,
+    Affiliate_ID: row.affiliate_id || "",
     Click_ID: row.click_id || "",
+    Offer_ID: row.offer_id || "",
+    Country: row.country || "",
+    City: row.city || "",
+    Region: row.region || "",
+    Postal_Code: row.postal_code || "",
+    Timezone: row.timezone || "",
+    Language: "Not recorded",
+    IP_Address: row.ip_address || "",
+    ISP: row.isp || "",
+    ASN: row.asn || "",
+    Device: row.device || "",
+    Operating_System: row.operating_system || "",
+    Browser: row.browser || "",
+    User_Agent: row.user_agent || "",
+    Worker_Sub_ID: row.worker_sub_id || "",
+    Traffic_Source: row.traffic_source || "",
+    Campaign: row.campaign || "",
+    Gross_Revenue: Number(row.gross_revenue || 0),
+    Network_Profit: Number(row.network_profit || 0),
     Payout: Number(row.payout || 0),
     Status: row.status || "",
   }));
@@ -1158,48 +1197,98 @@ useEffect(() => {
                   )}
 
                   {activeTab === "conversions" && (
-                    <div className="overflow-x-auto p-4">
-                      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                        <h3 className="font-bold">Conversion History</h3>
-                        <ExportButtons section="conversions" />
-                      </div>
+  <div className="overflow-x-auto p-4">
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h3 className="font-bold">Conversion History</h3>
+        <p className="mt-1 text-xs text-slate-500">
+          {report.conversions.length} conversion records
+        </p>
+      </div>
+      <ExportButtons section="conversions" />
+    </div>
 
-                      <table className="w-full min-w-[650px] text-left text-sm">
-                        <thead className="text-xs uppercase text-slate-500">
-                          <tr>
-                            <th className="px-3 py-3">Date</th>
-                            <th className="px-3 py-3">Click ID</th>
-                            <th className="px-3 py-3">Payout</th>
-                            <th className="px-3 py-3">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-800">
-                          {report.conversions.map((row) => (
-                            <tr key={row.id}>
-                              <td className="px-3 py-3">
-                                {formatDate(row.converted_at || row.created_at)}
-                              </td>
-                              <td className="px-3 py-3 font-mono text-cyan-300">
-                                {row.click_id || "—"}
-                              </td>
-                              <td className="px-3 py-3">{money(row.payout)}</td>
-                              <td className="px-3 py-3">
-                                <span className={`rounded-full px-2 py-1 text-xs ${statusClass(row.status)}`}>
-                                  {row.status || "Unknown"}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+    <table className="w-full min-w-[1900px] text-left text-xs">
+      <thead className="bg-slate-950 uppercase text-slate-500">
+        <tr>
+          {[
+            "Date",
+            "Conversion ID",
+            "Affiliate ID",
+            "Click ID",
+            "Offer ID",
+            "Country",
+            "City",
+            "Region",
+            "Timezone",
+            "Language",
+            "IP Address",
+            "ISP",
+            "ASN",
+            "Device",
+            "Operating System",
+            "Browser",
+            "Worker Sub ID",
+            "Gross Revenue",
+            "Network Profit",
+            "Payout",
+            "Status",
+          ].map((heading) => (
+            <th key={heading} className="whitespace-nowrap px-3 py-3">
+              {heading}
+            </th>
+          ))}
+        </tr>
+      </thead>
 
-                      {report.conversions.length === 0 && (
-                        <p className="p-8 text-center text-sm text-slate-500">
-                          No conversions found.
-                        </p>
-                      )}
-                    </div>
-                  )}
+      <tbody className="divide-y divide-slate-800">
+        {report.conversions.map((row) => (
+          <tr key={row.id} className="hover:bg-slate-800/40">
+            <td className="whitespace-nowrap px-3 py-3">
+              {formatDate(row.converted_at || row.created_at)}
+            </td>
+            <td className="px-3 py-3 font-mono">{row.id}</td>
+            <td className="px-3 py-3">{row.affiliate_id || "—"}</td>
+            <td className="px-3 py-3 font-mono text-cyan-300">
+              {row.click_id || "—"}
+            </td>
+            <td className="px-3 py-3">{row.offer_id || "—"}</td>
+            <td className="px-3 py-3">{row.country || "—"}</td>
+            <td className="px-3 py-3">{row.city || "—"}</td>
+            <td className="px-3 py-3">{row.region || "—"}</td>
+            <td className="px-3 py-3">{row.timezone || "—"}</td>
+            <td className="px-3 py-3">Not recorded</td>
+            <td className="px-3 py-3 font-mono">{row.ip_address || "—"}</td>
+            <td className="px-3 py-3">{row.isp || "—"}</td>
+            <td className="px-3 py-3">{row.asn || "—"}</td>
+            <td className="px-3 py-3">{row.device || "—"}</td>
+            <td className="px-3 py-3">{row.operating_system || "—"}</td>
+            <td className="px-3 py-3">{row.browser || "—"}</td>
+            <td className="px-3 py-3">{row.worker_sub_id || "—"}</td>
+            <td className="px-3 py-3">{money(row.gross_revenue)}</td>
+            <td className="px-3 py-3">{money(row.network_profit)}</td>
+            <td className="px-3 py-3 font-bold text-emerald-400">
+              {money(row.payout)}
+            </td>
+            <td className="px-3 py-3">
+              <span
+                className={`rounded-full px-2 py-1 ${statusClass(row.status)}`}
+              >
+                {row.status || "Unknown"}
+              </span>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+
+    {report.conversions.length === 0 && (
+      <p className="p-8 text-center text-sm text-slate-500">
+        No conversions found.
+      </p>
+    )}
+  </div>
+)}
 
                   {activeTab === "payments" && (
                     <div className="overflow-x-auto p-4">
