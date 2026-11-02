@@ -190,14 +190,10 @@ while (true) {
   if (page.length < PAGE_SIZE) break;
 }
 
-if (profileError) {
-  throw new Error(`Profiles: ${profileError.message}`);
-}
 
 const profileRows = profiles || [];
 
 console.info("AFFILIATE DETAILS PROFILE DIAGNOSTIC:", {
-  exactDatabaseCount: profileExactCount,
   apiReturnedCount: profileRows.length,
   hasAffiliateIdCount: profileRows.filter(
     (profile: any) => String(profile.affiliate_id || "").trim()
