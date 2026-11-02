@@ -98,8 +98,69 @@ export default function SubIdManager({admin=false,dark=false,affiliateId='',smar
       <h3 className="mt-7 font-bold">Worker performance by destination</h3>
       <div className="mt-3 overflow-x-auto"><table className={`w-full text-left text-sm ${admin?'min-w-[1050px]':'min-w-[700px]'}`}><thead><tr>{['Sub ID','Smart Link / destination','Clicks','Unique clicks','Leads','Affiliate earnings',...(admin?['Revenue*','Your share*','Missing revenue']:[])].map(h=><th className="border-b border-slate-500/20 p-3" key={h}>{h}</th>)}</tr></thead><tbody>{report.rows.map(r=><tr key={JSON.stringify([r.sub_id,r.source_id])}><td className="p-3 font-mono">{r.sub_id}</td><td className="p-3">{r.source_name}</td><td className="p-3">{r.clicks}</td><td className="p-3">{r.unique_clicks}</td><td className="p-3">{r.conversions}</td><td className="p-3">{money(r.earnings)}</td>{admin&&<><td className="p-3">{money(r.revenue||0)}{r.missing_revenue?' *':''}</td><td className="p-3">{money(r.profit||0)}{r.missing_revenue?' *':''}</td><td className="p-3">{r.missing_revenue||0}</td></>}</tr>)}</tbody></table></div>
       {!report.rows.length&&<p className="py-5 text-sm opacity-70">No tracked worker clicks in this period.</p>}
-      <p className="mt-4 text-xs opacity-60">Existing links without a Sub ID still contribute to the main account and do not appear here. Unique clicks use known visitor hashes. Global results are grouped by the destination selected for each click.</p>
-      {admin&&<p className="mt-3 text-xs opacity-60">* Revenue and your share include known amounts only. Your share = recorded revenue − affiliate earnings for known records, before referrals and costs. Missing revenue is not estimated. This report uses click dates; Network Revenue uses conversion dates. Compare all-time totals.</p>}
+      'use client';
+
+      <h3 className="mt-7 font-bold">Daily Worker Performance</h3>
+      <div className="mt-3 overflow-x-auto">
+        <table className={`w-full text-left text-sm ${admin ? 'min-w-[1050px]' : 'min-w-[700px]'}`}>
+          <thead>
+            <tr>
+              {[
+                'Date (BD)',
+                'Worker / Sub ID',
+                'Smart Link / Destination',
+                'Clicks',
+                'Unique Clicks',
+                'Leads',
+                'Affiliate Earnings',
+                ...(admin ? ['Revenue*', 'Your Share*', 'Missing Revenue'] : []),
+              ].map(h => (
+                <th key={h} className="border-b border-slate-500/20 p-3">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {report.dailyRows.map((r, index) => {
+              const worker = report.workers.find(w => w.sub_id === r.sub_id);
+              return (
+                <tr key={`${r.date}-${r.sub_id}-${r.source_id}-${index}`}>
+                  <td className="p-3">{r.date}</td>
+                  <td className="p-3">
+                    {worker?.name || r.sub_id}
+                    <div className="text-xs opacity-60">{r.sub_id}</div>
+                  </td>
+                  <td className="p-3">{r.source_name}</td>
+                  <td className="p-3">{r.clicks}</td>
+                  <td className="p-3">{r.unique_clicks}</td>
+                  <td className="p-3">{r.conversions}</td>
+                  <td className="p-3 text-emerald-500">{money(r.earnings)}</td>
+                  {admin && (
+                    <>
+                      <td className="p-3">{money(r.revenue || 0)}</td>
+                      <td className="p-3">{money(r.profit || 0)}</td>
+                      <td className="p-3">{r.missing_revenue || 0}</td>
+                    </>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {!report.dailyRows.length && (
+        <p className="py-5 text-sm opacity-70">
+          No daily worker activity found for this date range.
+        </p>
+      )}
+      <p className="mt-4 text-xs opacity-60">
+        Existing links without a Sub ID still contribute to the main account and do not appear here.
+        Unique clicks use known visitor hashes. Global results are grouped by the destination selected for each click.
+      </p>
+      {admin && (
+        <p className="mt-3 text-xs opacity-60">
+          * Revenue and your share include known amounts only. Your share = recorded revenue − affiliate earnings for known records, before referrals and costs. Missing revenue is not estimated. This report uses click dates; Network Revenue uses conversion dates. Compare all-time totals.
+        </p>
+      )}
     </>}
   </section>;
 }
