@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { deliverAffiliateConversion } from "@/lib/affiliate-postback-delivery";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -195,6 +196,39 @@ async function processPostback(request: NextRequest) {
       );
     }
 
+        // Fetch the recorded conversion and notify the affiliate.
+    // Delivery failure must never undo a successful conversion.
+    const {
+      data: conversion,
+      error: deliveryLookupError,
+    } = await supabase
+      .from("clicks")
+      .select(
+        "click_id,affiliate_id,offer_id,status,payout,gross_revenue,country"
+      )
+      .eq("click_id", clickId)
+      .maybeSingle();
+
+    if (deliveryLookupError) {
+      console.error(
+        "Affiliate conversion delivery lookup failed:",
+        deliveryLookupError.message
+      );
+    } else if (conversion) {
+      await deliverAffiliateConversion(supabase, {
+        click_id: String(conversion.click_id),
+        affiliate_id: conversion.affiliate_id,
+        offer_id: conversion.offer_id,
+        status: conversion.status,
+        payout: conversion.payout,
+        gross_revenue: conversion.gross_revenue,
+        country: conversion.country,
+      });
+    } else {
+      console.error(
+        "Recorded conversion could not be found for affiliate delivery."
+      );
+    }
     return reply(
       "Conversion recorded successfully",
       200
