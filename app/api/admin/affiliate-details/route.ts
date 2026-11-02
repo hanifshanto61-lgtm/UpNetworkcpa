@@ -164,8 +164,31 @@ export async function GET(request: NextRequest) {
     }
 
     
-const { data: profiles, error: profileError, count: profileExactCount } =
-  await profileQuery.limit(5000);
+const profileRows: any[] = [];
+let profileOffset = 0;
+
+while (true) {
+  const { data, error } = await profileQuery
+    .range(profileOffset, profileOffset + PAGE_SIZE - 1);
+
+  if (error) {
+    throw new Error(`Profiles: ${error.message}`);
+  }
+
+  const page = data || [];
+
+  if (page.length === 0) break;
+
+  profileRows.push(...page);
+
+  if (profileRows.length > MAX_ROWS) {
+    throw new Error("Profiles exceed the supported limit.");
+  }
+
+  profileOffset += page.length;
+
+  if (page.length < PAGE_SIZE) break;
+}
 
 if (profileError) {
   throw new Error(`Profiles: ${profileError.message}`);
