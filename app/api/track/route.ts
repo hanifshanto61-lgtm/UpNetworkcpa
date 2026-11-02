@@ -247,6 +247,7 @@ function validClickIdParameter(
   return parameter;
 }
 
+
 function addTrackingParameters(
   destination: URL,
   clickId: string,
@@ -254,9 +255,20 @@ function addTrackingParameters(
   offerId: string | null,
   parameter: string
 ): string {
+  const existingValue =
+    destination.searchParams.get(parameter) || "";
+
+  // Preserve AdBlueMedia's s1 prefix only
+  // when its explicit placeholder is present.
+  const isAdBlueMediaPlaceholder =
+    parameter.toLowerCase() === "sub5" &&
+    existingValue.toUpperCase() === "S1SUBID1HERE";
+
   destination.searchParams.set(
     parameter,
-    clickId
+    isAdBlueMediaPlaceholder
+      ? `s1${clickId}`
+      : clickId
   );
 
   destination.searchParams.set(
@@ -276,6 +288,7 @@ function addTrackingParameters(
 
   return destination.toString();
 }
+
 
 function errorResponse(
   message: string,
