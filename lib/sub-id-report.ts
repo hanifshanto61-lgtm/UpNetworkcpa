@@ -213,7 +213,7 @@ export async function workerReport(
     let query = client
       .from('clicks')
       .select(
-        'id,affiliate_id,worker_sub_id,smartlink_id,offer_id,status,payout,gross_revenue,converted_at,visitor_hash'
+        'id,affiliate_id,worker_sub_id,smartlink_id,offer_id,status,payout,gross_revenue,converted_at,visitor_hash,created_at'
       )
       .eq('affiliate_id', affiliateId)
       .not('worker_sub_id', 'is', null);
@@ -294,6 +294,7 @@ export async function workerReport(
     offer_id: offerId,
     workers,
     rows: summarizeWorkers(clicks, names, admin),
+    dailyRows: summarizeWorkersByDay(clicks, names, admin),
     period: {
       from,
       to,
