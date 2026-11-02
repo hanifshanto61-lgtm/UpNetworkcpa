@@ -163,14 +163,28 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { data: profiles, error: profileError } =
-      await profileQuery.limit(5000);
+    
+const { data: profiles, error: profileError, count: profileExactCount } =
+  await profileQuery
+    .select("*", { count: "exact" })
+    .limit(5000);
 
-    if (profileError) {
-      throw new Error(`Profiles: ${profileError.message}`);
-    }
+if (profileError) {
+  throw new Error(`Profiles: ${profileError.message}`);
+}
 
-    const profileRows = profiles || [];
+const profileRows = profiles || [];
+
+console.info("AFFILIATE DETAILS PROFILE DIAGNOSTIC:", {
+  exactDatabaseCount: profileExactCount,
+  apiReturnedCount: profileRows.length,
+  hasAffiliateIdCount: profileRows.filter(
+    (profile: any) => String(profile.affiliate_id || "").trim()
+  ).length,
+  statusFilter: statusFilter || "all",
+  searchApplied: Boolean(search),
+});
+
 
     if (affiliateId && profileRows.length === 0) {
       return response(
