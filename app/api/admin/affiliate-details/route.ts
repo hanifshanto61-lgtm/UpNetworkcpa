@@ -191,7 +191,6 @@ while (true) {
 }
 
 
-const profileRows = profiles || [];
 
 console.info("AFFILIATE DETAILS PROFILE DIAGNOSTIC:", {
   apiReturnedCount: profileRows.length,
