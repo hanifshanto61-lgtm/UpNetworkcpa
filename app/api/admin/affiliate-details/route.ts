@@ -143,7 +143,7 @@ export async function GET(request: NextRequest) {
 
     let profileQuery = db
       .from("profiles")
-      .select("*")
+      .select("*", { count: "exact" })
       .order("created_at", { ascending: false });
 
     if (affiliateId) {
@@ -165,9 +165,7 @@ export async function GET(request: NextRequest) {
 
     
 const { data: profiles, error: profileError, count: profileExactCount } =
-  await profileQuery
-    .select("*", { count: "exact" })
-    .limit(5000);
+  await profileQuery.limit(5000);
 
 if (profileError) {
   throw new Error(`Profiles: ${profileError.message}`);
