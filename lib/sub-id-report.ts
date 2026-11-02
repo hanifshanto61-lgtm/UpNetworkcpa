@@ -50,6 +50,7 @@ export function validReportDate(v: string) {
   );
 }
 
+
 export function summarizeWorkers(
   clicks: WorkerClick[],
   names: Map<string, string>,
@@ -62,39 +63,6 @@ export function summarizeWorkers(
       visitors: Set<string>;
       clicks: WorkerClick[];
     }
-    function summarizeWorkersByDay(
-  clicks: WorkerClick[],
-  names: Map<string, string>,
-  admin: boolean
-): DailyWorkerReportRow[] {
-  const daily = new Map<string, WorkerClick[]>();
-
-  for (const click of clicks) {
-    const date = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Dhaka',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(new Date(click.created_at));
-
-    const group = daily.get(date) || [];
-    group.push(click);
-    daily.set(date, group);
-  }
-
-  return Array.from(daily.entries())
-    .flatMap(([date, dayClicks]) =>
-      summarizeWorkers(dayClicks, names, admin).map(row => ({
-        ...row,
-        date,
-      }))
-    )
-    .sort((a, b) =>
-      b.date.localeCompare(a.date) ||
-      a.sub_id.localeCompare(b.sub_id) ||
-      a.source_name.localeCompare(b.source_name)
-    );
-}
   >();
 
   for (const c of clicks) {
@@ -160,6 +128,40 @@ export function summarizeWorkers(
       a.sub_id.localeCompare(b.sub_id) ||
       a.source_name.localeCompare(b.source_name)
   );
+}
+
+function summarizeWorkersByDay(
+  clicks: WorkerClick[],
+  names: Map<string, string>,
+  admin: boolean
+): DailyWorkerReportRow[] {
+  const daily = new Map<string, WorkerClick[]>();
+
+  for (const click of clicks) {
+    const date = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Dhaka',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date(click.created_at));
+
+    const group = daily.get(date) || [];
+    group.push(click);
+    daily.set(date, group);
+  }
+
+  return Array.from(daily.entries())
+    .flatMap(([date, dayClicks]) =>
+      summarizeWorkers(dayClicks, names, admin).map(row => ({
+        ...row,
+        date,
+      }))
+    )
+    .sort((a, b) =>
+      b.date.localeCompare(a.date) ||
+      a.sub_id.localeCompare(b.sub_id) ||
+      a.source_name.localeCompare(b.source_name)
+    );
 }
 
 export async function workerReport(
