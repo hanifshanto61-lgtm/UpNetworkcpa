@@ -1,9 +1,13 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import type { Worker, WorkerReportRow } from '@/lib/sub-id-report';
+import type {
+  Worker,
+  WorkerReportRow,
+  DailyWorkerReportRow,
+} from '@/lib/sub-id-report';
 const money=(v:number)=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(v);
-type Report={affiliate_id:string;workers:Worker[];rows:WorkerReportRow[];period:{from:string;to:string};generated_at:string};
+type Report={affiliate_id:string;workers:Worker[];rows:WorkerReportRow[];dailyRows: DailyWorkerReportRow[];period:{from:string;to:string};generated_at:string};
 type Choice={id:string;name:string;slug:string};
 export default function SubIdManager({admin=false,dark=false,affiliateId='',smartLinks=[]}:{admin?:boolean;dark?:boolean;affiliateId?:string;smartLinks?:Choice[]}) {
   const [report,setReport]=useState<Report|null>(null);
