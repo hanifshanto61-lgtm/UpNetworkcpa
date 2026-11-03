@@ -344,22 +344,48 @@ const targetAffiliate = allAffiliates.find(
     normalize(item.affiliate_id) === "anikmh211"
 );
 
+const targetUserId = String(targetAffiliate?.id || "");
+
+const directProfileById = targetUserId
+  ? await db
+      .from("profiles")
+      .select("id, affiliate_id, application_status")
+      .eq("id", targetUserId)
+      .maybeSingle()
+  : { data: null, error: null };
+
+const directProfilesByAffiliate = await db
+  .from("profiles")
+  .select("id, affiliate_id, application_status")
+  .eq("affiliate_id", "anikmh211")
+  .limit(10);
+
 const targetUser = users.find(
   (user: any) =>
-    String(user.id) === String(targetAffiliate?.id)
+    String(user.id) === targetUserId
 );
 
-const targetProfile = profileMap.get(
-  String(targetAffiliate?.id)
-);
-
-console.info("AFFILIATE DETAILS STATUS CHECK:", {
+console.info("AFFILIATE DIRECT DATABASE CHECK:", {
   affiliate_id: targetAffiliate?.affiliate_id,
-  user_id: targetAffiliate?.id,
-  profile_status_raw: targetProfile?.application_status,
-  metadata_status_raw:
+  user_id: targetUserId,
+
+  mapped_profile_status:
+    profileMap.get(targetUserId)?.application_status,
+
+  direct_profile_status:
+    directProfileById.data?.application_status,
+
+  direct_profile_error:
+    directProfileById.error?.message || null,
+
+  affiliate_id_matches:
+    directProfilesByAffiliate.data || [],
+
+  affiliate_id_query_error:
+    directProfilesByAffiliate.error?.message || null,
+
+  metadata_status:
     targetUser?.user_metadata?.application_status,
-  final_status: targetAffiliate?.application_status,
 });
     console.info("AFFILIATE DETAILS DIAGNOSTIC:", {
       affiliateManagementSourceCount: allAffiliates.length,
