@@ -187,40 +187,43 @@ export async function GET(request: NextRequest) {
       authPage++;
     }
 
-    // Load profiles directly by Auth user IDs in batches.
-const profileMap = new Map<string, any>();
+    // Load all database profiles using the same pagination
+    // method as Affiliate Management.
+    const profileRows: any[] = [];
 
-const userIds = users
-  .map((user: any) => String(user.id))
-  .filter(Boolean);
+    let profilePage = 0;
 
-const PROFILE_BATCH_SIZE = 500;
+    while (profilePage < 20) {
+      const from = profilePage * 1000;
+      const to = from + 999;
 
-for (
-  let i = 0;
-  i < userIds.length;
-  i += PROFILE_BATCH_SIZE
-) {
-  const batchIds = userIds.slice(
-    i,
-    i + PROFILE_BATCH_SIZE
-  );
+      const { data, error } = await db
+        .from("profiles")
+        .select("*")
+        .range(from, to);
 
-  const { data, error } = await db
-    .from("profiles")
-    .select("*")
-    .in("id", batchIds);
+      if (error) {
+        throw new Error(`Profiles: ${error.message}`);
+      }
 
-  if (error) {
-    throw new Error(`Profiles: ${error.message}`);
-  }
+      const rows = data || [];
 
-  for (const profile of data || []) {
-    if (profile?.id) {
-      profileMap.set(String(profile.id), profile);
+      profileRows.push(...rows);
+
+      if (rows.length < 1000) {
+        break;
+      }
+
+      profilePage++;
     }
-  }
-}
+
+    const profileMap = new Map<string, any>();
+
+    for (const profile of profileRows) {
+      if (profile?.id) {
+        profileMap.set(String(profile.id), profile);
+      }
+    }
 
     // Build the same affiliate list as Affiliate Management
     const allAffiliates = users
