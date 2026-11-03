@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search,
@@ -529,7 +529,8 @@ export default function AffiliateDetailsPage() {
   const [selectedId, setSelectedId] = useState("");
   const [report, setReport] = useState<Report | null>(null);
   const [activeTab, setActiveTab] = useState("leads");
-
+  const autoRefreshInProgress = useRef(false);
+  
   const getToken = useCallback(async () => {
     const {
       data: { session },
@@ -654,7 +655,49 @@ export default function AffiliateDetailsPage() {
       void loadAffiliates();
     }
   }, [checking, selectedId, loadAffiliates]);
+  useEffect(() => {
+  if (checking) return;
 
+  const refreshCurrentView = async () => {
+    if (document.visibilityState !== "visible") return;
+    if (autoRefreshInProgress.current) return;
+
+    autoRefreshInProgress.current = true;
+
+    try {
+      if (selectedId) {
+        await loadReport(selectedId);
+      } else {
+        await loadAffiliates();
+      }
+    } finally {
+      autoRefreshInProgress.current = false;
+    }
+  };
+
+  const intervalId = window.setInterval(() => {
+    void refreshCurrentView();
+  }, 30_000);
+
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === "visible") {
+      void refreshCurrentView();
+    }
+  };
+
+  const handleWindowFocus = () => {
+    void refreshCurrentView();
+  };
+
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+  window.addEventListener("focus", handleWindowFocus);
+
+  return () => {
+    window.clearInterval(intervalId);
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
+    window.removeEventListener("focus", handleWindowFocus);
+  };
+}, [checking, selectedId, loadAffiliates, loadReport]);
   
   const summary = useMemo(() => {
     return affiliates.reduce(
