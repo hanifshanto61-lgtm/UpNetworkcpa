@@ -150,66 +150,65 @@ export async function GET(request: NextRequest) {
       profileQuery = profileQuery.eq("affiliate_id", affiliateId);
     }
 
-    if (statusFilter && statusFilter !== "all") {
-      profileQuery = profileQuery.eq(
-        "application_status",
-        statusFilter
-      );
-    }
-
+    // Status filtering is applied after fetching profiles so that
+    // uppercase/lowercase values and surrounding spaces are handled.
     if (search) {
       profileQuery = profileQuery.or(
         `affiliate_id.ilike.%${search}%,email.ilike.%${search}%,full_name.ilike.%${search}%,username.ilike.%${search}%`
       );
     }
 
-    
-const profileRows: any[] = [];
-let profileOffset = 0;
+    const profileRows: any[] = [];
+    let profileOffset = 0;
 
-while (true) {
-  const { data, error } = await profileQuery
-    .range(profileOffset, profileOffset + PAGE_SIZE - 1);
+    while (true) {
+      const { data, error } = await profileQuery
+        .range(profileOffset, profileOffset + PAGE_SIZE - 1);
 
-  if (error) {
-    throw new Error(`Profiles: ${error.message}`);
-  }
+      if (error) {
+        throw new Error(`Profiles: ${error.message}`);
+      }
 
-  const page = data || [];
+      const page = data || [];
 
-  if (page.length === 0) break;
+      if (page.length === 0) break;
 
-  profileRows.push(...page);
+      profileRows.push(...page);
 
-  if (profileRows.length > MAX_ROWS) {
-    throw new Error("Profiles exceed the supported limit.");
-  }
+      if (profileRows.length > MAX_ROWS) {
+        throw new Error("Profiles exceed the supported limit.");
+      }
 
-  profileOffset += page.length;
+      profileOffset += page.length;
 
-  if (page.length < PAGE_SIZE) break;
-}
+      if (page.length < PAGE_SIZE) break;
+    }
 
+    const matchingProfileRows =
+      statusFilter && statusFilter !== "all"
+        ? profileRows.filter(
+            (profile: any) =>
+              normalize(profile.application_status) === statusFilter
+          )
+        : profileRows;
 
+    console.info("AFFILIATE DETAILS PROFILE DIAGNOSTIC:", {
+      apiReturnedCount: matchingProfileRows.length,
+      hasAffiliateIdCount: matchingProfileRows.filter(
+        (profile: any) => String(profile.affiliate_id || "").trim()
+      ).length,
+      statusFilter: statusFilter || "all",
+      searchApplied: Boolean(search),
+    });
 
-console.info("AFFILIATE DETAILS PROFILE DIAGNOSTIC:", {
-  apiReturnedCount: profileRows.length,
-  hasAffiliateIdCount: profileRows.filter(
-    (profile: any) => String(profile.affiliate_id || "").trim()
-  ).length,
-  statusFilter: statusFilter || "all",
-  searchApplied: Boolean(search),
-});
-
-
-    if (affiliateId && profileRows.length === 0) {
+    if (affiliateId && matchingProfileRows.length === 0) {
       return response(
         { success: false, error: "Affiliate not found." },
         404
       );
     }
 
-    const ids = profileRows
+    const ids = matchingProfileRows
       .map((profile: any) =>
         String(profile.affiliate_id || "").trim()
       )
@@ -419,7 +418,7 @@ console.info("AFFILIATE DETAILS PROFILE DIAGNOSTIC:", {
       };
     };
 
-    const reports = profileRows.map(buildReport);
+    const reports = matchingProfileRows.map(buildReport);
 
     if (affiliateId) {
       return response({
@@ -448,4 +447,4 @@ console.info("AFFILIATE DETAILS PROFILE DIAGNOSTIC:", {
       500
     );
   }
-}
+        }
