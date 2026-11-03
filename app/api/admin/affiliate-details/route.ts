@@ -269,23 +269,20 @@ export async function GET(request: NextRequest) {
           `UP${String(user.id).replace(/-/g, "").slice(0, 10).toUpperCase()}`;
 
         const profileStatus = normalize(profile.application_status);
-        const metadataStatus = normalize(metadata.application_status);
+const metadataStatus = normalize(metadata.application_status);
 
-        const applicationStatus = [
-          "pending",
-          "approved",
-          "rejected",
-          "suspended",
-        ].includes(profileStatus)
-          ? profileStatus
-          : [
-              "pending",
-              "approved",
-              "rejected",
-              "suspended",
-            ].includes(metadataStatus)
-            ? metadataStatus
-            : "pending";
+const validStatuses = [
+  "pending",
+  "approved",
+  "rejected",
+  "suspended",
+];
+
+const applicationStatus = validStatuses.includes(metadataStatus)
+  ? metadataStatus
+  : validStatuses.includes(profileStatus)
+    ? profileStatus
+    : "pending";
 
         return {
           ...profile,
