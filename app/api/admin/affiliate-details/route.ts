@@ -141,29 +141,61 @@ export async function GET(request: NextRequest) {
     const search = normalize(params.get("search"));
     const statusFilter = normalize(params.get("status"));
 
-    let profileQuery = db
-      .from("profiles")
-      .select("*", { count: "exact" })
-      .order("created_at", { ascending: false });
+    // Load protected admin accounts
+    const adminIds = new Set<string>();
+    let adminOffset = 0;
 
-    if (affiliateId) {
-      profileQuery = profileQuery.eq("affiliate_id", affiliateId);
+    while (true) {
+      const { data, error } = await db
+        .from("admin_roles")
+        .select("user_id")
+        .range(adminOffset, adminOffset + 999);
+
+      if (error) {
+        throw new Error(`Admin roles: ${error.message}`);
+      }
+
+      const rows = data || [];
+
+      for (const row of rows) {
+        adminIds.add(String(row.user_id));
+      }
+
+      if (rows.length < 1000) break;
+      adminOffset += rows.length;
     }
 
-    // Status filtering is applied after fetching profiles so that
-    // uppercase/lowercase values and surrounding spaces are handled.
-    if (search) {
-      profileQuery = profileQuery.or(
-        `affiliate_id.ilike.%${search}%,email.ilike.%${search}%,full_name.ilike.%${search}%,username.ilike.%${search}%`
-      );
+    // Load the same Auth users used by Affiliate Management
+    const users: any[] = [];
+    let authPage = 1;
+
+    while (authPage <= 20) {
+      const { data, error } =
+        await db.auth.admin.listUsers({
+          page: authPage,
+          perPage: 1000,
+        });
+
+      if (error) {
+        throw new Error(`Auth users: ${error.message}`);
+      }
+
+      const pageUsers = data?.users || [];
+      users.push(...pageUsers);
+
+      if (pageUsers.length < 1000) break;
+      authPage++;
     }
 
+    // Load profiles
     const profileRows: any[] = [];
     let profileOffset = 0;
 
     while (true) {
-      const { data, error } = await profileQuery
-        .range(profileOffset, profileOffset + PAGE_SIZE - 1);
+      const { data, error } = await db
+        .from("profiles")
+        .select("*")
+        .range(profileOffset, profileOffset + 999);
 
       if (error) {
         throw new Error(`Profiles: ${error.message}`);
@@ -181,22 +213,139 @@ export async function GET(request: NextRequest) {
 
       profileOffset += page.length;
 
-      if (page.length < PAGE_SIZE) break;
+      if (page.length < 1000) break;
     }
 
-    const matchingProfileRows =
-      statusFilter && statusFilter !== "all"
-        ? profileRows.filter(
-            (profile: any) =>
-              normalize(profile.application_status) === statusFilter
-          )
-        : profileRows;
+    const profileMap = new Map<string, any>();
 
-    console.info("AFFILIATE DETAILS PROFILE DIAGNOSTIC:", {
+    for (const profile of profileRows) {
+      if (profile?.id) {
+        profileMap.set(String(profile.id), profile);
+      }
+    }
+
+    // Build the same affiliate list as Affiliate Management
+    const allAffiliates = users
+      .filter((user: any) => {
+        if (adminIds.has(String(user.id))) return false;
+
+        const metadata = user.user_metadata || {};
+        const profile = profileMap.get(String(user.id));
+
+        const accountType = normalize(
+          metadata.account_type || profile?.account_type
+        );
+
+        return (
+          accountType === "affiliate" ||
+          Boolean(profile)
+        );
+      })
+      .map((user: any) => {
+        const metadata = user.user_metadata || {};
+        const profile = profileMap.get(String(user.id)) || {};
+
+        const firstName = String(
+          metadata.first_name || profile.first_name || ""
+        ).trim();
+
+        const lastName = String(
+          metadata.last_name || profile.last_name || ""
+        ).trim();
+
+        const fullName =
+          [firstName, lastName].filter(Boolean).join(" ") ||
+          profile.full_name ||
+          metadata.full_name ||
+          metadata.username ||
+          user.email ||
+          "Affiliate";
+
+        const id =
+          profile.affiliate_id ||
+          metadata.affiliate_id ||
+          metadata.affiliateId ||
+          metadata.username ||
+          `UP${String(user.id).replace(/-/g, "").slice(0, 10).toUpperCase()}`;
+
+        const profileStatus = normalize(profile.application_status);
+        const metadataStatus = normalize(metadata.application_status);
+
+        const applicationStatus = [
+          "pending",
+          "approved",
+          "rejected",
+          "suspended",
+        ].includes(profileStatus)
+          ? profileStatus
+          : [
+              "pending",
+              "approved",
+              "rejected",
+              "suspended",
+            ].includes(metadataStatus)
+            ? metadataStatus
+            : "pending";
+
+        return {
+          ...profile,
+          id: user.id,
+          affiliate_id: id,
+          full_name: fullName,
+          username: profile.username || metadata.username || "",
+          email: user.email || profile.email || "",
+          application_status: applicationStatus,
+          created_at: user.created_at || profile.created_at || null,
+          phone: profile.phone || metadata.phone || "",
+          country: profile.country || metadata.country || "",
+          city: profile.city || metadata.city || "",
+        };
+      });
+
+    // Apply affiliate ID, search and status filters
+    const matchingProfileRows = allAffiliates
+      .filter((profile: any) => {
+        if (
+          affiliateId &&
+          normalize(profile.affiliate_id) !== normalize(affiliateId)
+        ) {
+          return false;
+        }
+
+        if (
+          statusFilter &&
+          statusFilter !== "all" &&
+          normalize(profile.application_status) !== statusFilter
+        ) {
+          return false;
+        }
+
+        if (search) {
+          const searchable = [
+            profile.affiliate_id,
+            profile.email,
+            profile.full_name,
+            profile.username,
+            profile.phone,
+          ]
+            .join(" ")
+            .toLowerCase();
+
+          if (!searchable.includes(search)) return false;
+        }
+
+        return true;
+      })
+      .sort((a: any, b: any) => {
+        return (
+          new Date(b.created_at || 0).getTime() -
+          new Date(a.created_at || 0).getTime()
+        );
+      });
+
+    console.info("AFFILIATE DETAILS DIAGNOSTIC:", {
+      affiliateManagementSourceCount: allAffiliates.length,
       apiReturnedCount: matchingProfileRows.length,
-      hasAffiliateIdCount: matchingProfileRows.filter(
-        (profile: any) => String(profile.affiliate_id || "").trim()
-      ).length,
       statusFilter: statusFilter || "all",
       searchApplied: Boolean(search),
     });
@@ -219,10 +368,10 @@ export async function GET(request: NextRequest) {
         success: true,
         affiliates: [],
         affiliate: null,
+        total: 0,
         message: "No matching affiliates found.",
       });
     }
-
     // Read existing records only. No database writes are performed.
     const [clicks, payments, referrals, commissions] =
       await Promise.all([
