@@ -187,42 +187,40 @@ export async function GET(request: NextRequest) {
       authPage++;
     }
 
-    // Load profiles
-    const profileRows: any[] = [];
-    let profileOffset = 0;
+    // Load profiles directly by Auth user IDs in batches.
+const profileMap = new Map<string, any>();
 
-    while (true) {
-      const { data, error } = await db
-        .from("profiles")
-        .select("*")
-        .range(profileOffset, profileOffset + 999);
+const userIds = users
+  .map((user: any) => String(user.id))
+  .filter(Boolean);
 
-      if (error) {
-        throw new Error(`Profiles: ${error.message}`);
-      }
+const PROFILE_BATCH_SIZE = 500;
 
-      const page = data || [];
+for (
+  let i = 0;
+  i < userIds.length;
+  i += PROFILE_BATCH_SIZE
+) {
+  const batchIds = userIds.slice(
+    i,
+    i + PROFILE_BATCH_SIZE
+  );
 
-      if (page.length === 0) break;
+  const { data, error } = await db
+    .from("profiles")
+    .select("*")
+    .in("id", batchIds);
 
-      profileRows.push(...page);
+  if (error) {
+    throw new Error(`Profiles: ${error.message}`);
+  }
 
-      if (profileRows.length > MAX_ROWS) {
-        throw new Error("Profiles exceed the supported limit.");
-      }
-
-      profileOffset += page.length;
-
-      if (page.length < 1000) break;
+  for (const profile of data || []) {
+    if (profile?.id) {
+      profileMap.set(String(profile.id), profile);
     }
-
-    const profileMap = new Map<string, any>();
-
-    for (const profile of profileRows) {
-      if (profile?.id) {
-        profileMap.set(String(profile.id), profile);
-      }
-    }
+  }
+}
 
     // Build the same affiliate list as Affiliate Management
     const allAffiliates = users
@@ -339,54 +337,7 @@ const applicationStatus = validStatuses.includes(profileStatus)
           new Date(a.created_at || 0).getTime()
         );
       });
-const targetAffiliate = allAffiliates.find(
-  (item: any) =>
-    normalize(item.affiliate_id) === "anikmh211"
-);
 
-const targetUserId = String(targetAffiliate?.id || "");
-
-const directProfileById = targetUserId
-  ? await db
-      .from("profiles")
-      .select("id, affiliate_id, application_status")
-      .eq("id", targetUserId)
-      .maybeSingle()
-  : { data: null, error: null };
-
-const directProfilesByAffiliate = await db
-  .from("profiles")
-  .select("id, affiliate_id, application_status")
-  .eq("affiliate_id", "anikmh211")
-  .limit(10);
-
-const targetUser = users.find(
-  (user: any) =>
-    String(user.id) === targetUserId
-);
-
-console.info("AFFILIATE DIRECT DATABASE CHECK:", {
-  affiliate_id: targetAffiliate?.affiliate_id,
-  user_id: targetUserId,
-
-  mapped_profile_status:
-    profileMap.get(targetUserId)?.application_status,
-
-  direct_profile_status:
-    directProfileById.data?.application_status,
-
-  direct_profile_error:
-    directProfileById.error?.message || null,
-
-  affiliate_id_matches:
-    directProfilesByAffiliate.data || [],
-
-  affiliate_id_query_error:
-    directProfilesByAffiliate.error?.message || null,
-
-  metadata_status:
-    targetUser?.user_metadata?.application_status,
-});
     console.info("AFFILIATE DETAILS DIAGNOSTIC:", {
       affiliateManagementSourceCount: allAffiliates.length,
       apiReturnedCount: matchingProfileRows.length,
@@ -640,4 +591,4 @@ console.info("AFFILIATE DIRECT DATABASE CHECK:", {
       500
     );
   }
-        }
+}
