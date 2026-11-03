@@ -141,194 +141,40 @@ export async function GET(request: NextRequest) {
     const search = normalize(params.get("search"));
     const statusFilter = normalize(params.get("status"));
 
-    // Load protected admin accounts
-    const adminIds = new Set<string>();
-    let adminOffset = 0;
+// Use Affiliate Management as the single source of truth.
+    // This guarantees both pages use exactly the same affiliate list.
+    const managementUrl = new URL(
+      "/api/admin/affiliates",
+      request.url
+    );
 
-    while (true) {
-      const { data, error } = await db
-        .from("admin_roles")
-        .select("user_id")
-        .range(adminOffset, adminOffset + 999);
-
-      if (error) {
-        throw new Error(`Admin roles: ${error.message}`);
-      }
-
-      const rows = data || [];
-
-      for (const row of rows) {
-        adminIds.add(String(row.user_id));
-      }
-
-      if (rows.length < 1000) break;
-      adminOffset += rows.length;
-    }
-
-    // Load the same Auth users used by Affiliate Management
-    const users: any[] = [];
-    let authPage = 1;
-
-    while (authPage <= 20) {
-      const { data, error } =
-        await db.auth.admin.listUsers({
-          page: authPage,
-          perPage: 1000,
-        });
-
-      if (error) {
-        throw new Error(`Auth users: ${error.message}`);
-      }
-
-      const pageUsers = data?.users || [];
-      users.push(...pageUsers);
-
-      if (pageUsers.length < 1000) break;
-      authPage++;
-    }
-
-    // Load all database profiles using the same pagination
-    // method as Affiliate Management.
-    const profileRows: any[] = [];
-
-    let profilePage = 0;
-
-    while (profilePage < 20) {
-      const from = profilePage * 1000;
-      const to = from + 999;
-
-      const { data, error } = await db
-        .from("profiles")
-        .select("*")
-        .range(from, to);
-
-      if (error) {
-        throw new Error(`Profiles: ${error.message}`);
-      }
-
-      const rows = data || [];
-
-      profileRows.push(...rows);
-
-      if (rows.length < 1000) {
-        break;
-      }
-
-      profilePage++;
-    }
-
-    const profileMap = new Map<string, any>();
-
-    for (const profile of profileRows) {
-      if (profile?.id) {
-        profileMap.set(String(profile.id), profile);
-      }
-    }
-
-    // Build the same affiliate list as Affiliate Management
-    const allAffiliates = users
-      .filter((user: any) => {
-        if (adminIds.has(String(user.id))) return false;
-
-        const metadata = user.user_metadata || {};
-        const profile = profileMap.get(String(user.id));
-
-        const accountType = normalize(
-          metadata.account_type || profile?.account_type
-        );
-
-        return (
-          accountType === "affiliate" ||
-          Boolean(profile)
-        );
-      })
-      .map((user: any) => {
-        const metadata = user.user_metadata || {};
-        const profile = profileMap.get(String(user.id)) || {};
-
-        const firstName = String(
-          metadata.first_name || profile.first_name || ""
-        ).trim();
-
-        const lastName = String(
-          metadata.last_name || profile.last_name || ""
-        ).trim();
-
-        const fullName =
-          [firstName, lastName].filter(Boolean).join(" ") ||
-          profile.full_name ||
-          metadata.full_name ||
-          metadata.username ||
-          user.email ||
-          "Affiliate";
-
-        const id =
-          profile.affiliate_id ||
-          metadata.affiliate_id ||
-          metadata.affiliateId ||
-          metadata.username ||
-          `UP${String(user.id).replace(/-/g, "").slice(0, 10).toUpperCase()}`;
-
-        const profileStatus = normalize(profile.application_status);
-const metadataStatus = normalize(metadata.application_status);
-
-const validStatuses = [
-  "pending",
-  "approved",
-  "rejected",
-  "suspended",
-];
-
-const applicationStatus = validStatuses.includes(profileStatus)
-  ? profileStatus
-  : validStatuses.includes(metadataStatus)
-    ? metadataStatus
-    : "pending";
-
-        return {
-          ...profile,
-          id: user.id,
-          affiliate_id: id,
-          full_name: fullName,
-          username: profile.username || metadata.username || "",
-          email: user.email || profile.email || "",
-          application_status: applicationStatus,
-          created_at: user.created_at || profile.created_at || null,
-          phone: profile.phone || metadata.phone || "",
-          country: profile.country || metadata.country || "",
-          city: profile.city || metadata.city || "",
-        };
-      });
-
-    // TEMPORARY AFFILIATE COUNT DIAGNOSTIC
-    const excludedUsers = users
-      .filter((user: any) => {
-        if (adminIds.has(String(user.id))) return false;
-
-        const metadata = user.user_metadata || {};
-        const profile = profileMap.get(String(user.id));
-
-        const accountType = normalize(
-          metadata.account_type || profile?.account_type
-        );
-
-        return accountType !== "affiliate" && !profile;
-      })
-      .map((user: any) => ({
-        id: user.id,
-        email: user.email,
-        account_type: user.user_metadata?.account_type || null,
-        profile_found: profileMap.has(String(user.id)),
-      }));
-
-    console.info("AFFILIATE COUNT INVESTIGATION:", {
-      authUsersCount: users.length,
-      adminUsersCount: adminIds.size,
-      profilesFoundCount: profileMap.size,
-      affiliateCount: allAffiliates.length,
-      excludedUsers,
+    const managementResponse = await fetch(managementUrl, {
+      method: "GET",
+      headers: {
+        Authorization:
+          request.headers.get("authorization") || "",
+        Cookie: request.headers.get("cookie") || "",
+      },
+      cache: "no-store",
     });
-    // Apply affiliate ID, search and status filters
+
+    const managementData = await managementResponse.json();
+
+    if (
+      !managementResponse.ok ||
+      !managementData.success ||
+      !Array.isArray(managementData.affiliates)
+    ) {
+      throw new Error(
+        managementData.error ||
+        "Unable to load the Affiliate Management list."
+      );
+    }
+
+    // Exact same affiliate records and membership as Affiliate Management.
+    const allAffiliates = managementData.affiliates;
+
+    // Apply search and status filters for Affiliate Details.
     const matchingProfileRows = allAffiliates
       .filter((profile: any) => {
         if (
@@ -369,13 +215,16 @@ const applicationStatus = validStatuses.includes(profileStatus)
         );
       });
 
-    console.info("AFFILIATE DETAILS DIAGNOSTIC:", {
-      affiliateManagementSourceCount: allAffiliates.length,
-      apiReturnedCount: matchingProfileRows.length,
+    console.info("AFFILIATE DETAILS SHARED SOURCE:", {
+      affiliateManagementTotal:
+        managementData.totals?.total ?? allAffiliates.length,
+      affiliateDetailsTotal: allAffiliates.length,
+      returnedAfterFilters: matchingProfileRows.length,
       statusFilter: statusFilter || "all",
       searchApplied: Boolean(search),
     });
 
+  
     if (affiliateId && matchingProfileRows.length === 0) {
       return response(
         { success: false, error: "Affiliate not found." },
