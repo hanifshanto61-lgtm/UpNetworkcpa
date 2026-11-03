@@ -278,10 +278,10 @@ const validStatuses = [
   "suspended",
 ];
 
-const applicationStatus = validStatuses.includes(metadataStatus)
-  ? metadataStatus
-  : validStatuses.includes(profileStatus)
-    ? profileStatus
+const applicationStatus = validStatuses.includes(profileStatus)
+  ? profileStatus
+  : validStatuses.includes(metadataStatus)
+    ? metadataStatus
     : "pending";
 
         return {
