@@ -339,7 +339,18 @@ const applicationStatus = validStatuses.includes(profileStatus)
           new Date(a.created_at || 0).getTime()
         );
       });
+const targetAffiliate = allAffiliates.find(
+  (item: any) =>
+    normalize(item.affiliate_id) === "anikmh211"
+);
 
+console.info("AFFILIATE DETAILS STATUS CHECK:", {
+  found: Boolean(targetAffiliate),
+  affiliate_id: targetAffiliate?.affiliate_id,
+  email: targetAffiliate?.email,
+  application_status: targetAffiliate?.application_status,
+  user_id: targetAffiliate?.id,
+});
     console.info("AFFILIATE DETAILS DIAGNOSTIC:", {
       affiliateManagementSourceCount: allAffiliates.length,
       apiReturnedCount: matchingProfileRows.length,
