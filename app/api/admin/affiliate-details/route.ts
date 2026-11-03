@@ -344,12 +344,22 @@ const targetAffiliate = allAffiliates.find(
     normalize(item.affiliate_id) === "anikmh211"
 );
 
+const targetUser = users.find(
+  (user: any) =>
+    String(user.id) === String(targetAffiliate?.id)
+);
+
+const targetProfile = profileMap.get(
+  String(targetAffiliate?.id)
+);
+
 console.info("AFFILIATE DETAILS STATUS CHECK:", {
-  found: Boolean(targetAffiliate),
   affiliate_id: targetAffiliate?.affiliate_id,
-  email: targetAffiliate?.email,
-  application_status: targetAffiliate?.application_status,
   user_id: targetAffiliate?.id,
+  profile_status_raw: targetProfile?.application_status,
+  metadata_status_raw:
+    targetUser?.user_metadata?.application_status,
+  final_status: targetAffiliate?.application_status,
 });
     console.info("AFFILIATE DETAILS DIAGNOSTIC:", {
       affiliateManagementSourceCount: allAffiliates.length,
