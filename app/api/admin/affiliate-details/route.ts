@@ -297,6 +297,34 @@ const applicationStatus = validStatuses.includes(profileStatus)
         };
       });
 
+    // TEMPORARY AFFILIATE COUNT DIAGNOSTIC
+    const excludedUsers = users
+      .filter((user: any) => {
+        if (adminIds.has(String(user.id))) return false;
+
+        const metadata = user.user_metadata || {};
+        const profile = profileMap.get(String(user.id));
+
+        const accountType = normalize(
+          metadata.account_type || profile?.account_type
+        );
+
+        return accountType !== "affiliate" && !profile;
+      })
+      .map((user: any) => ({
+        id: user.id,
+        email: user.email,
+        account_type: user.user_metadata?.account_type || null,
+        profile_found: profileMap.has(String(user.id)),
+      }));
+
+    console.info("AFFILIATE COUNT INVESTIGATION:", {
+      authUsersCount: users.length,
+      adminUsersCount: adminIds.size,
+      profilesFoundCount: profileMap.size,
+      affiliateCount: allAffiliatesCountPlaceholder,
+      excludedUsers,
+    });
     // Apply affiliate ID, search and status filters
     const matchingProfileRows = allAffiliates
       .filter((profile: any) => {
