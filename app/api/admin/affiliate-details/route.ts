@@ -322,7 +322,7 @@ const applicationStatus = validStatuses.includes(profileStatus)
       authUsersCount: users.length,
       adminUsersCount: adminIds.size,
       profilesFoundCount: profileMap.size,
-      affiliateCount: allAffiliatesCountPlaceholder,
+      affiliateCount: allAffiliates.length,
       excludedUsers,
     });
     // Apply affiliate ID, search and status filters
