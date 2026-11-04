@@ -230,7 +230,60 @@ export async function GET(request: NextRequest) {
 
       referralOffset += PAGE_SIZE;
     }
+   // 4.1 Load latest referred affiliate statuses
+    // from profiles table.
+    const referredAffiliateIds = Array.from(
+      new Set(
+        referralRows
+          .map((row) =>
+            safeText(row.referred_affiliate_id)
+          )
+          .filter(Boolean)
+      )
+    );
 
+    const profileStatusByAffiliate =
+      new Map<string, string>();
+
+    if (referredAffiliateIds.length > 0) {
+      const {
+        data: referredProfiles,
+        error: referredProfilesError,
+      } = await admin
+        .from("profiles")
+        .select("affiliate_id,application_status")
+        .in("affiliate_id", referredAffiliateIds);
+
+      if (referredProfilesError) {
+        console.error(
+          "Referred affiliate profiles query:",
+          referredProfilesError.message
+        );
+
+        return errorResponse(
+          "Unable to load referred affiliate statuses.",
+          500
+        );
+      }
+
+      for (const profile of referredProfiles ?? []) {
+        const referredId = safeText(
+          profile.affiliate_id
+        );
+
+        const currentStatus = safeText(
+          profile.application_status
+        ).toLowerCase();
+
+        if (referredId && currentStatus) {
+          profileStatusByAffiliate.set(
+            referredId,
+            currentStatus
+          );
+        }
+      }
+    }
+    
     // 5. Load commissions using the actual
     // database column names.
     const commissionRows: CommissionRow[] = [];
@@ -353,18 +406,36 @@ export async function GET(request: NextRequest) {
     }
 
     // 8. Format referral records.
+    // profiles.application_status is the
+    // authoritative source for affiliate status.
     const referrals = referralRows.map(
       (row) => {
         const referredId = safeText(
           row.referred_affiliate_id
         );
 
+        const profileStatus =
+          profileStatusByAffiliate.get(
+            referredId
+          );
+
+        const referralStatus = (
+          profileStatus ||
+          safeText(row.status) ||
+          "pending"
+        ).toLowerCase();
+
+        const finalStatus =
+          referralStatus === "active"
+            ? "approved"
+            : referralStatus;
+
         return {
           id: row.id,
           affiliateId: referredId,
           name: referredId || "Affiliate",
           email: "",
-          status: row.status || "pending",
+          status: finalStatus,
           joinedAt: row.created_at,
           commission: roundMoney(
             commissionByAffiliate.get(
