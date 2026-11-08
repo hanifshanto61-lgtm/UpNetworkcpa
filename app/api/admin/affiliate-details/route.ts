@@ -44,6 +44,14 @@ function normalize(value: unknown): string {
   return String(value ?? "").trim().toLowerCase();
 }
 
+function clean(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function makeAffiliateId(userId: string): string {
+  return `UP${userId.replace(/-/g, "").slice(0, 10).toUpperCase()}`;
+}
+
 function isConverted(row: any): boolean {
   return (
     Boolean(row.converted_at) ||
@@ -80,9 +88,7 @@ async function readAll(
 
     const page = data || [];
 
-    if (page.length === 0) {
-      break;
-    }
+    if (page.length === 0) break;
 
     rows.push(...page);
 
@@ -90,27 +96,136 @@ async function readAll(
       throw new Error(`${table} report exceeds the supported limit.`);
     }
 
-    // Move by the actual number of rows returned.
-    // This also handles Supabase returning fewer rows than requested.
     offset += page.length;
 
-    // Stop only after reading the exact total count.
-    if (totalCount !== null && offset >= totalCount) {
-      break;
-    }
+    if (totalCount !== null && offset >= totalCount) break;
 
-    // Safety fallback if the database does not return an exact count.
-    if (totalCount === null && page.length < PAGE_SIZE) {
-      break;
-    }
+    if (totalCount === null && page.length < PAGE_SIZE) break;
   }
 
   return rows;
 }
 
+async function loadAffiliateProfiles(db: any): Promise<any[]> {
+  // Read existing profiles directly from Supabase.
+  const [profiles, adminRows] = await Promise.all([
+    readAll(db, "profiles", "*"),
+    readAll(db, "admin_roles", "user_id"),
+  ]);
+
+  const protectedAdminIds = new Set(
+    adminRows.map((row: any) => String(row.user_id))
+  );
+
+  // Load Auth users for metadata and email fallback.
+  const users: any[] = [];
+  let page = 1;
+  const perPage = 1000;
+
+  while (page <= 20) {
+    const { data, error } = await db.auth.admin.listUsers({
+      page,
+      perPage,
+    });
+
+    if (error) {
+      throw new Error(`Unable to load Auth users: ${error.message}`);
+    }
+
+    const pageUsers = data?.users || [];
+    users.push(...pageUsers);
+
+    if (pageUsers.length < perPage) break;
+    page++;
+  }
+
+  const userMap = new Map<string, any>();
+
+  for (const user of users) {
+    userMap.set(String(user.id), user);
+  }
+
+  return profiles
+    .filter((profile: any) => {
+      if (!profile?.id) return false;
+
+      if (protectedAdminIds.has(String(profile.id))) {
+        return false;
+      }
+
+      const user = userMap.get(String(profile.id));
+      const metadata = user?.user_metadata || {};
+
+      const accountType = normalize(
+        metadata.account_type || profile.account_type
+      );
+
+      return accountType === "affiliate" || Boolean(profile);
+    })
+    .map((profile: any) => {
+      const user = userMap.get(String(profile.id));
+      const metadata = user?.user_metadata || {};
+
+      const firstName = clean(
+        metadata.first_name || profile.first_name
+      );
+
+      const lastName = clean(
+        metadata.last_name || profile.last_name
+      );
+
+      const fullName =
+        [firstName, lastName].filter(Boolean).join(" ") ||
+        clean(profile.full_name) ||
+        clean(metadata.full_name) ||
+        clean(metadata.username) ||
+        user?.email ||
+        "Affiliate";
+
+      const affiliateId =
+        clean(profile.affiliate_id) ||
+        clean(metadata.affiliate_id) ||
+        clean(metadata.affiliateId) ||
+        clean(metadata.username) ||
+        makeAffiliateId(profile.id);
+
+      return {
+        id: profile.id,
+        affiliate_id: affiliateId,
+        full_name: fullName,
+        username:
+          clean(profile.username) ||
+          clean(metadata.username) ||
+          affiliateId,
+        email: user?.email || profile.email || "",
+        phone:
+          profile.phone ||
+          metadata.phone ||
+          metadata.phone_number ||
+          "",
+        country: profile.country || metadata.country || "",
+        city: profile.city || metadata.city || "",
+        application_status:
+          clean(profile.application_status) ||
+          clean(metadata.application_status) ||
+          "pending",
+        created_at:
+          user?.created_at ||
+          profile.created_at ||
+          null,
+      };
+    })
+    .sort((a: any, b: any) => {
+      return (
+        new Date(b.created_at || 0).getTime() -
+        new Date(a.created_at || 0).getTime()
+      );
+    });
+}
+
 export async function GET(request: NextRequest) {
   try {
-    // Keep existing admin authorization.
+    // Keep the existing admin authorization.
     const session = await getAdminSession(request);
 
     if (!session) {
@@ -120,7 +235,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Use service-role client only after admin verification.
     if (!supabaseAdmin) {
       return response(
         {
@@ -134,49 +248,15 @@ export async function GET(request: NextRequest) {
     const db = supabaseAdmin;
     const params = request.nextUrl.searchParams;
 
-    const affiliateId = String(
-      params.get("affiliate_id") || ""
-    ).trim();
-
+    const affiliateId = clean(params.get("affiliate_id"));
     const search = normalize(params.get("search"));
     const statusFilter = normalize(params.get("status"));
 
-// Use Affiliate Management as the single source of truth.
-    // This guarantees both pages use exactly the same affiliate list.
-    const managementUrl = new URL(
-      "/api/admin/affiliates",
-      request.url
-    );
+    // Direct Supabase query. No internal API request.
+    const allAffiliates = await loadAffiliateProfiles(db);
 
-    const managementResponse = await fetch(managementUrl, {
-      method: "GET",
-      headers: {
-        Authorization:
-          request.headers.get("authorization") || "",
-        Cookie: request.headers.get("cookie") || "",
-      },
-      cache: "no-store",
-    });
-
-    const managementData = await managementResponse.json();
-
-    if (
-      !managementResponse.ok ||
-      !managementData.success ||
-      !Array.isArray(managementData.affiliates)
-    ) {
-      throw new Error(
-        managementData.error ||
-        "Unable to load the Affiliate Management list."
-      );
-    }
-
-    // Exact same affiliate records and membership as Affiliate Management.
-    const allAffiliates = managementData.affiliates;
-
-    // Apply search and status filters for Affiliate Details.
-    const matchingProfileRows = allAffiliates
-      .filter((profile: any) => {
+    const matchingProfileRows = allAffiliates.filter(
+      (profile: any) => {
         if (
           affiliateId &&
           normalize(profile.affiliate_id) !== normalize(affiliateId)
@@ -207,24 +287,16 @@ export async function GET(request: NextRequest) {
         }
 
         return true;
-      })
-      .sort((a: any, b: any) => {
-        return (
-          new Date(b.created_at || 0).getTime() -
-          new Date(a.created_at || 0).getTime()
-        );
-      });
+      }
+    );
 
-    console.info("AFFILIATE DETAILS SHARED SOURCE:", {
-      affiliateManagementTotal:
-        managementData.totals?.total ?? allAffiliates.length,
-      affiliateDetailsTotal: allAffiliates.length,
+    console.info("AFFILIATE DETAILS DIRECT SOURCE:", {
+      totalProfiles: allAffiliates.length,
       returnedAfterFilters: matchingProfileRows.length,
       statusFilter: statusFilter || "all",
       searchApplied: Boolean(search),
     });
 
-  
     if (affiliateId && matchingProfileRows.length === 0) {
       return response(
         { success: false, error: "Affiliate not found." },
@@ -232,13 +304,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const ids = matchingProfileRows
-      .map((profile: any) =>
-        String(profile.affiliate_id || "").trim()
-      )
-      .filter(Boolean);
-
-    if (ids.length === 0) {
+    if (matchingProfileRows.length === 0) {
       return response({
         success: true,
         affiliates: [],
@@ -247,7 +313,8 @@ export async function GET(request: NextRequest) {
         message: "No matching affiliates found.",
       });
     }
-    // Read existing records only. No database writes are performed.
+
+    // Read existing records only. No database writes.
     const [clicks, payments, referrals, commissions] =
       await Promise.all([
         readAll(
@@ -280,7 +347,6 @@ export async function GET(request: NextRequest) {
           String(row.affiliate_id || "").trim() === id
       );
 
-      // Preserve existing conversion identification rules.
       const affiliateConversions = affiliateClicks
         .filter((row: any) => isConverted(row))
         .map((row: any) => ({
@@ -366,7 +432,6 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Preserve existing conversion payout calculation.
       const conversionEarnings = affiliateConversions.reduce(
         (sum: number, row: any) =>
           sum + safeNumber(row.payout),
