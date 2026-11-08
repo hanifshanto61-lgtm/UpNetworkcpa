@@ -843,11 +843,13 @@ if (workerSubId !== null) {
       "";
 
     // Vercel sets these headers at the edge; do not trust caller-supplied IP params.
-    const forwardedIp = process.env.VERCEL === "1"
-      ? (request.headers.get("x-vercel-forwarded-for") ||
-         request.headers.get("x-forwarded-for") || "").split(",")[0].trim()
-      : "";
-    const ipAddress = isIP(forwardedIp) ? forwardedIp : null;
+    const forwardedIp =
+  request.headers.get("cf-connecting-ip")?.trim() ||
+  request.headers.get("x-vercel-forwarded-for")?.trim() ||
+  request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+  "";
+
+const ipAddress = isIP(forwardedIp) ? forwardedIp : null;
 
     const clickData: Record<string, unknown> = {
       ip_address: ipAddress,
