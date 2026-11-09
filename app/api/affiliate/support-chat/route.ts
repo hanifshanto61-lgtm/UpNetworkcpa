@@ -179,7 +179,15 @@ export async function POST(request: NextRequest) {
       return value || undefined;
     };
 
-    if (
+   console.log("AI_SUPPORT_CONFIG_CHECK", {
+  bindingExists: Boolean(workerEnv.AI_SUPPORT_ENABLED),
+  processEnvExists: Boolean(process.env.AI_SUPPORT_ENABLED),
+  bindingEnabled:
+    workerEnv.AI_SUPPORT_ENABLED?.trim().toLowerCase() === "true",
+  processEnvEnabled:
+    process.env.AI_SUPPORT_ENABLED?.trim().toLowerCase() === "true",
+});
+ if (
       readEnv("AI_SUPPORT_ENABLED")?.toLowerCase() !== "true"
     ) {
       return json(
