@@ -6,33 +6,58 @@ on:
     branches:
       - android-app
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout android-app branch
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: |
+            platform-tools
+            platforms;android-35
+            build-tools;35.0.0
 
-      - uses: gradle/actions/setup-gradle@v4
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Extract Android project
+      - name: Check and extract Android project ZIP
+        shell: bash
         run: |
+          set -euo pipefail
+          test -f UpNetwork-CPA-Android-Complete.zip
+          unzip -t UpNetwork-CPA-Android-Complete.zip
+          mkdir -p extracted
           unzip -q UpNetwork-CPA-Android-Complete.zip -d extracted
+          test -f extracted/UpNetwork-CPA-Android/settings.gradle
+          test -f extracted/UpNetwork-CPA-Android/app/build.gradle
+          echo "Android project ZIP extracted successfully."
 
-      - name: Build APK
+      - name: Build debug APK
+        shell: bash
         run: |
+          set -o pipefail
           cd extracted/UpNetwork-CPA-Android
-          gradle --no-daemon assembleDebug
+          gradle --no-daemon assembleDebug 2>&1 | tee "$GITHUB_WORKSPACE/gradle-build.log"
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload APK
+        if: success()
+        uses: actions/upload-artifact@v4
         with:
           name: UpNetwork-CPA-Android-APK
           path: extracted/UpNetwork-CPA-Android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
