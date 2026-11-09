@@ -345,7 +345,8 @@ const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
       }
 
       const dashboardData = dashboardResult.value;
-
+      setError("");
+      
       setProfile(dashboardData.profile || null);
       setClicks(
         Array.isArray(dashboardData.clicks) ? dashboardData.clicks : []
