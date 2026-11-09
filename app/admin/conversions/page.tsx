@@ -256,7 +256,11 @@ export default function AdminConversionsPage() {
         cache: "no-store",
       });
 
-      const result = await response.json();
+      const result = await response.json().catch(() => null);
+
+if (!result) {
+  throw new Error("IP service returned an invalid response.");
+}
 
       if (!response.ok || !result.success || !result.check) {
         throw new Error(result.error || "IP check unavailable.");
