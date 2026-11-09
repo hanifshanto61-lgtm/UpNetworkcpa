@@ -79,7 +79,8 @@ For general questions, provide a helpful answer when you know it.
 Follow the same accuracy and language rules for all questions.
 `;
 
-const MANAGER_REPLY = "Please click Contact Manager below to open the panel's manager contact options.";
+const MANAGER_REPLY =
+  "Please click Contact Manager below to open the panel's manager contact options.";
 
 function managerReply(question: string) {
   if (/[\u0980-\u09FF]/.test(question)) {
@@ -161,15 +162,26 @@ function readMessages(value: unknown): Message[] | null {
 
 export async function POST(request: NextRequest) {
   try {
-    // Read Cloudflare Worker environment variables and secrets.
+    // Read Cloudflare Worker environment variables.
     const { env: cloudflareEnv } = getCloudflareContext();
 
-    const env = cloudflareEnv as unknown as Record<
+    const workerEnv = cloudflareEnv as unknown as Record<
       string,
       string | undefined
     >;
 
-    if (env.AI_SUPPORT_ENABLED !== "true") {
+    // Read from Cloudflare bindings first, then process.env.
+    const readEnv = (name: string): string | undefined => {
+      const value =
+        workerEnv[name]?.trim() ||
+        process.env[name]?.trim();
+
+      return value || undefined;
+    };
+
+    if (
+      readEnv("AI_SUPPORT_ENABLED")?.toLowerCase() !== "true"
+    ) {
       return json(
         {
           error:
@@ -179,9 +191,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = env.GEMINI_API_KEY;
-    const url = env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = env.SUPABASE_SERVICE_ROLE_KEY;
+    const apiKey = readEnv("GEMINI_API_KEY");
+    const url = readEnv("NEXT_PUBLIC_SUPABASE_URL");
+    const key = readEnv("SUPABASE_SERVICE_ROLE_KEY");
 
     if (!apiKey || !url || !key) {
       return json(
@@ -320,12 +332,12 @@ export async function POST(request: NextRequest) {
       await db.rpc("consume_ai_support_quota", {
         p_user_id: auth.user.id,
         p_user_limit: limit(
-          env.AI_SUPPORT_DAILY_LIMIT,
+          readEnv("AI_SUPPORT_DAILY_LIMIT"),
           30,
           100
         ),
         p_global_limit: limit(
-          env.AI_SUPPORT_GLOBAL_DAILY_LIMIT,
+          readEnv("AI_SUPPORT_GLOBAL_DAILY_LIMIT"),
           1000,
           5000
         ),
