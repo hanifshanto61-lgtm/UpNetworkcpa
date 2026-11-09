@@ -1,13 +1,3 @@
-- name: Check Android launcher icon resources
-        shell: bash
-        run: |
-          echo "Checking Android manifest..."
-          grep -nE 'android:icon|android:roundIcon' extracted/UpNetwork-CPA-Android/app/src/main/AndroidManifest.xml || true
-          echo "Checking icon files..."
-          find extracted/UpNetwork-CPA-Android/app/src/main/res -maxdepth 3 -type f | sort
-          echo "Checking UpNetwork logo..."
-          test -f public/file_0000000013688207a03d42a2550c1954.png && echo "Logo found"
-
 name: Build UpNetwork CPA APK
 
 on:
@@ -33,7 +23,6 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
@@ -42,7 +31,6 @@ jobs:
       - name: Install required Android SDK packages
         run: |
           sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
-
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -60,6 +48,16 @@ jobs:
           test -f extracted/UpNetwork-CPA-Android/settings.gradle
           test -f extracted/UpNetwork-CPA-Android/app/build.gradle
           echo "Android project ZIP extracted successfully."
+
+      - name: Check Android launcher icon resources
+        shell: bash
+        run: |
+          echo "Checking Android manifest..."
+          grep -nE 'android:icon|android:roundIcon' extracted/UpNetwork-CPA-Android/app/src/main/AndroidManifest.xml || true
+          echo "Checking icon files..."
+          find extracted/UpNetwork-CPA-Android/app/src/main/res -maxdepth 3 -type f | sort
+          echo "Checking UpNetwork logo..."
+          test -f public/file_0000000013688207a03d42a2550c1954.png && echo "Logo found"
 
       - name: Build debug APK
         shell: bash
