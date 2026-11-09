@@ -247,9 +247,9 @@ export async function POST(request: NextRequest) {
     const check: IpCheck = {
       ip,
 
-      risk:
-        typeof entry.risk === "number"
-          ? entry.risk
+            risk:
+        typeof detections.risk === "number"
+          ? detections.risk
           : null,
 
       proxy: booleanValue(detections.proxy),
@@ -258,11 +258,10 @@ export async function POST(request: NextRequest) {
       hosting: booleanValue(detections.hosting),
       anonymous: booleanValue(detections.anonymous),
 
-      country: stringValue(location.country),
-      region: stringValue(location.region),
-      city: stringValue(location.city),
-      continent: stringValue(location.continent),
-
+      country: stringValue(location.country_name),
+      region: stringValue(location.region_name),
+      city: stringValue(location.city_name),
+      continent: stringValue(location.continent_name),
       provider: stringValue(network.provider),
       asn: stringValue(network.asn),
       hostname: stringValue(network.hostname),
