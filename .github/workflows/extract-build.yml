@@ -1,3 +1,13 @@
+- name: Check Android launcher icon resources
+        shell: bash
+        run: |
+          echo "Checking Android manifest..."
+          grep -nE 'android:icon|android:roundIcon' extracted/UpNetwork-CPA-Android/app/src/main/AndroidManifest.xml || true
+          echo "Checking icon files..."
+          find extracted/UpNetwork-CPA-Android/app/src/main/res -maxdepth 3 -type f | sort
+          echo "Checking UpNetwork logo..."
+          test -f public/file_0000000013688207a03d42a2550c1954.png && echo "Logo found"
+
 name: Build UpNetwork CPA APK
 
 on:
