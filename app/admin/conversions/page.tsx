@@ -51,6 +51,16 @@ type IpCheck = {
   tor: boolean | null;
   hosting: boolean | null;
   anonymous: boolean | null;
+  country: string | null;
+  region: string | null;
+  city: string | null;
+  continent: string | null;
+  provider: string | null;
+  asn: string | null;
+  hostname: string | null;
+  network_type: string | null;
+  confidence: number | null;
+  details: Record<string, unknown>;
   checked_at: string;
 };
 
