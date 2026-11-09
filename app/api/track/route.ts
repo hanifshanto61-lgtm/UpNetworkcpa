@@ -136,16 +136,27 @@ function getVisitorHash(
   ua: string,
   secret: string
 ): string | null {
+  // Cloudflare Workers: use the real visitor IP first.
   const ip =
-    request.headers.get("x-vercel-forwarded-for") ||
+    request.headers
+      .get("cf-connecting-ip")
+      ?.trim() ||
+    request.headers
+      .get("x-vercel-forwarded-for")
+      ?.split(",")[0]
+      ?.trim() ||
     request.headers
       .get("x-forwarded-for")
       ?.split(",")[0]
       ?.trim() ||
     "";
 
-  if (!ip) return null;
+  // Never generate a fake visitor from an invalid IP.
+  if (!ip || !isIP(ip)) {
+    return null;
+  }
 
+  // Keep the existing daily unique visitor logic.
   const day = new Date()
     .toISOString()
     .slice(0, 10);
