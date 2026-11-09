@@ -838,21 +838,51 @@ if (!result) {
                           )}
 
                           {ipCheck && (
-                            <div className="mt-3 space-y-1 text-slate-600">
-                              <p className="font-semibold">
-                                Risk: {ipCheck.risk === null ? "Unknown" : `${ipCheck.risk}/100`}
-                              </p>
-                              <p>Proxy: {flag(ipCheck.proxy)} · VPN: {flag(ipCheck.vpn)}</p>
-                              <p>Tor: {flag(ipCheck.tor)} · Hosting: {flag(ipCheck.hosting)}</p>
-                              <p>Anonymous: {flag(ipCheck.anonymous)}</p>
-                              <p className="text-slate-400">
-                                Checked: {dateTime(ipCheck.checked_at)}
-                              </p>
-                              <p className="text-slate-400">
-                                IP reputation is a signal, not proof of fraud.
-                              </p>
-                            </div>
-                          )}
+  <div className="mt-3 space-y-2 rounded-xl border border-blue-200 bg-blue-50 p-4 text-slate-700">
+    <h3 className="font-bold text-blue-800">
+      Complete IP Intelligence Report
+    </h3>
+
+    <p className="break-all font-mono font-bold">IP: {ipCheck.ip}</p>
+    <p>Risk Score: {ipCheck.risk === null ? "Unknown" : `${ipCheck.risk}/100`}</p>
+    <p>Confidence: {ipCheck.confidence === null ? "Unknown" : `${ipCheck.confidence}/100`}</p>
+
+    <hr />
+    <p>Country: {ipCheck.country || "Unknown"}</p>
+    <p>Region: {ipCheck.region || "Unknown"}</p>
+    <p>City: {ipCheck.city || "Unknown"}</p>
+    <p>Continent: {ipCheck.continent || "Unknown"}</p>
+
+    <hr />
+    <p>Provider / ISP: {ipCheck.provider || "Unknown"}</p>
+    <p>ASN: {ipCheck.asn || "Unknown"}</p>
+    <p>Hostname: {ipCheck.hostname || "Unknown"}</p>
+    <p>Network Type: {ipCheck.network_type || "Unknown"}</p>
+
+    <hr />
+    <p>Proxy: {flag(ipCheck.proxy)}</p>
+    <p>VPN: {flag(ipCheck.vpn)}</p>
+    <p>TOR: {flag(ipCheck.tor)}</p>
+    <p>Hosting: {flag(ipCheck.hosting)}</p>
+    <p>Anonymous: {flag(ipCheck.anonymous)}</p>
+
+    <details>
+      <summary className="cursor-pointer font-bold text-blue-800">
+        View Full IP Intelligence Data
+      </summary>
+      <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-slate-900 p-3 text-xs text-white">
+        {JSON.stringify(ipCheck.details, null, 2)}
+      </pre>
+    </details>
+
+    <p className="text-xs text-slate-500">
+      Checked: {dateTime(ipCheck.checked_at)}
+    </p>
+    <p className="text-xs text-slate-500">
+      IP reputation is a signal, not proof of fraud.
+    </p>
+  </div>
+)}
                         </td>
 
                         <td className="min-w-[200px] max-w-[260px] px-4 py-4 text-xs">
