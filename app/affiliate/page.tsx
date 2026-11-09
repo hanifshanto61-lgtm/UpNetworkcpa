@@ -836,7 +836,18 @@ const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
               </div>
             )}
         </header>
-
+      {/* Android App Download */}
+        <div className="relative z-10 mx-auto max-w-7xl px-4 pt-4 sm:px-6">
+          <a
+            href="https://github.com/hanifshanto61-lgtm/UpNetworkcpa/releases/download/v1.0.0/app-debug.apk"
+            className="flex w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-4 text-center font-bold text-white shadow-lg transition hover:scale-[1.01]"
+          >
+            <span className="text-xl">📱</span>
+            Download UpNetwork CPA Android App
+            <span>⬇️</span>
+          </a>
+        </div>
+        
         {/* Main */}
         <div className={`${styles.content} mx-auto max-w-7xl px-4 py-7 sm:px-6 sm:py-9`}>
           {error && (
