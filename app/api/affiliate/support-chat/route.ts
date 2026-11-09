@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -84,7 +85,6 @@ function managerReply(question: string) {
   if (/[\u0980-\u09FF]/.test(question)) {
     return "ম্যানেজারের সঙ্গে যোগাযোগ করতে নিচের Contact Manager বাটনে চাপুন।";
   }
-  // Use a language-neutral button label if the question uses another script.
   if (/[^\u0000-\u007F]/.test(question)) return "Contact Manager";
   return MANAGER_REPLY;
 }
@@ -161,7 +161,15 @@ function readMessages(value: unknown): Message[] | null {
 
 export async function POST(request: NextRequest) {
   try {
-    if (process.env.AI_SUPPORT_ENABLED !== "true") {
+    // Read Cloudflare Worker environment variables and secrets.
+    const { env: cloudflareEnv } = getCloudflareContext();
+
+    const env = cloudflareEnv as unknown as Record<
+      string,
+      string | undefined
+    >;
+
+    if (env.AI_SUPPORT_ENABLED !== "true") {
       return json(
         {
           error:
@@ -171,9 +179,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const apiKey = env.GEMINI_API_KEY;
+    const url = env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!apiKey || !url || !key) {
       return json(
@@ -294,12 +302,16 @@ export async function POST(request: NextRequest) {
     }
 
     if (requestsManager(messages[messages.length - 1].content)) {
-      return json({ reply: managerReply(messages[messages.length - 1].content), contact_manager: true });
+      return json({
+        reply: managerReply(messages[messages.length - 1].content),
+        contact_manager: true,
+      });
     }
 
     // Avoid feeding old direct-contact replies back into the model.
     const safeMessages = messages.map((message) =>
-      message.role === "assistant" && containsDirectContact(message.content)
+      message.role === "assistant" &&
+      containsDirectContact(message.content)
         ? { ...message, content: MANAGER_REPLY }
         : message
     );
@@ -308,12 +320,12 @@ export async function POST(request: NextRequest) {
       await db.rpc("consume_ai_support_quota", {
         p_user_id: auth.user.id,
         p_user_limit: limit(
-          process.env.AI_SUPPORT_DAILY_LIMIT,
+          env.AI_SUPPORT_DAILY_LIMIT,
           30,
           100
         ),
         p_global_limit: limit(
-          process.env.AI_SUPPORT_GLOBAL_DAILY_LIMIT,
+          env.AI_SUPPORT_GLOBAL_DAILY_LIMIT,
           1000,
           5000
         ),
@@ -397,8 +409,8 @@ export async function POST(request: NextRequest) {
             },
             contents,
             generationConfig: {
-           maxOutputTokens: 2048,
-      },
+              maxOutputTokens: 2048,
+            },
           }),
           signal: controller.signal,
           cache: "no-store",
@@ -483,14 +495,19 @@ export async function POST(request: NextRequest) {
 
       // Enforce the contact policy even if the model ignores its instructions.
       if (containsDirectContact(text)) {
-        return json({ reply: managerReply(messages[messages.length - 1].content), contact_manager: true });
+        return json({
+          reply: managerReply(messages[messages.length - 1].content),
+          contact_manager: true,
+        });
       }
 
       return json({ reply: text });
     } finally {
       clearTimeout(timer);
     }
-  } catch {
+  } catch (error) {
+    console.error("AI support route error", error);
+
     return json(
       {
         error:
