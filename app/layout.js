@@ -1,7 +1,7 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "UP Network — Affiliate Panel",
+  title: "UpNetworkCpa — Affiliate Panel",
   description:
     "Modern CPA affiliate network and performance tracking platform",
   icons: {
