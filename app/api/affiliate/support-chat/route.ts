@@ -202,7 +202,12 @@ export async function POST(request: NextRequest) {
     const apiKey = readEnv("GEMINI_API_KEY");
     const url = readEnv("NEXT_PUBLIC_SUPABASE_URL");
     const key = readEnv("SUPABASE_SERVICE_ROLE_KEY");
-
+  console.log("AI_SUPPORT_REQUIRED_CONFIG_CHECK", {
+  geminiKey: Boolean(apiKey),
+  supabaseUrl: Boolean(url),
+  serviceRoleKey: Boolean(key),
+});
+    
     if (!apiKey || !url || !key) {
       return json(
         {
