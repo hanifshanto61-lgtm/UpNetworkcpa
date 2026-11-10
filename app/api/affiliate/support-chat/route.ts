@@ -179,15 +179,16 @@ export async function POST(request: NextRequest) {
       return value || undefined;
     };
 
-   console.log("AI_SUPPORT_CONFIG_CHECK", {
-  bindingExists: Boolean(workerEnv.AI_SUPPORT_ENABLED),
-  processEnvExists: Boolean(process.env.AI_SUPPORT_ENABLED),
-  bindingEnabled:
-    workerEnv.AI_SUPPORT_ENABLED?.trim().toLowerCase() === "true",
-  processEnvEnabled:
-    process.env.AI_SUPPORT_ENABLED?.trim().toLowerCase() === "true",
-});
- if (
+    console.log("AI_SUPPORT_CONFIG_CHECK", {
+      bindingExists: Boolean(workerEnv.AI_SUPPORT_ENABLED),
+      processEnvExists: Boolean(process.env.AI_SUPPORT_ENABLED),
+      bindingEnabled:
+        workerEnv.AI_SUPPORT_ENABLED?.trim().toLowerCase() === "true",
+      processEnvEnabled:
+        process.env.AI_SUPPORT_ENABLED?.trim().toLowerCase() === "true",
+    });
+
+    if (
       readEnv("AI_SUPPORT_ENABLED")?.toLowerCase() !== "true"
     ) {
       return json(
@@ -202,12 +203,13 @@ export async function POST(request: NextRequest) {
     const apiKey = readEnv("GEMINI_API_KEY");
     const url = readEnv("NEXT_PUBLIC_SUPABASE_URL");
     const key = readEnv("SUPABASE_SERVICE_ROLE_KEY");
-  console.log("AI_SUPPORT_REQUIRED_CONFIG_CHECK", {
-  geminiKey: Boolean(apiKey),
-  supabaseUrl: Boolean(url),
-  serviceRoleKey: Boolean(key),
-});
-    
+
+    console.log("AI_SUPPORT_REQUIRED_CONFIG_CHECK", {
+      geminiKey: Boolean(apiKey),
+      supabaseUrl: Boolean(url),
+      serviceRoleKey: Boolean(key),
+    });
+
     if (!apiKey || !url || !key) {
       return json(
         {
@@ -381,155 +383,227 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const controller = new AbortController();
+    const model = "gemini-3.1-flash-lite";
 
-    const timer = setTimeout(
-      () => controller.abort(),
-      25000
-    );
+    const contents: {
+      role: "user" | "model";
+      parts: { text: string }[];
+    }[] = [];
 
-    try {
-      const model = "gemini-3.1-flash-lite";
+    for (const message of safeMessages) {
+      const role =
+        message.role === "assistant"
+          ? "model"
+          : "user";
 
-      const contents: {
-        role: "user" | "model";
-        parts: { text: string }[];
-      }[] = [];
+      const last = contents[contents.length - 1];
 
-      for (const message of safeMessages) {
-        const role =
-          message.role === "assistant"
-            ? "model"
-            : "user";
-
-        const last = contents[contents.length - 1];
-
-        if (last?.role === role) {
-          last.parts.push({
-            text: message.content,
-          });
-        } else {
-          contents.push({
-            role,
-            parts: [{ text: message.content }],
-          });
-        }
-      }
-
-      if (contents[0]?.role === "model") {
-        contents.shift();
-      }
-
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-        {
-          method: "POST",
-          headers: {
-            "x-goog-api-key": apiKey,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            systemInstruction: {
-              parts: [{ text: INSTRUCTIONS }],
-            },
-            contents,
-            generationConfig: {
-              maxOutputTokens: 2048,
-            },
-          }),
-          signal: controller.signal,
-          cache: "no-store",
-        }
-      );
-
-      const data = await response
-        .json()
-        .catch(() => null);
-
-      if (!response.ok) {
-        const providerCode =
-          typeof data?.error?.status === "string"
-            ? data.error.status
-                .replace(/[^A-Z_]/g, "")
-                .slice(0, 80)
-            : "UNKNOWN";
-
-        console.error(
-          "Gemini support provider unavailable",
-          response.status,
-          providerCode
-        );
-
-        return json(
-          {
-            error:
-              response.status === 429
-                ? "The free AI service limit has been reached. Please try later or contact a manager."
-                : "AI support could not answer right now. Please try again or contact a manager.",
-          },
-          response.status === 429 ? 429 : 503
-        );
-      }
-
-      const candidate = data?.candidates?.[0];
-
-      if (
-        data?.promptFeedback?.blockReason ||
-        !candidate ||
-        !["STOP", "MAX_TOKENS"].includes(
-          candidate.finishReason
-        )
-      ) {
-        return json(
-          {
-            error:
-              "AI support could not answer this question. Please rephrase it or contact a manager.",
-          },
-          503
-        );
-      }
-
-      const text = Array.isArray(
-        candidate.content?.parts
-      )
-        ? candidate.content.parts
-            .filter(
-              (part: {
-                text?: string;
-                thought?: boolean;
-              }) =>
-                typeof part.text === "string" &&
-                !part.thought
-            )
-            .map(
-              (part: { text: string }) => part.text
-            )
-            .join("\n")
-            .trim()
-        : "";
-
-      if (!text) {
-        return json(
-          {
-            error:
-              "AI support returned no answer. Please try again.",
-          },
-          503
-        );
-      }
-
-      // Enforce the contact policy even if the model ignores its instructions.
-      if (containsDirectContact(text)) {
-        return json({
-          reply: managerReply(messages[messages.length - 1].content),
-          contact_manager: true,
+      if (last?.role === role) {
+        last.parts.push({
+          text: message.content,
+        });
+      } else {
+        contents.push({
+          role,
+          parts: [{ text: message.content }],
         });
       }
-
-      return json({ reply: text });
-    } finally {
-      clearTimeout(timer);
     }
+
+    if (contents[0]?.role === "model") {
+      contents.shift();
+    }
+
+    const requestBody = JSON.stringify({
+      systemInstruction: {
+        parts: [{ text: INSTRUCTIONS }],
+      },
+      contents,
+      generationConfig: {
+        maxOutputTokens: 2048,
+      },
+    });
+
+    // Retry temporary Gemini provider errors.
+    // Total attempts: 3 (initial request + 2 retries).
+    const retryDelays = [1000, 2000];
+    const retryableStatuses = [500, 502, 503, 504];
+
+    let response: Response | null = null;
+
+    for (let attempt = 0; attempt <= retryDelays.length; attempt++) {
+      const controller = new AbortController();
+
+      const timer = setTimeout(
+        () => controller.abort(),
+        15000
+      );
+
+      try {
+        response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+          {
+            method: "POST",
+            headers: {
+              "x-goog-api-key": apiKey,
+              "Content-Type": "application/json",
+            },
+            body: requestBody,
+            signal: controller.signal,
+            cache: "no-store",
+          }
+        );
+      } catch (error) {
+        if (attempt < retryDelays.length) {
+          console.warn(
+            "Gemini request failed; retrying",
+            attempt + 1,
+            error instanceof Error ? error.name : "UnknownError"
+          );
+
+          await new Promise((resolve) =>
+            setTimeout(resolve, retryDelays[attempt])
+          );
+
+          continue;
+        }
+
+        console.error(
+          "Gemini request failed after retries",
+          error instanceof Error ? error.name : "UnknownError"
+        );
+
+        return json(
+          {
+            error:
+              "AI support could not connect right now. Please try again or contact a manager.",
+          },
+          503
+        );
+      } finally {
+        clearTimeout(timer);
+      }
+
+      if (response.ok) {
+        break;
+      }
+
+      const shouldRetry =
+        retryableStatuses.includes(response.status) &&
+        attempt < retryDelays.length;
+
+      if (!shouldRetry) {
+        break;
+      }
+
+      console.warn(
+        "Gemini provider temporarily unavailable; retrying",
+        response.status,
+        attempt + 1
+      );
+
+      await response.body?.cancel().catch(() => undefined);
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, retryDelays[attempt])
+      );
+    }
+
+    if (!response) {
+      return json(
+        {
+          error:
+            "AI support could not connect right now. Please try again or contact a manager.",
+        },
+        503
+      );
+    }
+
+    const data = await response
+      .json()
+      .catch(() => null);
+
+    if (!response.ok) {
+      const providerCode =
+        typeof data?.error?.status === "string"
+          ? data.error.status
+              .replace(/[^A-Z_]/g, "")
+              .slice(0, 80)
+          : "UNKNOWN";
+
+      console.error(
+        "Gemini support provider unavailable after retries",
+        response.status,
+        providerCode
+      );
+
+      return json(
+        {
+          error:
+            response.status === 429
+              ? "The free AI service limit has been reached. Please try later or contact a manager."
+              : "AI support could not answer right now. Please try again or contact a manager.",
+        },
+        response.status === 429 ? 429 : 503
+      );
+    }
+
+    const candidate = data?.candidates?.[0];
+
+    if (
+      data?.promptFeedback?.blockReason ||
+      !candidate ||
+      !["STOP", "MAX_TOKENS"].includes(
+        candidate.finishReason
+      )
+    ) {
+      return json(
+        {
+          error:
+            "AI support could not answer this question. Please rephrase it or contact a manager.",
+        },
+        503
+      );
+    }
+
+    const text = Array.isArray(
+      candidate.content?.parts
+    )
+      ? candidate.content.parts
+          .filter(
+            (part: {
+              text?: string;
+              thought?: boolean;
+            }) =>
+              typeof part.text === "string" &&
+              !part.thought
+          )
+          .map(
+            (part: { text: string }) => part.text
+          )
+          .join("\n")
+          .trim()
+      : "";
+
+    if (!text) {
+      return json(
+        {
+          error:
+            "AI support returned no answer. Please try again.",
+        },
+        503
+      );
+    }
+
+    // Enforce the contact policy even if the model ignores its instructions.
+    if (containsDirectContact(text)) {
+      return json({
+        reply: managerReply(messages[messages.length - 1].content),
+        contact_manager: true,
+      });
+    }
+
+    return json({ reply: text });
   } catch (error) {
     console.error("AI support route error", error);
 
