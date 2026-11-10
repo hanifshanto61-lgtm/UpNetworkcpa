@@ -1,5 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { deliverAffiliateConversion } from "@/lib/affiliate-postback-delivery";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -37,10 +39,8 @@ export async function GET(request: NextRequest) {
   try {
     const supabaseUrl =
       process.env.NEXT_PUBLIC_SUPABASE_URL;
-
     const serviceKey =
       process.env.SUPABASE_SERVICE_ROLE_KEY;
-
     const postbackSecret =
       process.env.POSTBACK_SECRET;
 
@@ -80,9 +80,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (
-      !/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/.test(
-        payoutText
-      )
+      !/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/.test(payoutText)
     ) {
       return reply("Invalid payout amount", 400);
     }
@@ -97,8 +95,17 @@ export async function GET(request: NextRequest) {
       return reply("Invalid payout amount", 400);
     }
 
-    // Direct POST request to the Supabase RPC endpoint.
-    // Avoid any cached GET response for conversion writes.
+    const supabase = createClient(
+      supabaseUrl,
+      serviceKey,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    );
+
     const rpcResponse = await fetch(
       `${supabaseUrl}/rest/v1/rpc/approve_postback_conversion`,
       {
@@ -131,6 +138,38 @@ export async function GET(request: NextRequest) {
       return reply(
         "Click not found, already converted, or not eligible",
         409
+      );
+    }
+
+    // Deliver the newly recorded conversion to the affiliate.
+    // Delivery errors must never undo the recorded conversion.
+    const { data: conversion, error: lookupError } =
+      await supabase
+        .from("clicks")
+        .select(
+          "click_id,affiliate_id,offer_id,status,payout,gross_revenue,country"
+        )
+        .eq("click_id", clickId)
+        .maybeSingle();
+
+    if (lookupError) {
+      console.error(
+        "Affiliate conversion delivery lookup failed:",
+        lookupError.message
+      );
+    } else if (conversion) {
+      await deliverAffiliateConversion(supabase, {
+        click_id: String(conversion.click_id),
+        affiliate_id: conversion.affiliate_id,
+        offer_id: conversion.offer_id,
+        status: conversion.status,
+        payout: conversion.payout,
+        gross_revenue: conversion.gross_revenue,
+        country: conversion.country,
+      });
+    } else {
+      console.error(
+        "Recorded conversion could not be found for affiliate delivery."
       );
     }
 
