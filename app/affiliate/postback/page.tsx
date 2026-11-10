@@ -13,10 +13,14 @@ import {
   CheckCircle2,
   AlertCircle,
   Send,
-  Check,
   Power,
   Code2,
   Info,
+  Pencil,
+  FlaskConical,
+  History,
+  X,
+  Save,
 } from "lucide-react";
 
 type Setting = {
@@ -26,6 +30,16 @@ type Setting = {
   postback_url: string;
   enabled: boolean;
   created_at?: string;
+};
+
+type DeliveryLog = {
+  id: string;
+  setting_id: string | null;
+  event_type: "test" | "conversion";
+  status: "pending" | "success" | "failed";
+  http_status: number | null;
+  response_excerpt: string | null;
+  created_at: string;
 };
 
 type Tracker = {
@@ -38,50 +52,42 @@ const trackers: Tracker[] = [
   {
     value: "affise",
     label: "Affise",
-    template:
-      "https://your-tracker.com/postback?clickid={clickid}&sum={sum}",
+    template: "https://your-tracker.com/postback?clickid={clickid}&sum={sum}",
   },
   {
     value: "keitaro",
     label: "Keitaro",
-    template:
-      "https://your-tracker.com/postback?subid={clickid}&payout={sum}",
+    template: "https://your-tracker.com/postback?subid={clickid}&payout={sum}",
   },
   {
     value: "redtrack",
     label: "RedTrack",
-    template:
-      "https://your-tracker.com/postback?clickid={clickid}&sum={sum}",
+    template: "https://your-tracker.com/postback?clickid={clickid}&sum={sum}",
   },
   {
     value: "binom",
     label: "Binom 2",
-    template:
-      "https://your-tracker.com/postback?cnv_id={clickid}&payout={sum}",
+    template: "https://your-tracker.com/postback?cnv_id={clickid}&payout={sum}",
   },
   {
     value: "voluum",
     label: "Voluum",
-    template:
-      "https://your-tracker.com/postback?cid={clickid}&payout={sum}",
+    template: "https://your-tracker.com/postback?cid={clickid}&payout={sum}",
   },
   {
     value: "bemob",
     label: "BeMob",
-    template:
-      "https://your-tracker.com/postback?cid={clickid}&payout={sum}",
+    template: "https://your-tracker.com/postback?cid={clickid}&payout={sum}",
   },
   {
     value: "peerclick",
     label: "PeerClick",
-    template:
-      "https://your-tracker.com/postback?cid={clickid}&payout={sum}",
+    template: "https://your-tracker.com/postback?cid={clickid}&payout={sum}",
   },
   {
     value: "other",
     label: "Custom URL",
-    template:
-      "https://your-tracker.com/postback?your_clickid_param={clickid}&your_payout_param={sum}",
+    template: "https://your-tracker.com/postback?your_clickid_param={clickid}&your_payout_param={sum}",
   },
 ];
 
@@ -95,6 +101,26 @@ const macros = [
     value: "{sum}",
     label: "{sum}",
     description: "Conversion payout amount.",
+  },
+  {
+    value: "{status}",
+    label: "{status}",
+    description: "Conversion status.",
+  },
+  {
+    value: "{affiliate_id}",
+    label: "{affiliate_id}",
+    description: "Affiliate ID.",
+  },
+  {
+    value: "{offer_id}",
+    label: "{offer_id}",
+    description: "Offer ID.",
+  },
+  {
+    value: "{country}",
+    label: "{country}",
+    description: "Conversion country.",
   },
 ];
 
@@ -122,11 +148,32 @@ function trackerLabel(value: string) {
   );
 }
 
+function formatDate(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toLocaleString();
+}
+
+function statusClass(status: string) {
+  if (status === "success") {
+    return "bg-emerald-400/10 text-emerald-300";
+  }
+
+  if (status === "failed") {
+    return "bg-red-400/10 text-red-300";
+  }
+
+  return "bg-amber-400/10 text-amber-300";
+}
+
 export default function AffiliatePostbackPage() {
   const [settings, setSettings] = useState<Setting[]>([]);
   const [name, setName] = useState("");
   const [tracker, setTracker] = useState("affise");
   const [url, setUrl] = useState("");
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState("");
@@ -134,12 +181,19 @@ export default function AffiliatePostbackPage() {
   const [error, setError] = useState("");
 
   const [chatId, setChatId] = useState("");
-  const [telegramEnabled, setTelegramEnabled] =
-    useState(true);
-  const [telegramLoading, setTelegramLoading] =
-    useState(true);
-  const [telegramSaving, setTelegramSaving] =
-    useState(false);
+  const [telegramEnabled, setTelegramEnabled] = useState(true);
+  const [telegramLoading, setTelegramLoading] = useState(true);
+  const [telegramSaving, setTelegramSaving] = useState(false);
+
+  const [editingId, setEditingId] = useState("");
+  const [editName, setEditName] = useState("");
+  const [editTracker, setEditTracker] = useState("other");
+  const [editUrl, setEditUrl] = useState("");
+
+  const [logs, setLogs] = useState<DeliveryLog[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsSettingId, setLogsSettingId] = useState("");
+  const [testingId, setTestingId] = useState("");
 
   async function request(
     endpoint: string,
@@ -233,6 +287,30 @@ export default function AffiliatePostbackPage() {
     }
   }
 
+  async function loadLogs(settingId?: string) {
+    setLogsLoading(true);
+    setError("");
+
+    try {
+      const endpoint = settingId
+        ? `/api/affiliate/postback-test?setting_id=${encodeURIComponent(settingId)}`
+        : "/api/affiliate/postback-test";
+
+      const result = await request(endpoint, "GET");
+
+      setLogs(result.logs || []);
+      setLogsSettingId(settingId || "");
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Unable to load delivery logs."
+      );
+    } finally {
+      setLogsLoading(false);
+    }
+  }
+
   useEffect(() => {
     void loadSettings();
     void loadTelegramSettings();
@@ -253,10 +331,20 @@ export default function AffiliatePostbackPage() {
   function insertMacro(value: string) {
     setUrl((current) => {
       if (!current) return value;
+      if (current.includes(value)) return current;
 
       const separator = current.includes("?") ? "&" : "?";
 
+      return `${current}${separator}macro=${value}`;
+    });
+  }
+
+  function insertEditMacro(value: string) {
+    setEditUrl((current) => {
+      if (!current) return value;
       if (current.includes(value)) return current;
+
+      const separator = current.includes("?") ? "&" : "?";
 
       return `${current}${separator}macro=${value}`;
     });
@@ -292,16 +380,12 @@ export default function AffiliatePostbackPage() {
     }
 
     if (!isValidHttpsUrl(cleanUrl)) {
-      setError(
-        "Enter a valid HTTPS postback URL."
-      );
+      setError("Enter a valid HTTPS postback URL.");
       return;
     }
 
     if (!cleanUrl.includes("{clickid}")) {
-      setError(
-        "The URL must contain the exact {clickid} macro."
-      );
+      setError("The URL must contain the exact {clickid} macro.");
       return;
     }
 
@@ -321,9 +405,9 @@ export default function AffiliatePostbackPage() {
 
       setName("");
       setUrl("");
+      setTracker("affise");
 
       setMessage("Postback setting saved successfully.");
-
       await loadSettings();
     } catch (e) {
       setError(
@@ -333,6 +417,105 @@ export default function AffiliatePostbackPage() {
       );
     } finally {
       setSaving(false);
+    }
+  }
+
+  function startEdit(setting: Setting) {
+    setEditingId(setting.id);
+    setEditName(setting.name);
+    setEditTracker(setting.tracker);
+    setEditUrl(setting.postback_url);
+    setMessage("");
+    setError("");
+  }
+
+  async function saveEdit(
+    event: React.FormEvent<HTMLFormElement>,
+    setting: Setting
+  ) {
+    event.preventDefault();
+    setMessage("");
+    setError("");
+
+    const cleanUrl = editUrl.trim();
+
+    if (!editName.trim()) {
+      setError("Postback name is required.");
+      return;
+    }
+
+    if (
+      !isValidHttpsUrl(cleanUrl) ||
+      !cleanUrl.includes("{clickid}")
+    ) {
+      setError(
+        "Enter a valid HTTPS URL containing {clickid}."
+      );
+      return;
+    }
+
+    setBusyId(setting.id);
+
+    try {
+      const result = await request(
+        "/api/affiliate/postback-settings",
+        "PUT",
+        {
+          id: setting.id,
+          name: editName.trim(),
+          tracker: editTracker,
+          postback_url: cleanUrl,
+        }
+      );
+
+      setSettings((current) =>
+        current.map((item) =>
+          item.id === setting.id
+            ? result.setting
+            : item
+        )
+      );
+
+      setEditingId("");
+      setMessage("Postback updated successfully.");
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Unable to update postback."
+      );
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function testSetting(setting: Setting) {
+    setMessage("");
+    setError("");
+    setTestingId(setting.id);
+
+    try {
+      const result = await request(
+        "/api/affiliate/postback-test",
+        "POST",
+        { setting_id: setting.id }
+      );
+
+      setMessage(
+        result.message || "Test callback completed."
+      );
+
+      await loadLogs(setting.id);
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Test callback failed."
+      );
+
+      await loadLogs(setting.id);
+    } finally {
+      setTestingId("");
     }
   }
 
@@ -401,6 +584,11 @@ export default function AffiliatePostbackPage() {
           (item) => item.id !== setting.id
         )
       );
+
+      if (logsSettingId === setting.id) {
+        setLogs([]);
+        setLogsSettingId("");
+      }
 
       setMessage("Postback deleted successfully.");
     } catch (e) {
@@ -516,6 +704,9 @@ export default function AffiliatePostbackPage() {
             onClick={() => {
               void loadSettings();
               void loadTelegramSettings();
+              if (logsSettingId) {
+                void loadLogs(logsSettingId);
+              }
             }}
             className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-4 py-2 text-sm transition hover:bg-slate-800"
           >
@@ -558,18 +749,12 @@ export default function AffiliatePostbackPage() {
 
           <form onSubmit={saveSetting} className="space-y-6">
             <div>
-              <div className="mb-2 flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-400/15 text-xs font-bold text-amber-300">
-                  S1
-                </span>
-
-                <label
-                  htmlFor="tracker"
-                  className="text-sm font-semibold"
-                >
-                  Tracker
-                </label>
-              </div>
+              <label
+                htmlFor="tracker"
+                className="mb-2 block text-sm font-semibold"
+              >
+                Tracker
+              </label>
 
               <select
                 id="tracker"
@@ -580,17 +765,14 @@ export default function AffiliatePostbackPage() {
                 className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-3 outline-none focus:border-amber-400"
               >
                 {trackers.map((item) => (
-                  <option
-                    key={item.value}
-                    value={item.value}
-                  >
+                  <option key={item.value} value={item.value}>
                     {item.label}
                   </option>
                 ))}
               </select>
 
               <p className="mt-2 text-xs text-slate-400">
-                {`Selected tracker: ${activeTracker.label}`}
+                Selected tracker: {activeTracker.label}
               </p>
             </div>
 
@@ -614,23 +796,17 @@ export default function AffiliatePostbackPage() {
             </div>
 
             <div>
-              <div className="mb-2 flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-400/15 text-xs font-bold text-amber-300">
-                  S2
-                </span>
-
-                <label
-                  htmlFor="postback-url"
-                  className="text-sm font-semibold"
-                >
-                  Global Postback URL{" "}
-                  <span className="text-red-400">*</span>
-                </label>
-              </div>
+              <label
+                htmlFor="postback-url"
+                className="mb-2 block text-sm font-semibold"
+              >
+                Global Postback URL{" "}
+                <span className="text-red-400">*</span>
+              </label>
 
               <p className="mb-3 flex items-start gap-2 text-xs leading-5 text-slate-400">
                 <Info size={15} className="mt-0.5 shrink-0" />
-                Select a template and replace the example domain and parameter names with the values required by your tracker.
+                Replace the example domain and parameter names with the values required by your tracker.
               </p>
 
               <textarea
@@ -646,7 +822,7 @@ export default function AffiliatePostbackPage() {
 
               <div className="mt-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
                 <h3 className="text-sm font-semibold">
-                  Correct Format — Examples
+                  Tracker URL Examples
                 </h3>
 
                 <div className="mt-3 space-y-3">
@@ -670,9 +846,7 @@ export default function AffiliatePostbackPage() {
 
                       <button
                         type="button"
-                        onClick={() =>
-                          void copyText(item.template)
-                        }
+                        onClick={() => void copyText(item.template)}
                         aria-label={`Copy ${item.label} template`}
                         className="shrink-0 rounded-lg border border-slate-700 p-2 text-slate-400 hover:bg-slate-800 hover:text-white"
                       >
@@ -689,18 +863,12 @@ export default function AffiliatePostbackPage() {
             </div>
 
             <div>
-              <div className="mb-2 flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-400/15 text-xs font-bold text-amber-300">
-                  S3
-                </span>
-
-                <h3 className="text-sm font-semibold">
-                  Available Macros
-                </h3>
-              </div>
+              <h3 className="mb-3 text-sm font-semibold">
+                Available Macros
+              </h3>
 
               <p className="mb-3 text-xs text-slate-400">
-                Click a macro to insert it into the URL. Keep the macro spelling exactly as shown.
+                Click a macro to insert it into the URL.
               </p>
 
               <div className="flex flex-wrap gap-2">
@@ -790,7 +958,7 @@ export default function AffiliatePostbackPage() {
                 />
 
                 <p className="mt-2 text-xs leading-5 text-slate-400">
-                  Start your Telegram bot before expecting messages. Use your numeric Chat ID, not your @username.
+                  Start your Telegram bot before expecting messages. Use your numeric Chat ID, not your @username. The bot token stays on the server.
                 </p>
               </div>
 
@@ -821,9 +989,7 @@ export default function AffiliatePostbackPage() {
                 {chatId && (
                   <button
                     type="button"
-                    onClick={() =>
-                      void removeTelegramSettings()
-                    }
+                    onClick={() => void removeTelegramSettings()}
                     className="inline-flex items-center gap-2 rounded-lg border border-red-900 px-4 py-3 text-sm text-red-300 hover:bg-red-950"
                   >
                     <Trash2 size={16} />
@@ -844,7 +1010,7 @@ export default function AffiliatePostbackPage() {
               </h2>
 
               <p className="mt-1 text-sm text-slate-400">
-                Manage the postback settings saved to your account.
+                Edit, test and manage your saved tracker integrations.
               </p>
             </div>
 
@@ -868,68 +1034,287 @@ export default function AffiliatePostbackPage() {
                   key={setting.id}
                   className="rounded-xl border border-slate-800 p-4 sm:p-5"
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h3 className="break-words font-semibold">
-                        {setting.name}
-                      </h3>
+                  {editingId === setting.id ? (
+                    <form
+                      onSubmit={(event) =>
+                        void saveEdit(event, setting)
+                      }
+                      className="space-y-4"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <h3 className="font-semibold">
+                          Edit Postback
+                        </h3>
 
-                      <p className="mt-1 text-sm text-slate-400">
-                        {trackerLabel(setting.tracker)}
-                      </p>
+                        <button
+                          type="button"
+                          onClick={() => setEditingId("")}
+                          className="rounded-lg border border-slate-700 p-2 text-slate-400 hover:bg-slate-800"
+                          aria-label="Cancel editing"
+                        >
+                          <X size={17} />
+                        </button>
+                      </div>
+
+                      <input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        maxLength={100}
+                        required
+                        placeholder="Postback name"
+                        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-3 outline-none focus:border-amber-400"
+                      />
+
+                      <select
+                        value={editTracker}
+                        onChange={(e) => {
+                          setEditTracker(e.target.value);
+                        }}
+                        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-3 outline-none focus:border-amber-400"
+                      >
+                        {trackers.map((item) => (
+                          <option key={item.value} value={item.value}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </select>
+
+                      <textarea
+                        value={editUrl}
+                        onChange={(e) => setEditUrl(e.target.value)}
+                        maxLength={2000}
+                        required
+                        rows={4}
+                        className="w-full break-all rounded-lg border border-slate-700 bg-slate-950 px-3 py-3 font-mono text-sm outline-none focus:border-amber-400"
+                      />
+
+                      <div className="flex flex-wrap gap-2">
+                        {macros.map((macro) => (
+                          <button
+                            key={macro.value}
+                            type="button"
+                            onClick={() =>
+                              insertEditMacro(macro.value)
+                            }
+                            className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-2 py-1 font-mono text-xs text-cyan-300"
+                          >
+                            {macro.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="submit"
+                          disabled={busyId === setting.id}
+                          className="inline-flex items-center gap-2 rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-950 disabled:opacity-50"
+                        >
+                          <Save size={15} />
+                          {busyId === setting.id
+                            ? "Saving..."
+                            : "Save Changes"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setEditingId("")}
+                          className="rounded-lg border border-slate-700 px-4 py-2 text-sm hover:bg-slate-800"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <>
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h3 className="break-words font-semibold">
+                            {setting.name}
+                          </h3>
+
+                          <p className="mt-1 text-sm text-slate-400">
+                            {trackerLabel(setting.tracker)}
+                          </p>
+                        </div>
+
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs ${
+                            setting.enabled
+                              ? "bg-emerald-400/10 text-emerald-300"
+                              : "bg-slate-700 text-slate-300"
+                          }`}
+                        >
+                          {setting.enabled ? "Enabled" : "Disabled"}
+                        </span>
+                      </div>
+
+                      <div className="mt-4 break-all rounded-lg bg-slate-950 p-3 font-mono text-xs text-slate-300">
+                        {setting.postback_url}
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void copyText(setting.postback_url)
+                          }
+                          className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm hover:bg-slate-800"
+                        >
+                          <Copy size={15} />
+                          Copy URL
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => startEdit(setting)}
+                          className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm hover:bg-slate-800"
+                        >
+                          <Pencil size={15} />
+                          Edit
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={
+                            !setting.enabled ||
+                            testingId === setting.id
+                          }
+                          onClick={() => void testSetting(setting)}
+                          className="inline-flex items-center gap-2 rounded-lg border border-cyan-700/60 px-3 py-2 text-sm text-cyan-300 hover:bg-cyan-950/40 disabled:opacity-50"
+                        >
+                          <FlaskConical size={15} />
+                          {testingId === setting.id
+                            ? "Testing..."
+                            : "Test"}
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={busyId === setting.id}
+                          onClick={() => void toggleSetting(setting)}
+                          className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm hover:bg-slate-800 disabled:opacity-50"
+                        >
+                          <Power size={15} />
+                          {setting.enabled ? "Disable" : "Enable"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => void loadLogs(setting.id)}
+                          className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm hover:bg-slate-800"
+                        >
+                          <History size={15} />
+                          Logs
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={busyId === setting.id}
+                          onClick={() => void deleteSetting(setting)}
+                          className="inline-flex items-center gap-2 rounded-lg border border-red-900 px-3 py-2 text-sm text-red-300 hover:bg-red-950 disabled:opacity-50"
+                        >
+                          <Trash2 size={15} />
+                          Delete
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Delivery Logs */}
+        <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5 sm:p-7">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="flex items-center gap-2 text-lg font-semibold">
+                <History size={19} className="text-amber-300" />
+                Delivery Logs
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-400">
+                Review test callbacks and conversion delivery results.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                void loadLogs(logsSettingId || undefined)
+              }
+              disabled={logsLoading}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm hover:bg-slate-800 disabled:opacity-50"
+            >
+              <RefreshCw size={15} />
+              Refresh Logs
+            </button>
+          </div>
+
+          {logsSettingId && (
+            <button
+              type="button"
+              onClick={() => void loadLogs()}
+              className="mb-4 text-xs text-cyan-300 underline"
+            >
+              Show all postback logs
+            </button>
+          )}
+
+          {logsLoading ? (
+            <p className="py-5 text-sm text-slate-400">
+              Loading delivery logs...
+            </p>
+          ) : logs.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-slate-700 p-6 text-center text-sm text-slate-400">
+              No delivery logs loaded. Select Logs on a postback or refresh this section.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {logs.map((log) => (
+                <article
+                  key={log.id}
+                  className="rounded-xl border border-slate-800 bg-slate-950/60 p-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold capitalize">
+                        {log.event_type || "event"}
+                      </span>
+
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-xs capitalize ${statusClass(
+                          log.status
+                        )}`}
+                      >
+                        {log.status}
+                      </span>
                     </div>
 
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs ${
-                        setting.enabled
-                          ? "bg-emerald-400/10 text-emerald-300"
-                          : "bg-slate-700 text-slate-300"
-                      }`}
-                    >
-                      {setting.enabled ? "Enabled" : "Disabled"}
+                    <span className="text-xs text-slate-500">
+                      {formatDate(log.created_at)}
                     </span>
                   </div>
 
-                  <div className="mt-4 break-all rounded-lg bg-slate-950 p-3 font-mono text-xs text-slate-300">
-                    {setting.postback_url}
+                  <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-400">
+                    <span>
+                      HTTP: {log.http_status ?? "—"}
+                    </span>
+
+                    <span>
+                      Setting:{" "}
+                      {settings.find(
+                        (item) => item.id === log.setting_id
+                      )?.name || "Postback"}
+                    </span>
                   </div>
 
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void copyText(setting.postback_url)
-                      }
-                      className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm hover:bg-slate-800"
-                    >
-                      <Copy size={15} />
-                      Copy URL
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={busyId === setting.id}
-                      onClick={() =>
-                        void toggleSetting(setting)
-                      }
-                      className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm hover:bg-slate-800 disabled:opacity-50"
-                    >
-                      <Power size={15} />
-                      {setting.enabled ? "Disable" : "Enable"}
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={busyId === setting.id}
-                      onClick={() =>
-                        void deleteSetting(setting)
-                      }
-                      className="inline-flex items-center gap-2 rounded-lg border border-red-900 px-3 py-2 text-sm text-red-300 hover:bg-red-950 disabled:opacity-50"
-                    >
-                      <Trash2 size={15} />
-                      Delete
-                    </button>
-                  </div>
+                  {log.response_excerpt && (
+                    <pre className="mt-3 max-h-32 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-slate-900 p-3 text-xs text-slate-400">
+                      {log.response_excerpt}
+                    </pre>
+                  )}
                 </article>
               ))}
             </div>
@@ -940,11 +1325,11 @@ export default function AffiliatePostbackPage() {
           <div className="flex items-start gap-2">
             <Code2 size={16} className="mt-0.5 shrink-0" />
             <p>
-              Postback settings are stored using the existing authenticated API. Saving a URL does not by itself guarantee that conversion callbacks are delivered. Live delivery requires the server-side conversion integration to resolve the macros and send the callback successfully.
+              Test sends a TEST_CLICK_ID callback only. It does not create a real conversion or affiliate earnings. Live delivery depends on the server-side conversion integration and the tracker accepting the callback.
             </p>
           </div>
         </footer>
       </div>
     </main>
   );
-  }
+}
