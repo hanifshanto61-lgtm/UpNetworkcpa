@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "crypto";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -27,15 +28,22 @@ function reply(
 }
 
 export async function POST(request: NextRequest) {
+  const { env: cloudflareEnv } = getCloudflareContext();
+
+  const workerEnv = cloudflareEnv as unknown as Record<
+    string,
+    string | undefined
+  >;
+
   const secret =
+    workerEnv.PAYMENT_EMAIL_JOB_SECRET?.trim() ||
     process.env.PAYMENT_EMAIL_JOB_SECRET?.trim();
 
   if (!secret || secret.length < 32) {
     return reply(
       {
         success: false,
-        error:
-          "Payment email job secret is not configured.",
+        error: "Payment email job secret is not configured.",
       },
       503
     );
