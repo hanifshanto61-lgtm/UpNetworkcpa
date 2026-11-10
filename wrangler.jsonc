@@ -8,6 +8,9 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
+ "vars": {
+    "AI_SUPPORT_ENABLED": "true"
+  },
   "workers_dev": true,
   "observability": {
     "enabled": true
