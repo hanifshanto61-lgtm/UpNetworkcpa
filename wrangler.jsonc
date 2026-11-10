@@ -9,7 +9,8 @@
     "binding": "ASSETS"
   },
  "vars": {
-    "AI_SUPPORT_ENABLED": "true"
+    "AI_SUPPORT_ENABLED": "true",
+    "NEXT_PUBLIC_SUPABASE_URL": "https://hoxxmgaycxyomvzyxwlp.supabase.co"
   },
   "workers_dev": true,
   "observability": {
