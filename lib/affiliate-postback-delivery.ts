@@ -17,42 +17,67 @@ function amount(value: unknown): string {
     : "0.00";
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function replaceMacros(
   template: string,
   values: Record<string, string>
 ): string {
-  let result = template;
-
   const aliases: Record<string, string[]> = {
     click_id: [
-      "{{click_id}}",
-      "{click_id}",
-      "{{clickid}}",
       "{clickid}",
+      "{{clickid}}",
+      "{click_id}",
+      "{{click_id}}",
       "%CLICK_ID%",
     ],
     payout: [
-      "{{payout}}",
-      "{payout}",
-      "{{sum}}",
       "{sum}",
+      "{{sum}}",
+      "{payout}",
+      "{{payout}}",
       "%PAYOUT%",
     ],
-    status: ["{{status}}", "{status}", "%STATUS%"],
+    status: [
+      "{status}",
+      "{{status}}",
+      "%STATUS%",
+    ],
     affiliate_id: [
-      "{{affiliate_id}}",
       "{affiliate_id}",
+      "{{affiliate_id}}",
       "%AFFILIATE_ID%",
     ],
-    offer_id: ["{{offer_id}}", "{offer_id}", "%OFFER_ID%"],
-    country: ["{{country}}", "{country}", "%COUNTRY%"],
+    offer_id: [
+      "{offer_id}",
+      "{{offer_id}}",
+      "%OFFER_ID%",
+    ],
+    country: [
+      "{country}",
+      "{{country}}",
+      "%COUNTRY%",
+    ],
   };
 
+  let result = template;
+
   for (const [key, tokens] of Object.entries(aliases)) {
-    const encoded = encodeURIComponent(values[key] ?? "");
+    const encodedValue = encodeURIComponent(values[key] ?? "");
 
     for (const token of tokens) {
-      result = result.split(token).join(encoded);
+      const encodedToken = token
+        .replace(/\{/g, "%7B")
+        .replace(/\}/g, "%7D");
+
+      const pattern = new RegExp(
+        escapeRegExp(token) + "|" + escapeRegExp(encodedToken),
+        "gi"
+      );
+
+      result = result.replace(pattern, () => encodedValue);
     }
   }
 
@@ -63,15 +88,18 @@ function safeHttpsUrl(value: string): URL | null {
   try {
     const url = new URL(value);
 
+    const hostname = url.hostname.toLowerCase();
+
     if (
       url.protocol !== "https:" ||
       url.username ||
       url.password ||
-      !url.hostname ||
-      url.hostname === "localhost" ||
-      url.hostname.endsWith(".local") ||
-      url.hostname === "127.0.0.1" ||
-      url.hostname === "::1"
+      !hostname ||
+      hostname === "localhost" ||
+      hostname.endsWith(".local") ||
+      hostname === "127.0.0.1" ||
+      hostname === "::1" ||
+      hostname === "[::1]"
     ) {
       return null;
     }
@@ -88,14 +116,21 @@ async function sendTelegram(
 ): Promise<void> {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
 
-  if (!botToken || !chatId) return;
+  if (!botToken || !chatId) {
+    console.error(
+      "Affiliate Telegram notification skipped: missing bot token or chat ID."
+    );
+    return;
+  }
 
   try {
     const response = await fetch(
       `https://api.telegram.org/bot${botToken}/sendMessage`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           chat_id: chatId,
           text: message,
@@ -106,18 +141,33 @@ async function sendTelegram(
       }
     );
 
-    if (!response.ok) {
-      console.error("Affiliate Telegram notification failed:", response.status);
+    const result = await response
+      .json()
+      .catch(() => null) as {
+        ok?: boolean;
+        description?: string;
+      } | null;
+
+    if (!response.ok || result?.ok !== true) {
+      console.error(
+        "Affiliate Telegram notification failed:",
+        response.status,
+        String(result?.description || "Telegram API rejected the message").slice(0, 300)
+      );
     }
-  } catch {
-    console.error("Affiliate Telegram notification request failed.");
+  } catch (error) {
+    console.error(
+      "Affiliate Telegram notification request failed:",
+      error instanceof Error ? error.message : "Unknown error"
+    );
   }
 }
 
 /**
- * Deliver an already-recorded conversion to the affiliate's configured
- * tracker URL and Telegram chat. Delivery failures must never undo a
- * conversion or change its earnings.
+ * Delivers an already-recorded conversion to every enabled
+ * affiliate tracker and the affiliate's configured Telegram chat.
+ *
+ * Delivery failures must never undo a conversion or earnings.
  */
 export async function deliverAffiliateConversion(
   db: SupabaseClient,
@@ -127,7 +177,12 @@ export async function deliverAffiliateConversion(
     const clickId = String(conversion.click_id || "").trim();
     const affiliateId = String(conversion.affiliate_id || "").trim();
 
-    if (!clickId || !affiliateId) return;
+    if (!clickId || !affiliateId) {
+      console.error(
+        "Affiliate delivery skipped: missing click ID or affiliate ID."
+      );
+      return;
+    }
 
     const { data: profile, error: profileError } = await db
       .from("profiles")
@@ -136,7 +191,10 @@ export async function deliverAffiliateConversion(
       .maybeSingle();
 
     if (profileError || !profile) {
-      console.error("Affiliate delivery profile lookup failed.");
+      console.error(
+        "Affiliate delivery profile lookup failed:",
+        profileError?.message || "Profile not found."
+      );
       return;
     }
 
@@ -144,7 +202,7 @@ export async function deliverAffiliateConversion(
     const payout = amount(conversion.payout);
     const grossRevenue = amount(conversion.gross_revenue);
 
-    const macroValues = {
+    const macroValues: Record<string, string> = {
       click_id: clickId,
       payout,
       status: String(conversion.status || "converted"),
@@ -153,6 +211,7 @@ export async function deliverAffiliateConversion(
       country: String(conversion.country || ""),
     };
 
+    // Deliver to every enabled tracker configured by this affiliate.
     const { data: settings, error: settingsError } = await db
       .from("affiliate_postback_settings")
       .select("id, postback_url")
@@ -160,20 +219,25 @@ export async function deliverAffiliateConversion(
       .eq("enabled", true);
 
     if (settingsError) {
-      console.error("Affiliate tracker settings lookup failed.");
+      console.error(
+        "Affiliate tracker settings lookup failed:",
+        settingsError.message
+      );
     } else {
       for (const setting of settings || []) {
         const settingId = String(setting.id);
+
         const target = replaceMacros(
           String(setting.postback_url || ""),
           macroValues
         );
+
         const parsedUrl = safeHttpsUrl(target);
 
         let logId: string | null = null;
 
         try {
-          const { data: log } = await db
+          const { data: log, error: logError } = await db
             .from("affiliate_postback_logs")
             .insert({
               setting_id: settingId,
@@ -183,6 +247,13 @@ export async function deliverAffiliateConversion(
             })
             .select("id")
             .maybeSingle();
+
+          if (logError) {
+            console.error(
+              "Affiliate postback log creation failed:",
+              logError.message
+            );
+          }
 
           logId = log?.id ? String(log.id) : null;
 
@@ -197,11 +268,13 @@ export async function deliverAffiliateConversion(
             signal: AbortSignal.timeout(8000),
             headers: {
               "User-Agent": "UpNetworkCPA-Postback/1.0",
-              "Accept": "*/*",
+              Accept: "*/*",
             },
           });
 
-          const responseText = (await response.text()).slice(0, 500);
+          const responseText = (
+            await response.text()
+          ).slice(0, 500);
 
           if (!response.ok) {
             if (logId) {
@@ -214,6 +287,12 @@ export async function deliverAffiliateConversion(
                 })
                 .eq("id", logId);
             }
+
+            console.error(
+              "Affiliate tracker returned HTTP error:",
+              response.status
+            );
+
             continue;
           }
 
@@ -227,33 +306,44 @@ export async function deliverAffiliateConversion(
               })
               .eq("id", logId);
           }
-        } catch {
+        } catch (error) {
           if (logId) {
             await db
               .from("affiliate_postback_logs")
               .update({
                 status: "failed",
-                response_excerpt: "Callback request failed.",
+                response_excerpt: (
+                  error instanceof Error
+                    ? error.message
+                    : "Callback request failed."
+                ).slice(0, 500),
               })
               .eq("id", logId);
           }
 
-          console.error("Affiliate tracker postback delivery failed.");
+          console.error(
+            "Affiliate tracker postback delivery failed:",
+            error instanceof Error ? error.message : "Unknown error"
+          );
         }
       }
     }
 
-    // Telegram is optional; a missing settings table or bot token
-    // must not interfere with the recorded conversion.
+    // Telegram notification is independent of tracker postbacks.
     try {
-      const { data: telegram } = await db
+      const { data: telegram, error: telegramError } = await db
         .from("affiliate_telegram_settings")
         .select("chat_id")
         .eq("affiliate_user_id", userId)
         .eq("enabled", true)
         .maybeSingle();
 
-      if (telegram?.chat_id) {
+      if (telegramError) {
+        console.error(
+          "Affiliate Telegram settings lookup failed:",
+          telegramError.message
+        );
+      } else if (telegram?.chat_id) {
         const message = [
           "🚨 UpNetwork CPA — New Lead",
           `Affiliate ID: ${affiliateId}`,
@@ -265,14 +355,23 @@ export async function deliverAffiliateConversion(
           `Offer ID: ${macroValues.offer_id || "N/A"}`,
         ].join("\n");
 
-        await sendTelegram(String(telegram.chat_id), message);
+        await sendTelegram(
+          String(telegram.chat_id),
+          message
+        );
       }
-    } catch {
-      console.error("Affiliate Telegram settings lookup failed.");
+    } catch (error) {
+      console.error(
+        "Affiliate Telegram notification failed:",
+        error instanceof Error ? error.message : "Unknown error"
+      );
     }
-  } catch {
+  } catch (error) {
     // Never throw delivery errors back into conversion processing.
-    console.error("Affiliate conversion delivery helper failed.");
+    console.error(
+      "Affiliate conversion delivery helper failed:",
+      error instanceof Error ? error.message : "Unknown error"
+    );
   }
 }
 
