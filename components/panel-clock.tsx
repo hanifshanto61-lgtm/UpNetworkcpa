@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { PointerEvent } from "react";
 
 const TIME_ZONE = "America/New_York";
 
@@ -13,6 +14,7 @@ export default function PanelClock() {
   const [now, setNow] = useState<Date | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [position, setPosition] = useState<Position | null>(null);
+  const [dragging, setDragging] = useState(false);
 
   const dragRef = useRef<{
     pointerX: number;
@@ -23,42 +25,55 @@ export default function PanelClock() {
 
   const movedRef = useRef(false);
 
+  const getSize = (isExpanded: boolean) => ({
+    width: isExpanded ? 280 : 160,
+    height: isExpanded ? 130 : 68,
+  });
+
   useEffect(() => {
     setNow(new Date());
 
-    const timer = setInterval(() => {
+    const timer = window.setInterval(() => {
       setNow(new Date());
     }, 1000);
 
-    const width = window.innerWidth;
-    const height = window.innerHeight;
+    const initialSize = getSize(false);
 
     setPosition({
-      x: Math.max(8, width - 112),
-      y: Math.max(8, height - 105),
+      x: Math.max(8, (window.innerWidth - initialSize.width) / 2),
+      y: Math.max(8, (window.innerHeight - initialSize.height) / 2),
     });
 
-    return () => clearInterval(timer);
+    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
-    if (!position) return;
+    const handleResize = () => {
+      const size = getSize(expanded);
 
-    const widgetWidth = expanded ? 215 : 104;
-    const widgetHeight = expanded ? 88 : 46;
+      setPosition((current) => {
+        if (!current) return current;
+
+        return {
+          x: Math.max(8, Math.min(current.x, window.innerWidth - size.width - 8)),
+          y: Math.max(8, Math.min(current.y, window.innerHeight - size.height - 8)),
+        };
+      });
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [expanded]);
+
+  useEffect(() => {
+    const size = getSize(expanded);
 
     setPosition((current) => {
       if (!current) return current;
 
       return {
-        x: Math.max(
-          8,
-          Math.min(current.x, window.innerWidth - widgetWidth - 8)
-        ),
-        y: Math.max(
-          8,
-          Math.min(current.y, window.innerHeight - widgetHeight - 8)
-        ),
+        x: Math.max(8, Math.min(current.x, window.innerWidth - size.width - 8)),
+        y: Math.max(8, Math.min(current.y, window.innerHeight - size.height - 8)),
       };
     });
   }, [expanded]);
@@ -82,7 +97,7 @@ export default function PanelClock() {
 
   const date = new Intl.DateTimeFormat("en-US", {
     timeZone: TIME_ZONE,
-    weekday: "short",
+    weekday: "long",
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -95,9 +110,7 @@ export default function PanelClock() {
     .formatToParts(now)
     .find((part) => part.type === "timeZoneName")?.value;
 
-  function handlePointerDown(
-    event: React.PointerEvent<HTMLButtonElement>
-  ) {
+  function handlePointerDown(event: PointerEvent<HTMLButtonElement>) {
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
 
@@ -109,11 +122,11 @@ export default function PanelClock() {
       startX: position.x,
       startY: position.y,
     };
+
+    setDragging(true);
   }
 
-  function handlePointerMove(
-    event: React.PointerEvent<HTMLButtonElement>
-  ) {
+  function handlePointerMove(event: PointerEvent<HTMLButtonElement>) {
     if (!dragRef.current) return;
 
     const deltaX = event.clientX - dragRef.current.pointerX;
@@ -123,22 +136,21 @@ export default function PanelClock() {
       movedRef.current = true;
     }
 
-    const widgetWidth = expanded ? 215 : 104;
-    const widgetHeight = expanded ? 88 : 46;
+    const size = getSize(expanded);
 
     setPosition({
       x: Math.max(
         8,
         Math.min(
           dragRef.current.startX + deltaX,
-          window.innerWidth - widgetWidth - 8
+          window.innerWidth - size.width - 8
         )
       ),
       y: Math.max(
         8,
         Math.min(
           dragRef.current.startY + deltaY,
-          window.innerHeight - widgetHeight - 8
+          window.innerHeight - size.height - 8
         )
       ),
     });
@@ -146,6 +158,7 @@ export default function PanelClock() {
 
   function handlePointerUp() {
     dragRef.current = null;
+    setDragging(false);
   }
 
   function handleClick() {
@@ -167,39 +180,49 @@ export default function PanelClock() {
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
       onClick={handleClick}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          setExpanded((value) => !value);
-        }
-      }}
-      className="fixed z-[9999] flex flex-col items-center justify-center overflow-hidden rounded-2xl border border-cyan-300/40 bg-gradient-to-br from-violet-700 via-blue-700 to-cyan-600 text-white shadow-2xl shadow-blue-950/40 select-none cursor-grab active:cursor-grabbing"
+      className="
+        fixed z-[99999] flex flex-col items-center justify-center
+        overflow-hidden rounded-2xl
+        border-2 border-cyan-200
+        bg-gradient-to-br from-[#071B55] via-[#0755B8] to-[#00A6C7]
+        text-white
+        shadow-[0_0_0_2px_rgba(255,255,255,0.2),0_8px_30px_rgba(0,25,90,0.7),0_0_25px_rgba(0,210,255,0.5)]
+        select-none cursor-grab active:cursor-grabbing
+      "
       style={{
         left: position.x,
         top: position.y,
-        width: expanded ? 215 : 104,
-        minHeight: expanded ? 88 : 46,
-        padding: expanded ? "10px" : "7px",
+        width: expanded ? 280 : 160,
+        minHeight: expanded ? 130 : 68,
+        padding: expanded ? "15px" : "10px",
         touchAction: "none",
-        transition: dragRef.current ? "none" : "width 180ms, min-height 180ms",
+        transition: dragging
+          ? "none"
+          : "width 180ms ease, min-height 180ms ease",
       }}
     >
-      <span className="whitespace-nowrap text-sm font-black tabular-nums">
+      <span
+        className={`whitespace-nowrap font-black tracking-wide text-white ${
+          expanded
+            ? "text-[25px] drop-shadow-[0_2px_5px_rgba(0,0,0,0.7)]"
+            : "text-[20px] drop-shadow-[0_2px_5px_rgba(0,0,0,0.7)]"
+        }`}
+      >
         {expanded ? fullTime : time}
       </span>
 
       {expanded && (
         <>
-          <span className="mt-1 whitespace-nowrap text-[10px] font-bold">
-            {date} · {zone}
+          <span className="mt-2 whitespace-nowrap text-[13px] font-extrabold text-white drop-shadow-md">
+            {date}
           </span>
 
-          <span className="mt-1 text-[8px] font-semibold uppercase tracking-widest text-white/80">
-            New York Live Time
+          <span className="mt-2 rounded-full border border-white/60 bg-white/20 px-4 py-1 text-[12px] font-black tracking-widest text-white shadow-inner">
+            NEW YORK · {zone}
           </span>
 
-          <span className="mt-1 text-[8px] text-white/70">
-            Tap to minimize · Drag to move
+          <span className="mt-2 text-[10px] font-bold text-cyan-100">
+            TAP TO MINIMIZE · DRAG TO MOVE
           </span>
         </>
       )}
