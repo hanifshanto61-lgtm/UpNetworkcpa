@@ -42,6 +42,7 @@ import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import styles from "./dashboard.module.css";
 import { AnimatedMetric, DashboardSkeleton, useMetricChanged } from "./dashboard-motion";
 import type { MetricFormat } from "./dashboard-motion";
+import PanelClock from "@/components/panel-clock";
 
 type ClickRow = {
   click_id?: string;
@@ -836,17 +837,21 @@ const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
               </div>
             )}
         </header>
-      {/* Android App Download */}
-        <div className="relative z-10 mx-auto max-w-7xl px-4 pt-4 sm:px-6">
-          <a
-            href="https://github.com/hanifshanto61-lgtm/UpNetworkcpa/releases/download/v1.0.0/app-debug.apk"
-            className="flex w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-4 text-center font-bold text-white shadow-lg transition hover:scale-[1.01]"
-          >
-            <span className="text-xl">📱</span>
-            Download UpNetwork CPA Android App
-            <span>⬇️</span>
-          </a>
-        </div>
+      {/* Clock and Android App Download */}
+<div className="relative z-10 mx-auto max-w-7xl px-4 pt-4 sm:px-6">
+  <div className="flex w-full items-stretch gap-2 sm:gap-4">
+    <PanelClock />
+
+    <a
+      href="https://github.com/hanifshanto61-lgtm/UpNetworkcpa/releases/download/v1.0.0/app-debug.apk"
+      className="flex min-w-0 flex-[1.4] items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 px-2 py-3 text-center text-xs font-bold text-white shadow-lg transition hover:scale-[1.01] sm:gap-3 sm:px-5 sm:py-4 sm:text-base"
+    >
+      <span className="text-lg sm:text-xl">📱</span>
+      <span>Download UpNetwork CPA Android App</span>
+      <span>⬇️</span>
+    </a>
+  </div>
+</div>
         
         {/* Main */}
         <div className={`${styles.content} mx-auto max-w-7xl px-4 py-7 sm:px-6 sm:py-9`}>
