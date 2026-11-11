@@ -40,9 +40,9 @@ export default function PanelClock() {
     const initialSize = getSize(false);
 
     setPosition({
-      x: Math.max(8, (window.innerWidth - initialSize.width) / 2),
-      y: Math.max(8, (window.innerHeight - initialSize.height) / 2),
-    });
+  x: Math.max(8, window.innerWidth - initialSize.width - 16),
+  y: Math.max(8, (window.innerHeight - initialSize.height) / 2),
+});
 
     return () => window.clearInterval(timer);
   }, []);
