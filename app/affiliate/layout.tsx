@@ -16,8 +16,10 @@ function ColorfulAffiliateLayout({
   const pathname = usePathname();
   const dark = theme === "dark";
 
-  // Dashboard already has its own clock.
-  const showSharedClock = pathname !== "/affiliate";
+  // Show floating clock on affiliate subpages, not on Dashboard.
+  const showFloatingClock =
+    pathname.startsWith("/affiliate/") &&
+    pathname !== "/affiliate/";
 
   return (
     <div className="relative isolate min-h-screen">
@@ -38,13 +40,9 @@ function ColorfulAffiliateLayout({
       </div>
 
       <div className="relative z-0 min-h-screen">
-        {showSharedClock && (
-          <div className="relative z-50 mx-auto flex max-w-7xl justify-end px-4 pt-3 sm:px-6">
-            <PanelClock />
-          </div>
-        )}
-
         {children}
+
+        {showFloatingClock && <PanelClock />}
       </div>
     </div>
   );
