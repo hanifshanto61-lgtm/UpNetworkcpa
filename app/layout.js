@@ -1,5 +1,4 @@
 import "./globals.css";
-import PanelClock from "../components/panel-clock";
 
 export const metadata = {
   title: "UpNetworkCpa — Affiliate Panel",
@@ -24,7 +23,6 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <body>
         {children}
-        <PanelClock />
       </body>
     </html>
   );
