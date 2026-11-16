@@ -6,6 +6,7 @@ import { AffiliateNotificationProvider } from "./notification-context";
 import { AffiliateThemeProvider, useAffiliateTheme } from "./theme-context";
 import AffiliateAccessGate from "./access-gate";
 import PanelClock from "@/components/panel-clock";
+import FloatingNotifications from "./floating-notifications";
 
 function ColorfulAffiliateLayout({
   children,
@@ -16,7 +17,6 @@ function ColorfulAffiliateLayout({
   const pathname = usePathname();
   const dark = theme === "dark";
 
-  // Show floating clock on affiliate subpages, not on Dashboard.
   const showFloatingClock =
     pathname.startsWith("/affiliate/") &&
     pathname !== "/affiliate/";
@@ -41,6 +41,8 @@ function ColorfulAffiliateLayout({
 
       <div className="relative z-0 min-h-screen">
         {children}
+
+        <FloatingNotifications />
 
         {showFloatingClock && <PanelClock />}
       </div>
