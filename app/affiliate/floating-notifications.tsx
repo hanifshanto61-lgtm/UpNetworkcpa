@@ -33,10 +33,10 @@ export default function FloatingNotifications() {
           <div
             key={item.id}
             role="status"
-            className={`pointer-events-auto relative overflow-hidden rounded-xl border p-4 shadow-2xl backdrop-blur-xl ${
+            className={`pointer-events-auto relative overflow-hidden rounded-xl border p-4 shadow-2xl ${
               payment
-                ? "border-orange-300 bg-orange-50/95 text-orange-950 dark:border-orange-400/40 dark:bg-orange-950/95 dark:text-orange-100"
-                : "border-blue-300 bg-blue-50/95 text-blue-950 dark:border-blue-400/40 dark:bg-blue-950/95 dark:text-blue-100"
+                ? "border-orange-300 bg-orange-500 text-white"
+                : "border-green-300 bg-green-600 text-white"
             }`}
           >
             <button
@@ -45,7 +45,7 @@ export default function FloatingNotifications() {
                 void removeNotification(item.id);
               }}
               aria-label="Dismiss notification"
-              className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full text-xl font-bold opacity-70 hover:bg-black/10 hover:opacity-100"
+              className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full text-xl font-bold text-white opacity-80 hover:bg-black/20 hover:opacity-100"
             >
               ×
             </button>
@@ -63,7 +63,7 @@ export default function FloatingNotifications() {
             >
               <div className="mb-1 flex items-center gap-2">
                 <span className="text-lg">
-                  {payment ? "🟠" : "🔵"}
+                  {payment ? "🟠" : "🟢"}
                 </span>
 
                 <span className="text-sm font-bold">
@@ -71,11 +71,11 @@ export default function FloatingNotifications() {
                 </span>
               </div>
 
-              <p className="text-xs leading-5 opacity-90">
+              <p className="text-xs leading-5 text-white">
                 {item.message}
               </p>
 
-              <p className="mt-2 text-[10px] opacity-60">
+              <p className="mt-2 text-[10px] text-white/80">
                 {new Date(item.createdAt).toLocaleString()}
               </p>
             </button>
