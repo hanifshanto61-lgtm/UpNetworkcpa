@@ -10,6 +10,7 @@ type ClickRow = {
   affiliate_id?: string | null;
   smartlink_id?: string | null;
   offer_id?: string | null;
+  worker_sub_id?: string | null;
   country?: string | null;
   region?: string | null;
   city?: string | null;
@@ -96,8 +97,6 @@ function updateReport(
 
   item.clicks++;
 
-  // Count known visitors once per group in the selected date range.
-  // Clicks without visitor hashes still contribute to total clicks.
   if (visitorHash) {
     item.visitorHashes.add(visitorHash);
   }
@@ -261,7 +260,7 @@ export async function GET(request: NextRequest) {
       const { data, error } = await supabase
         .from("clicks")
         .select(
-          "id, click_id, affiliate_id, smartlink_id, offer_id, country, region, city, postal_code, timezone, device, browser, operating_system, referer, traffic_source, campaign, visitor_hash, is_suspicious, isp, asn, status, payout, gross_revenue, network_profit, converted_at, created_at"
+          "id, click_id, affiliate_id, smartlink_id, offer_id, worker_sub_id, country, region, city, postal_code, timezone, device, browser, operating_system, referer, traffic_source, campaign, visitor_hash, is_suspicious, isp, asn, status, payout, gross_revenue, network_profit, converted_at, created_at"
         )
         .eq("affiliate_id", affiliateId)
         .gte("created_at", fromTimestamp)
@@ -307,6 +306,10 @@ export async function GET(request: NextRequest) {
     const smartlinkMap = new Map<string, ReportValue>();
     const dailyMap = new Map<string, ReportValue>();
 
+    // New reports
+    const subIdMap = new Map<string, ReportValue>();
+    const offerMap = new Map<string, ReportValue>();
+
     for (const click of allClicks) {
       const isConversion = converted(click);
       const payout = isConversion ? amount(click.payout) : 0;
@@ -334,6 +337,9 @@ export async function GET(request: NextRequest) {
       const os = label(click.operating_system);
       const source = label(click.traffic_source);
       const campaign = label(click.campaign);
+
+      const subId = label(click.worker_sub_id);
+      const offer = label(click.offer_id);
 
       const smartlink = click.smartlink_id
         ? String(click.smartlink_id)
@@ -424,6 +430,24 @@ export async function GET(request: NextRequest) {
         payout,
         click.visitor_hash
       );
+
+      // Sub ID Report
+      updateReport(
+        subIdMap,
+        subId,
+        isConversion,
+        payout,
+        click.visitor_hash
+      );
+
+      // Offer Report
+      updateReport(
+        offerMap,
+        offer,
+        isConversion,
+        payout,
+        click.visitor_hash
+      );
     }
 
     const conversionRate =
@@ -433,7 +457,6 @@ export async function GET(request: NextRequest) {
 
     const uniqueVisitors = uniqueHashes.size;
 
-    // Do not treat old clicks without hashes as unique visitors.
     const identifiableClicks = allClicks.filter(
       (click) => Boolean(click.visitor_hash)
     ).length;
@@ -500,6 +523,18 @@ export async function GET(request: NextRequest) {
       String(a.date).localeCompare(String(b.date))
     );
 
+    const subIdReport = buildReport(
+      subIdMap,
+      "subId",
+      totalClicks
+    );
+
+    const offerReport = buildReport(
+      offerMap,
+      "offer",
+      totalClicks
+    );
+
     return NextResponse.json(
       {
         success: true,
@@ -542,6 +577,10 @@ export async function GET(request: NextRequest) {
         campaignReport,
         smartlinkReport,
         dailyReport,
+
+        // New report data
+        subIdReport,
+        offerReport,
 
         clicks: allClicks.slice(0, 100),
       },
