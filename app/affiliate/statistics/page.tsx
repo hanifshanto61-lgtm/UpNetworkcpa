@@ -3,31 +3,18 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
-  ArrowLeft,
-  Activity,
-  BarChart3,
-  CalendarDays,
-  Download,
-  DollarSign,
-  Filter,
-  Globe2,
-  MousePointerClick,
-  RefreshCw,
-  RotateCcw,
-  Search,
-  ShieldAlert,
-  Target,
-  TrendingUp,
-  Users,
+  ArrowLeft, Activity, BarChart3, CalendarDays, Download, DollarSign,
+  Filter, Globe2, MousePointerClick, RefreshCw, RotateCcw, Search,
+  Target, Users,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 
 type ClickRow = {
   click_id?: string | null;
   smartlink_id?: string | null;
   offer_id?: string | null;
+  worker_sub_id?: string | null;
   country?: string | null;
   region?: string | null;
   city?: string | null;
@@ -68,11 +55,7 @@ type Stats = {
 type ResponseData = {
   success?: boolean;
   error?: string;
-  profile?: {
-    affiliateId?: string;
-    affiliate_id?: string;
-    name?: string;
-  };
+  profile?: { affiliateId?: string; affiliate_id?: string; name?: string };
   stats?: Partial<Stats>;
   clicks?: ClickRow[];
   countryReport?: ReportItem[];
@@ -85,31 +68,17 @@ type ResponseData = {
   campaignReport?: ReportItem[];
   smartlinkReport?: ReportItem[];
   dailyReport?: ReportItem[];
+  subIdReport?: ReportItem[];
+  offerReport?: ReportItem[];
 };
 
 const emptyStats: Stats = {
-  totalClicks: 0,
-  conversions: 0,
-  conversionRate: 0,
-  earnings: 0,
-  uniqueVisitors: 0,
-  identifiableClicks: 0,
-  suspiciousClicks: 0,
-  cleanClicks: 0,
+  totalClicks: 0, conversions: 0, conversionRate: 0, earnings: 0,
+  uniqueVisitors: 0, identifiableClicks: 0, suspiciousClicks: 0, cleanClicks: 0,
 };
 
 function today() {
   return new Date().toISOString().slice(0, 10);
-}
-
-function monthStart() {
-  const date = new Date();
-
-  return new Date(
-    Date.UTC(date.getFullYear(), date.getMonth(), 1)
-  )
-    .toISOString()
-    .slice(0, 10);
 }
 
 function money(value: number) {
@@ -127,199 +96,85 @@ function converted(row: ClickRow) {
 function csvCell(value: unknown) {
   const text = String(value ?? "");
   const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
-
   return `"${safe.replace(/"/g, '""')}"`;
 }
 
 function exportCSV(rows: ClickRow[]) {
   const headers = [
-    "Date",
-    "Click ID",
-    "Country",
-    "Region",
-    "City",
-    "Device",
-    "Browser",
-    "OS",
-    "Source",
-    "Campaign",
-    "Smartlink",
-    "Status",
-    "Payout",
+    "Date", "Click ID", "Sub ID", "Offer ID", "Country", "Region", "City",
+    "Device", "Browser", "OS", "Source", "Campaign", "Smartlink", "Status", "Payout",
   ];
-
   const values = rows.map((r) => [
-    r.created_at,
-    r.click_id,
-    r.country,
-    r.region,
-    r.city,
-    r.device,
-    r.browser,
-    r.operating_system,
-    r.traffic_source,
-    r.campaign,
-    r.smartlink_id || r.offer_id,
-    r.status,
-    converted(r) ? r.payout || 0 : 0,
+    r.created_at, r.click_id, r.worker_sub_id, r.offer_id, r.country, r.region,
+    r.city, r.device, r.browser, r.operating_system, r.traffic_source, r.campaign,
+    r.smartlink_id || r.offer_id, r.status, converted(r) ? r.payout || 0 : 0,
   ]);
-
-  const csv = [headers, ...values]
-    .map((row) => row.map(csvCell).join(","))
-    .join("\r\n");
-
-  const blob = new Blob(["\uFEFF", csv], {
-    type: "text/csv;charset=utf-8",
-  });
-
+  const csv = [headers, ...values].map((row) => row.map(csvCell).join(",")).join("\r\n");
+  const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
-
   anchor.href = url;
   anchor.download = `upnetwork-traffic-${today()}.csv`;
   anchor.click();
-
   URL.revokeObjectURL(url);
 }
 
 function Metric({
-  title,
-  value,
-  icon,
-  color,
-  description,
+  title, value, icon, description,
 }: {
-  title: string;
-  value: string;
-  icon: ReactNode;
-  color: string;
-  description: string;
+  title: string; value: string; icon: ReactNode; description: string;
 }) {
-  const gradients: Record<string, string> = {
-    "Total Clicks": "from-cyan-600 via-sky-700 to-blue-800",
-    "Unique Visitors": "from-blue-600 via-indigo-700 to-violet-800",
-    Conversions: "from-violet-600 via-purple-700 to-fuchsia-800",
-    "Affiliate Earnings": "from-emerald-600 via-green-700 to-teal-800",
-    "Conversion Rate": "from-amber-500 via-orange-600 to-rose-700",
-    "Clean Clicks": "from-teal-600 via-cyan-700 to-sky-800",
-    "Suspicious Traffic": "from-rose-600 via-red-700 to-pink-800",
-    Countries: "from-indigo-600 via-blue-700 to-cyan-800",
+  const styles: Record<string, string> = {
+    Clicks: "from-cyan-600 to-blue-800",
+    Visitors: "from-blue-600 to-indigo-800",
+    Conversions: "from-violet-600 to-fuchsia-800",
+    Earnings: "from-emerald-600 to-teal-800",
   };
-
   return (
-    <div
-      className={`group relative overflow-hidden rounded-2xl
-        border border-white/25 bg-gradient-to-br
-        ${gradients[title] || "from-slate-700 to-slate-900"}
-        p-5 text-white shadow-xl
-        transition-all duration-300
-        hover:-translate-y-1 hover:scale-[1.02]
-        hover:shadow-2xl`}
-    >
-      <div className="pointer-events-none absolute -right-8 -top-8
-        h-28 w-28 rounded-full bg-white/15 blur-2xl
-        transition-all duration-300 group-hover:bg-white/25" />
-
-      <div className="relative mb-4 inline-flex rounded-xl
-        border border-white/25 bg-white/20 p-3 text-white">
-        {icon}
-      </div>
-
-      <p className="relative text-sm font-medium text-white/90">
-        {title}
-      </p>
-
-      <p className="relative mt-1 text-2xl font-bold tracking-tight
-        text-white drop-shadow-sm">
-        {value}
-      </p>
-
-      <p className="relative mt-2 text-xs text-white/80">
-        {description}
-      </p>
+    <div className={`rounded-2xl border border-white/10 bg-gradient-to-br ${styles[title]} p-5 text-white shadow-lg`}>
+      <div className="mb-3 inline-flex rounded-xl bg-white/15 p-3">{icon}</div>
+      <p className="text-sm text-white/85">{title}</p>
+      <p className="mt-1 text-2xl font-bold">{value}</p>
+      <p className="mt-2 text-xs text-white/75">{description}</p>
     </div>
   );
 }
 
 function ReportTable({
-  title,
-  rows,
-  field,
+  title, rows, field,
 }: {
-  title: string;
-  rows: ReportItem[];
-  field: string;
+  title: string; rows: ReportItem[]; field: string;
 }) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900/70">
-      <div className="border-b border-white/10 p-5">
+    <section className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-slate-900/70">
+      <div className="border-b border-white/10 px-4 py-3">
         <h2 className="font-semibold text-white">{title}</h2>
-
-        <p className="mt-1 text-xs text-slate-500">
-          Clicks, unique clicks, conversions and affiliate earnings
-        </p>
+        <p className="mt-1 text-xs text-slate-500">Clicks · Visitors · Conversions · Earnings</p>
       </div>
-
-      <p className="px-5 pt-3 text-xs text-slate-500">
-        Unique clicks count known visitors once per row in the selected
-        date range. Older clicks without visitor identifiers are excluded
-        from unique counts.
-      </p>
-
       {rows.length === 0 ? (
-        <p className="p-6 text-sm text-slate-500">
-          No data available for this period.
-        </p>
+        <p className="p-5 text-sm text-slate-500">No data available for this period.</p>
       ) : (
         <div className="max-h-80 overflow-auto">
-          <table className="w-full min-w-[440px] text-left text-sm">
+          <table className="w-full min-w-[390px] text-left text-sm">
             <thead className="sticky top-0 bg-slate-900 text-xs text-slate-400">
               <tr>
-                <th className="px-4 py-3">{title}</th>
-
-                <th className="px-3 py-3 text-right">
-                  Clicks
-                </th>
-
-                <th className="whitespace-nowrap px-3 py-3 text-right">
-                  Unique Clicks
-                </th>
-
-                <th className="px-3 py-3 text-right">
-                  Leads
-                </th>
-
-                <th className="px-4 py-3 text-right">
-                  Earned
-                </th>
+                <th className="px-3 py-3">{title.replace(" Report", "")}</th>
+                <th className="px-2 py-3 text-right">Clicks</th>
+                <th className="px-2 py-3 text-right">Visitors</th>
+                <th className="px-2 py-3 text-right">Conv.</th>
+                <th className="px-3 py-3 text-right">Earned</th>
               </tr>
             </thead>
-
             <tbody>
               {rows.map((item, index) => (
-                <tr
-                  key={`${String(item[field])}-${index}`}
-                  className="border-t border-white/5"
-                >
-                  <td className="max-w-[190px] break-all px-4 py-3 text-slate-200">
+                <tr key={`${String(item[field])}-${index}`} className="border-t border-white/5">
+                  <td className="max-w-[160px] break-all px-3 py-3 text-slate-200">
                     {String(item[field] || "Unknown")}
                   </td>
-
-                  <td className="px-3 py-3 text-right text-cyan-300">
-                    {item.clicks}
-                  </td>
-
-                  <td className="px-3 py-3 text-right text-blue-300">
-                    {item.uniqueClicks ?? "—"}
-                  </td>
-
-                  <td className="px-3 py-3 text-right text-violet-300">
-                    {item.conversions}
-                  </td>
-
-                  <td className="px-4 py-3 text-right text-emerald-400">
-                    {money(item.earnings)}
-                  </td>
+                  <td className="px-2 py-3 text-right text-cyan-300">{item.clicks}</td>
+                  <td className="px-2 py-3 text-right text-blue-300">{item.uniqueClicks ?? "—"}</td>
+                  <td className="px-2 py-3 text-right text-violet-300">{item.conversions}</td>
+                  <td className="px-3 py-3 text-right text-emerald-400">{money(item.earnings)}</td>
                 </tr>
               ))}
             </tbody>
@@ -332,48 +187,25 @@ function ReportTable({
 
 function TrendChart({ rows }: { rows: ReportItem[] }) {
   const max = Math.max(1, ...rows.map((item) => item.clicks));
-
   return (
     <section className="rounded-2xl border border-white/10 bg-slate-900/70 p-5">
-      <h2 className="mb-1 font-semibold">
-        Daily Traffic Trend
-      </h2>
-
-      <p className="mb-5 text-xs text-slate-500">
-        Clicks by day for the selected period
-      </p>
-
+      <h2 className="mb-1 font-semibold">Daily Traffic Trend</h2>
+      <p className="mb-5 text-xs text-slate-500">Clicks by day for the selected period</p>
       {rows.length === 0 ? (
-        <p className="text-sm text-slate-500">
-          No traffic yet.
-        </p>
+        <p className="text-sm text-slate-500">No traffic yet.</p>
       ) : (
         <div className="flex min-h-48 items-end gap-2 overflow-x-auto pb-2">
           {rows.map((item, index) => (
-            <div
-              key={`${String(item.date)}-${index}`}
-              className="flex min-w-10 flex-1 flex-col items-center gap-2"
-            >
-              <span className="text-xs text-cyan-300">
-                {item.clicks}
-              </span>
-
+            <div key={`${String(item.date)}-${index}`} className="flex min-w-10 flex-1 flex-col items-center gap-2">
+              <span className="text-xs text-cyan-300">{item.clicks}</span>
               <div className="flex h-36 w-full items-end rounded-md bg-white/5">
                 <div
                   className="w-full rounded-t-md bg-gradient-to-t from-cyan-600 to-blue-400"
-                  style={{
-                    height: `${Math.max(
-                      4,
-                      (item.clicks / max) * 100
-                    )}%`,
-                  }}
+                  style={{ height: `${Math.max(4, (item.clicks / max) * 100)}%` }}
                   title={`${String(item.date)}: ${item.clicks} clicks`}
                 />
               </div>
-
-              <span className="text-[10px] text-slate-500">
-                {String(item.date || "").slice(5)}
-              </span>
+              <span className="text-[10px] text-slate-500">{String(item.date || "").slice(5)}</span>
             </div>
           ))}
         </div>
@@ -384,12 +216,10 @@ function TrendChart({ rows }: { rows: ReportItem[] }) {
 
 export default function AffiliateStatisticsPage() {
   const router = useRouter();
-
-  const [fromDate, setFromDate] = useState(monthStart);
+  const [fromDate, setFromDate] = useState(today);
   const [toDate, setToDate] = useState(today);
-  const [appliedFrom, setAppliedFrom] = useState(monthStart);
+  const [appliedFrom, setAppliedFrom] = useState(today);
   const [appliedTo, setAppliedTo] = useState(today);
-
   const [data, setData] = useState<ResponseData>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -397,171 +227,81 @@ export default function AffiliateStatisticsPage() {
   const [countryFilter, setCountryFilter] = useState("");
   const [deviceFilter, setDeviceFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const [tab, setTab] = useState("geography");
 
-  async function load(
-    from: string,
-    to: string,
-    showLoading = true
-  ) {
-    if (showLoading) {
-      setLoading(true);
-      setError("");
-    }
-
+  async function load(from: string, to: string) {
+    setLoading(true);
+    setError("");
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
+      const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
         router.push("/login");
         return;
       }
-
       const params = new URLSearchParams({ from, to });
-
-      const response = await fetch(
-        `/api/affiliate/statistics?${params.toString()}`,
-        {
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          cache: "no-store",
-        }
-      );
-
+      const response = await fetch(`/api/affiliate/statistics?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        cache: "no-store",
+      });
       const json: ResponseData = await response.json();
-
       if (!response.ok || !json.success) {
-        throw new Error(
-          json.error || "Unable to load statistics."
-        );
+        throw new Error(json.error || "Unable to load statistics.");
       }
-
       setData(json);
     } catch (err) {
-      if (showLoading) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Unable to load statistics."
-        );
-      } else {
-        console.error("Statistics auto refresh failed:", err);
-      }
+      setError(err instanceof Error ? err.message : "Unable to load statistics.");
     } finally {
-      if (showLoading) {
-        setLoading(false);
-      }
+      setLoading(false);
     }
   }
 
+  // Initial load happens once. There is intentionally no timed auto-refresh.
   useEffect(() => {
-    void load(monthStart(), today());
+    void load(today(), today());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useAutoRefresh(
-    () => load(appliedFrom, appliedTo, false),
-    15000
-  );
-
-  const stats: Stats = {
-    ...emptyStats,
-    ...data.stats,
-  };
-
+  const stats: Stats = { ...emptyStats, ...data.stats };
   const clicks = data.clicks || [];
 
   const filteredClicks = useMemo(() => {
     const term = search.toLowerCase().trim();
-
     return clicks.filter((row) => {
       const searchable = [
-        row.click_id,
-        row.country,
-        row.region,
-        row.city,
-        row.device,
-        row.browser,
-        row.operating_system,
-        row.traffic_source,
-        row.campaign,
-        row.smartlink_id,
-        row.offer_id,
-        row.status,
-      ]
-        .join(" ")
-        .toLowerCase();
-
-      if (term && !searchable.includes(term)) {
-        return false;
-      }
-
-      if (countryFilter && row.country !== countryFilter) {
-        return false;
-      }
-
-      if (deviceFilter && row.device !== deviceFilter) {
-        return false;
-      }
-
-      if (statusFilter === "converted" && !converted(row)) {
-        return false;
-      }
-
-      if (statusFilter === "click" && converted(row)) {
-        return false;
-      }
-
+        row.click_id, row.worker_sub_id, row.offer_id, row.country, row.region,
+        row.city, row.device, row.browser, row.operating_system,
+        row.traffic_source, row.campaign, row.smartlink_id, row.status,
+      ].join(" ").toLowerCase();
+      if (term && !searchable.includes(term)) return false;
+      if (countryFilter && row.country !== countryFilter) return false;
+      if (deviceFilter && row.device !== deviceFilter) return false;
+      if (statusFilter === "converted" && !converted(row)) return false;
+      if (statusFilter === "click" && converted(row)) return false;
       return true;
     });
-  }, [
-    clicks,
-    search,
-    countryFilter,
-    deviceFilter,
-    statusFilter,
-  ]);
+  }, [clicks, search, countryFilter, deviceFilter, statusFilter]);
 
-  const countries = Array.from(
-    new Set(clicks.map((r) => r.country).filter(Boolean))
-  ) as string[];
-
-  const devices = Array.from(
-    new Set(clicks.map((r) => r.device).filter(Boolean))
-  ) as string[];
+  const countries = Array.from(new Set(clicks.map((r) => r.country).filter(Boolean))) as string[];
+  const devices = Array.from(new Set(clicks.map((r) => r.device).filter(Boolean))) as string[];
 
   function applyDates() {
     if (!fromDate || !toDate || fromDate > toDate) {
       setError("Please select a valid date range.");
       return;
     }
-
     setAppliedFrom(fromDate);
     setAppliedTo(toDate);
-
     void load(fromDate, toDate);
   }
 
   function resetDates() {
-    const from = monthStart();
+    const from = today();
     const to = today();
-
     setFromDate(from);
     setToDate(to);
     setAppliedFrom(from);
     setAppliedTo(to);
-
     void load(from, to);
   }
-
-  const tabs = [
-    { id: "geography", label: "Geography" },
-    { id: "devices", label: "Devices & OS" },
-    { id: "sources", label: "Traffic Sources" },
-    { id: "smartlinks", label: "Smartlinks" },
-  ];
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
@@ -575,180 +315,62 @@ export default function AffiliateStatisticsPage() {
             >
               <ArrowLeft size={19} />
             </button>
-
             <div>
               <div className="flex items-center gap-2">
-                <Activity
-                  className="text-cyan-400"
-                  size={25}
-                />
-
-                <h1 className="text-xl font-bold sm:text-2xl">
-                  Traffic Intelligence
-                </h1>
+                <Activity className="text-cyan-400" size={25} />
+                <h1 className="text-xl font-bold sm:text-2xl">Traffic Intelligence</h1>
               </div>
-
-              <p className="mt-1 text-sm text-slate-400">
-                UpNetwork CPA • Advanced Affiliate Analytics
-              </p>
+              <p className="mt-1 text-sm text-slate-400">UpNetwork CPA • Advanced Affiliate Analytics</p>
             </div>
           </div>
-
           <button
             onClick={() => void load(appliedFrom, appliedTo)}
             disabled={loading}
             className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm hover:bg-white/10 disabled:opacity-50"
           >
-            <RefreshCw
-              size={17}
-              className={loading ? "animate-spin" : ""}
-            />
+            <RefreshCw size={17} className={loading ? "animate-spin" : ""} />
             Refresh
           </button>
         </header>
 
         {data.profile && (
           <div className="mb-5 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3 text-sm text-cyan-300">
-            Affiliate ID:{" "}
-            <strong>
-              {data.profile.affiliateId ||
-                data.profile.affiliate_id}
-            </strong>
+            Affiliate ID: <strong>{data.profile.affiliateId || data.profile.affiliate_id}</strong>
           </div>
         )}
-
         {error && (
-          <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">
-            {error}
-          </div>
+          <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">{error}</div>
         )}
 
         <section className="mb-6 rounded-2xl border border-white/10 bg-slate-900/70 p-5">
           <div className="mb-4 flex items-center gap-2">
-            <CalendarDays
-              size={19}
-              className="text-cyan-400"
-            />
-
-            <h2 className="font-semibold">
-              Date Range
-            </h2>
+            <CalendarDays size={19} className="text-cyan-400" />
+            <h2 className="font-semibold">Date Range</h2>
           </div>
-
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto_auto]">
-            <input
-              type="date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className="min-w-0 rounded-xl border border-white/10 bg-slate-950 p-3"
-            />
-
-            <input
-              type="date"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              className="min-w-0 rounded-xl border border-white/10 bg-slate-950 p-3"
-            />
-
-            <button
-              onClick={applyDates}
-              disabled={loading}
-              className="rounded-xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950 disabled:opacity-50"
-            >
-              Apply
-            </button>
-
-            <button
-              onClick={resetDates}
-              disabled={loading}
-              className="flex items-center justify-center gap-2 rounded-xl bg-white/10 px-5 py-3 disabled:opacity-50"
-            >
-              <RotateCcw size={16} />
-              Reset
+            <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="min-w-0 rounded-xl border border-white/10 bg-slate-950 p-3" />
+            <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="min-w-0 rounded-xl border border-white/10 bg-slate-950 p-3" />
+            <button onClick={applyDates} disabled={loading} className="rounded-xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950 disabled:opacity-50">Apply</button>
+            <button onClick={resetDates} disabled={loading} className="flex items-center justify-center gap-2 rounded-xl bg-white/10 px-5 py-3 disabled:opacity-50">
+              <RotateCcw size={16} /> Reset
             </button>
           </div>
-
-          <p className="mt-3 text-xs text-slate-500">
-            Reporting: {appliedFrom} → {appliedTo} (UTC)
-          </p>
+          <p className="mt-3 text-xs text-slate-500">Reporting: {appliedFrom} → {appliedTo} (UTC)</p>
         </section>
 
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Metric
-            title="Total Clicks"
-            value={
-              loading
-                ? "..."
-                : stats.totalClicks.toLocaleString()
-            }
-            icon={<MousePointerClick size={22} />}
-            color="bg-cyan-500/15 text-cyan-400"
-            description="All recorded traffic"
-          />
+          <Metric title="Clicks" value={loading ? "..." : stats.totalClicks.toLocaleString()} icon={<MousePointerClick size={22} />} description="Today's recorded clicks" />
+          <Metric title="Visitors" value={loading ? "..." : stats.uniqueVisitors.toLocaleString()} icon={<Users size={22} />} description="Today's identifiable unique visitors" />
+          <Metric title="Conversions" value={loading ? "..." : stats.conversions.toLocaleString()} icon={<Target size={22} />} description="Today's conversion events" />
+          <Metric title="Earnings" value={loading ? "..." : money(stats.earnings)} icon={<DollarSign size={22} />} description="Today's affiliate earnings" />
+        </section>
 
-          <Metric
-            title="Unique Visitors"
-            value={
-              loading
-                ? "..."
-                : stats.uniqueVisitors.toLocaleString()
-            }
-            icon={<Users size={22} />}
-            color="bg-blue-500/15 text-blue-400"
-            description={`${stats.identifiableClicks} clicks with visitor identifiers`}
-          />
-
-          <Metric
-            title="Conversions"
-            value={
-              loading
-                ? "..."
-                : stats.conversions.toLocaleString()
-            }
-            icon={<Target size={22} />}
-            color="bg-violet-500/15 text-violet-400"
-            description="Confirmed conversion events"
-          />
-
-          <Metric
-            title="Affiliate Earnings"
-            value={loading ? "..." : money(stats.earnings)}
-            icon={<DollarSign size={22} />}
-            color="bg-emerald-500/15 text-emerald-400"
-            description="Converted click payouts"
-          />
-
-          <Metric
-            title="Conversion Rate"
-            value={`${stats.conversionRate.toFixed(2)}%`}
-            icon={<TrendingUp size={22} />}
-            color="bg-amber-500/15 text-amber-400"
-            description="Conversions / total clicks"
-          />
-
-          <Metric
-            title="Clean Clicks"
-            value={stats.cleanClicks.toLocaleString()}
-            icon={<Activity size={22} />}
-            color="bg-teal-500/15 text-teal-400"
-            description="Clicks not flagged as suspicious"
-          />
-
-          <Metric
-            title="Suspicious Traffic"
-            value={stats.suspiciousClicks.toLocaleString()}
-            icon={<ShieldAlert size={22} />}
-            color="bg-rose-500/15 text-rose-400"
-            description="Heuristic flags, not confirmed fraud"
-          />
-
-          <Metric
-            title="Countries"
-            value={String((data.countryReport || []).length)}
-            icon={<Globe2 size={22} />}
-            color="bg-indigo-500/15 text-indigo-400"
-            description="Includes unknown locations"
-          />
+        <section className="mt-6">
+          <div className="mb-4 flex items-center gap-2">
+            <Globe2 className="text-cyan-400" size={20} />
+            <h2 className="text-lg font-bold">Country Report</h2>
+          </div>
+          <ReportTable title="Country Report" rows={data.countryReport || []} field="country" />
         </section>
 
         <div className="mt-6">
@@ -756,168 +378,54 @@ export default function AffiliateStatisticsPage() {
         </div>
 
         <section className="mt-6">
-          <div className="mb-4 flex flex-wrap gap-2">
-            {tabs.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setTab(item.id)}
-                className={`rounded-xl px-4 py-2.5 text-sm font-medium ${
-                  tab === item.id
-                    ? "bg-cyan-500 text-slate-950"
-                    : "border border-white/10 bg-white/5 text-slate-300"
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
+          <h2 className="mb-4 text-lg font-bold">Complete Analytics Reports</h2>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <ReportTable title="Sub ID Report" rows={data.subIdReport || []} field="subId" />
+            <ReportTable title="Offer Report" rows={data.offerReport || []} field="offer" />
+            <ReportTable title="City Report" rows={data.cityReport || []} field="city" />
+            <ReportTable title="Region / State Report" rows={data.regionReport || []} field="region" />
+            <ReportTable title="Device Report" rows={data.deviceReport || []} field="device" />
+            <ReportTable title="Browser Report" rows={data.browserReport || []} field="browser" />
+            <ReportTable title="Operating System Report" rows={data.osReport || []} field="operatingSystem" />
+            <ReportTable title="Traffic Source Report" rows={data.sourceReport || []} field="source" />
+            <ReportTable title="Campaign Report" rows={data.campaignReport || []} field="campaign" />
+            <ReportTable title="Smartlink Report" rows={data.smartlinkReport || []} field="smartlinkId" />
+            <ReportTable title="Daily Report" rows={data.dailyReport || []} field="date" />
           </div>
-
-          {tab === "geography" && (
-            <div className="grid gap-5 lg:grid-cols-3">
-              <ReportTable
-                title="Country"
-                rows={data.countryReport || []}
-                field="country"
-              />
-
-              <ReportTable
-                title="Region / State"
-                rows={data.regionReport || []}
-                field="region"
-              />
-
-              <ReportTable
-                title="City"
-                rows={data.cityReport || []}
-                field="city"
-              />
-            </div>
-          )}
-
-          {tab === "devices" && (
-            <div className="grid gap-5 lg:grid-cols-3">
-              <ReportTable
-                title="Device"
-                rows={data.deviceReport || []}
-                field="device"
-              />
-
-              <ReportTable
-                title="Browser"
-                rows={data.browserReport || []}
-                field="browser"
-              />
-
-              <ReportTable
-                title="Operating System"
-                rows={data.osReport || []}
-                field="operatingSystem"
-              />
-            </div>
-          )}
-
-          {tab === "sources" && (
-            <div className="grid gap-5 lg:grid-cols-2">
-              <ReportTable
-                title="Traffic Source"
-                rows={data.sourceReport || []}
-                field="source"
-              />
-
-              <ReportTable
-                title="Campaign"
-                rows={data.campaignReport || []}
-                field="campaign"
-              />
-            </div>
-          )}
-
-          {tab === "smartlinks" && (
-            <ReportTable
-              title="Smartlink / Offer ID"
-              rows={data.smartlinkReport || []}
-              field="smartlinkId"
-            />
-          )}
         </section>
 
         <section className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-slate-900/70">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 p-5">
             <div>
               <div className="flex items-center gap-2">
-                <BarChart3
-                  size={20}
-                  className="text-cyan-400"
-                />
-
-                <h2 className="font-semibold">
-                  Detailed Traffic History
-                </h2>
+                <BarChart3 size={20} className="text-cyan-400" />
+                <h2 className="font-semibold">Detailed Traffic History</h2>
               </div>
-
-              <p className="mt-1 text-xs text-slate-500">
-                Latest 100 clicks returned by the report API
-              </p>
+              <p className="mt-1 text-xs text-slate-500">Latest 100 clicks returned by the report API</p>
             </div>
-
             <button
               onClick={() => exportCSV(filteredClicks)}
               disabled={!filteredClicks.length}
               className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold disabled:opacity-40"
             >
-              <Download size={17} />
-              Export CSV
+              <Download size={17} /> Export CSV
             </button>
           </div>
 
           <div className="grid gap-3 border-b border-white/10 p-4 md:grid-cols-4">
             <div className="relative">
-              <Search
-                size={16}
-                className="absolute left-3 top-3.5 text-slate-500"
-              />
-
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search traffic..."
-                className="w-full rounded-xl border border-white/10 bg-slate-950 py-3 pl-10 pr-3 text-sm"
-              />
+              <Search size={16} className="absolute left-3 top-3.5 text-slate-500" />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search traffic..." className="w-full rounded-xl border border-white/10 bg-slate-950 py-3 pl-10 pr-3 text-sm" />
             </div>
-
-            <select
-              value={countryFilter}
-              onChange={(e) => setCountryFilter(e.target.value)}
-              className="rounded-xl border border-white/10 bg-slate-950 p-3 text-sm"
-            >
+            <select value={countryFilter} onChange={(e) => setCountryFilter(e.target.value)} className="rounded-xl border border-white/10 bg-slate-950 p-3 text-sm">
               <option value="">All Countries</option>
-
-              {countries.map((country) => (
-                <option key={country} value={country}>
-                  {country}
-                </option>
-              ))}
+              {countries.map((country) => <option key={country} value={country}>{country}</option>)}
             </select>
-
-            <select
-              value={deviceFilter}
-              onChange={(e) => setDeviceFilter(e.target.value)}
-              className="rounded-xl border border-white/10 bg-slate-950 p-3 text-sm"
-            >
+            <select value={deviceFilter} onChange={(e) => setDeviceFilter(e.target.value)} className="rounded-xl border border-white/10 bg-slate-950 p-3 text-sm">
               <option value="">All Devices</option>
-
-              {devices.map((device) => (
-                <option key={device} value={device}>
-                  {device}
-                </option>
-              ))}
+              {devices.map((device) => <option key={device} value={device}>{device}</option>)}
             </select>
-
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="rounded-xl border border-white/10 bg-slate-950 p-3 text-sm"
-            >
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-xl border border-white/10 bg-slate-950 p-3 text-sm">
               <option value="">All Statuses</option>
               <option value="click">Clicks Only</option>
               <option value="converted">Converted</option>
@@ -925,123 +433,47 @@ export default function AffiliateStatisticsPage() {
           </div>
 
           <div className="flex items-center gap-2 px-5 py-3 text-xs text-slate-500">
-            <Filter size={14} />
-            Showing {filteredClicks.length} of {clicks.length} recent rows
+            <Filter size={14} /> Showing {filteredClicks.length} of {clicks.length} recent rows
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1150px] text-left text-sm">
+            <table className="w-full min-w-[1200px] text-left text-sm">
               <thead className="bg-white/5 text-xs uppercase text-slate-400">
                 <tr>
-                  {[
-                    "Date / Time",
-                    "Click ID",
-                    "Country",
-                    "Region",
-                    "City",
-                    "Device",
-                    "Browser",
-                    "OS",
-                    "Source",
-                    "Status",
-                    "Payout",
-                  ].map((heading) => (
-                    <th
-                      key={heading}
-                      className="whitespace-nowrap px-4 py-3"
-                    >
-                      {heading}
-                    </th>
+                  {["Date / Time", "Click ID", "Sub ID", "Offer ID", "Country", "Region", "City", "Device", "Browser", "OS", "Source", "Status", "Payout"].map((heading) => (
+                    <th key={heading} className="whitespace-nowrap px-4 py-3">{heading}</th>
                   ))}
                 </tr>
               </thead>
-
               <tbody>
                 {filteredClicks.map((row, index) => (
-                  <tr
-                    key={`${row.click_id || index}`}
-                    className="border-t border-white/5 hover:bg-white/[0.03]"
-                  >
-                    <td className="whitespace-nowrap px-4 py-3 text-slate-300">
-                      {row.created_at
-                        ? new Date(row.created_at).toLocaleString()
-                        : "—"}
-                    </td>
-
-                    <td
-                      className="max-w-[140px] truncate px-4 py-3 font-mono text-xs text-cyan-300"
-                      title={row.click_id || ""}
-                    >
-                      {row.click_id
-                        ? row.click_id.slice(0, 12)
-                        : "—"}
-                    </td>
-
+                  <tr key={`${row.click_id || index}`} className="border-t border-white/5 hover:bg-white/[0.03]">
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-300">{row.created_at ? new Date(row.created_at).toLocaleString() : "—"}</td>
+                    <td className="max-w-[140px] truncate px-4 py-3 font-mono text-xs text-cyan-300" title={row.click_id || ""}>{row.click_id ? row.click_id.slice(0, 12) : "—"}</td>
+                    <td className="px-4 py-3">{row.worker_sub_id || "—"}</td>
+                    <td className="px-4 py-3">{row.offer_id || "—"}</td>
+                    <td className="px-4 py-3">{row.country || "—"}</td>
+                    <td className="px-4 py-3">{row.region || "—"}</td>
+                    <td className="px-4 py-3">{row.city || "—"}</td>
+                    <td className="px-4 py-3">{row.device || "—"}</td>
+                    <td className="px-4 py-3">{row.browser || "—"}</td>
+                    <td className="px-4 py-3">{row.operating_system || "—"}</td>
+                    <td className="px-4 py-3">{row.traffic_source || "—"}</td>
                     <td className="px-4 py-3">
-                      {row.country || "—"}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      {row.region || "—"}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      {row.city || "—"}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      {row.device || "—"}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      {row.browser || "—"}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      {row.operating_system || "—"}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      {row.traffic_source || "—"}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                          converted(row)
-                            ? "bg-emerald-500/15 text-emerald-400"
-                            : "bg-blue-500/15 text-blue-400"
-                        }`}
-                      >
-                        {converted(row)
-                          ? "Converted"
-                          : row.status || "Click"}
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${converted(row) ? "bg-emerald-500/15 text-emerald-400" : "bg-blue-500/15 text-blue-400"}`}>
+                        {converted(row) ? "Converted" : row.status || "Click"}
                       </span>
                     </td>
-
-                    <td className="px-4 py-3 font-semibold text-emerald-400">
-                      {money(
-                        converted(row)
-                          ? Number(row.payout || 0)
-                          : 0
-                      )}
-                    </td>
+                    <td className="px-4 py-3 font-semibold text-emerald-400">{money(converted(row) ? Number(row.payout || 0) : 0)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-
-            {filteredClicks.length === 0 && (
-              <p className="p-8 text-center text-sm text-slate-500">
-                No traffic records match your filters.
-              </p>
-            )}
+            {filteredClicks.length === 0 && <p className="p-8 text-center text-sm text-slate-500">No traffic records match your filters.</p>}
           </div>
         </section>
 
-        <p className="mt-5 pb-6 text-center text-xs text-slate-500">
-          UpNetwork CPA • Traffic Intelligence
-        </p>
+        <p className="mt-5 pb-6 text-center text-xs text-slate-500">UpNetwork CPA • Traffic Intelligence</p>
       </div>
     </main>
   );
