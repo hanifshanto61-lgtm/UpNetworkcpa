@@ -41,6 +41,25 @@ type ReportValue = {
   earnings: number;
 };
 
+type DailyValue = {
+  date: string;
+  clicks: number;
+  conversions: number;
+  earnings: number;
+  visitors: Set<string>;
+  countries: Set<string>;
+  subIds: Set<string>;
+  offers: Set<string>;
+  cities: Set<string>;
+  regions: Set<string>;
+  devices: Set<string>;
+  browsers: Set<string>;
+  operatingSystems: Set<string>;
+  trafficSources: Set<string>;
+  campaigns: Set<string>;
+  smartlinks: Set<string>;
+};
+
 const CONVERSION_STATUSES = new Set([
   "converted",
   "conversion",
@@ -69,12 +88,8 @@ function converted(row: ClickRow): boolean {
 }
 
 function validDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return false;
-  }
-
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(`${value}T00:00:00.000Z`);
-
   return (
     !Number.isNaN(date.getTime()) &&
     date.toISOString().slice(0, 10) === value
@@ -96,10 +111,7 @@ function updateReport(
   };
 
   item.clicks++;
-
-  if (visitorHash) {
-    item.visitorHashes.add(visitorHash);
-  }
+  if (visitorHash) item.visitorHashes.add(visitorHash);
 
   if (isConversion) {
     item.conversions++;
@@ -127,12 +139,36 @@ function buildReport(
           : 0,
       conversionRate:
         value.clicks > 0
-          ? Number(
-              ((value.conversions / value.clicks) * 100).toFixed(2)
-            )
+          ? Number(((value.conversions / value.clicks) * 100).toFixed(2))
           : 0,
     }))
     .sort((a, b) => b.clicks - a.clicks);
+}
+
+function createDailyValue(date: string): DailyValue {
+  return {
+    date,
+    clicks: 0,
+    conversions: 0,
+    earnings: 0,
+    visitors: new Set<string>(),
+    countries: new Set<string>(),
+    subIds: new Set<string>(),
+    offers: new Set<string>(),
+    cities: new Set<string>(),
+    regions: new Set<string>(),
+    devices: new Set<string>(),
+    browsers: new Set<string>(),
+    operatingSystems: new Set<string>(),
+    trafficSources: new Set<string>(),
+    campaigns: new Set<string>(),
+    smartlinks: new Set<string>(),
+  };
+}
+
+function addValue(set: Set<string>, value: unknown) {
+  const text = String(value ?? "").trim();
+  if (text) set.add(text);
 }
 
 function responseError(message: string, status: number) {
@@ -148,20 +184,15 @@ export async function GET(request: NextRequest) {
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !serviceRoleKey) {
-      return responseError(
-        "Supabase server configuration is missing.",
-        500
-      );
+      return responseError("Supabase server configuration is missing.", 500);
     }
 
     const authorization = request.headers.get("authorization");
-
     if (!authorization?.startsWith("Bearer ")) {
       return responseError("Authentication required.", 401);
     }
 
     const accessToken = authorization.slice(7).trim();
-
     if (!accessToken) {
       return responseError("Authentication token is missing.", 401);
     }
@@ -173,24 +204,15 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    const {
-      data: authData,
-      error: authError,
-    } = await supabase.auth.getUser(accessToken);
-
+    const { data: authData, error: authError } =
+      await supabase.auth.getUser(accessToken);
     const user = authData?.user;
 
     if (authError || !user) {
-      return responseError(
-        "Your login session is invalid or expired.",
-        401
-      );
+      return responseError("Your login session is invalid or expired.", 401);
     }
 
-    const {
-      data: profile,
-      error: profileError,
-    } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("id, affiliate_id, full_name, email, application_status")
       .eq("id", user.id)
@@ -198,52 +220,29 @@ export async function GET(request: NextRequest) {
 
     if (profileError) {
       console.error("Statistics profile error:", profileError);
-      return responseError(
-        "Affiliate profile could not be loaded.",
-        500
-      );
+      return responseError("Affiliate profile could not be loaded.", 500);
     }
 
-    if (!profile) {
-      return responseError("Affiliate profile not found.", 404);
-    }
+    if (!profile) return responseError("Affiliate profile not found.", 404);
 
     const affiliateId = String(profile.affiliate_id ?? "").trim();
-
     if (!affiliateId) {
-      return responseError(
-        "Affiliate ID could not be determined.",
-        500
-      );
+      return responseError("Affiliate ID could not be determined.", 500);
     }
 
     const applicationStatus = normalize(profile.application_status);
-
-    if (
-      applicationStatus !== "approved" &&
-      applicationStatus !== "active"
-    ) {
-      return responseError(
-        "Your affiliate account is not approved.",
-        403
-      );
+    if (applicationStatus !== "approved" && applicationStatus !== "active") {
+      return responseError("Your affiliate account is not approved.", 403);
     }
 
     const from = request.nextUrl.searchParams.get("from");
     const to = request.nextUrl.searchParams.get("to");
 
     if (!from || !to || !validDate(from) || !validDate(to)) {
-      return responseError(
-        "Valid from and to dates are required.",
-        400
-      );
+      return responseError("Valid from and to dates are required.", 400);
     }
-
     if (from > to) {
-      return responseError(
-        "From Date cannot be later than To Date.",
-        400
-      );
+      return responseError("From Date cannot be later than To Date.", 400);
     }
 
     const nextDay = new Date(`${to}T00:00:00.000Z`);
@@ -271,28 +270,21 @@ export async function GET(request: NextRequest) {
 
       if (error) {
         console.error("Statistics click query:", error);
-        return responseError(
-          "Statistics database query failed.",
-          500
-        );
+        return responseError("Statistics database query failed.", 500);
       }
 
       const rows = (data ?? []) as ClickRow[];
       allClicks.push(...rows);
-
       if (rows.length < pageSize) break;
-
       offset += pageSize;
     }
 
     const totalClicks = allClicks.length;
-
     let conversions = 0;
     let earnings = 0;
     let grossRevenue = 0;
     let networkProfit = 0;
     let suspiciousClicks = 0;
-
     const uniqueHashes = new Set<string>();
 
     const countryMap = new Map<string, ReportValue>();
@@ -305,10 +297,9 @@ export async function GET(request: NextRequest) {
     const campaignMap = new Map<string, ReportValue>();
     const smartlinkMap = new Map<string, ReportValue>();
     const dailyMap = new Map<string, ReportValue>();
-
-    // New reports
     const subIdMap = new Map<string, ReportValue>();
     const offerMap = new Map<string, ReportValue>();
+    const dailyRowsMap = new Map<string, DailyValue>();
 
     for (const click of allClicks) {
       const isConversion = converted(click);
@@ -321,13 +312,8 @@ export async function GET(request: NextRequest) {
         networkProfit += amount(click.network_profit);
       }
 
-      if (click.is_suspicious === true) {
-        suspiciousClicks++;
-      }
-
-      if (click.visitor_hash) {
-        uniqueHashes.add(click.visitor_hash);
-      }
+      if (click.is_suspicious === true) suspiciousClicks++;
+      if (click.visitor_hash) uniqueHashes.add(click.visitor_hash);
 
       const country = label(click.country);
       const city = label(click.city);
@@ -337,208 +323,101 @@ export async function GET(request: NextRequest) {
       const os = label(click.operating_system);
       const source = label(click.traffic_source);
       const campaign = label(click.campaign);
-
       const subId = label(click.worker_sub_id);
       const offer = label(click.offer_id);
-
       const smartlink = click.smartlink_id
         ? String(click.smartlink_id)
         : click.offer_id
           ? `Offer: ${click.offer_id}`
           : "Legacy / Unknown";
-
       const date = click.created_at
         ? String(click.created_at).slice(0, 10)
         : "Unknown";
 
-      updateReport(
-        countryMap,
-        country,
-        isConversion,
-        payout,
-        click.visitor_hash
-      );
+      updateReport(countryMap, country, isConversion, payout, click.visitor_hash);
+      updateReport(cityMap, `${city}, ${country}`, isConversion, payout, click.visitor_hash);
+      updateReport(regionMap, `${region}, ${country}`, isConversion, payout, click.visitor_hash);
+      updateReport(deviceMap, device, isConversion, payout, click.visitor_hash);
+      updateReport(browserMap, browser, isConversion, payout, click.visitor_hash);
+      updateReport(osMap, os, isConversion, payout, click.visitor_hash);
+      updateReport(sourceMap, source, isConversion, payout, click.visitor_hash);
+      updateReport(campaignMap, campaign, isConversion, payout, click.visitor_hash);
+      updateReport(smartlinkMap, smartlink, isConversion, payout, click.visitor_hash);
+      updateReport(dailyMap, date, isConversion, payout, click.visitor_hash);
+      updateReport(subIdMap, subId, isConversion, payout, click.visitor_hash);
+      updateReport(offerMap, offer, isConversion, payout, click.visitor_hash);
 
-      updateReport(
-        cityMap,
-        `${city}, ${country}`,
-        isConversion,
-        payout,
-        click.visitor_hash
-      );
+      // One complete statistics row per date, including every report dimension.
+      const daily = dailyRowsMap.get(date) || createDailyValue(date);
+      daily.clicks++;
+      if (click.visitor_hash) daily.visitors.add(click.visitor_hash);
+      if (isConversion) {
+        daily.conversions++;
+        daily.earnings += payout;
+      }
 
-      updateReport(
-        regionMap,
-        `${region}, ${country}`,
-        isConversion,
-        payout,
-        click.visitor_hash
-      );
-
-      updateReport(
-        deviceMap,
-        device,
-        isConversion,
-        payout,
-        click.visitor_hash
-      );
-
-      updateReport(
-        browserMap,
-        browser,
-        isConversion,
-        payout,
-        click.visitor_hash
-      );
-
-      updateReport(
-        osMap,
-        os,
-        isConversion,
-        payout,
-        click.visitor_hash
-      );
-
-      updateReport(
-        sourceMap,
-        source,
-        isConversion,
-        payout,
-        click.visitor_hash
-      );
-
-      updateReport(
-        campaignMap,
-        campaign,
-        isConversion,
-        payout,
-        click.visitor_hash
-      );
-
-      updateReport(
-        smartlinkMap,
-        smartlink,
-        isConversion,
-        payout,
-        click.visitor_hash
-      );
-
-      updateReport(
-        dailyMap,
-        date,
-        isConversion,
-        payout,
-        click.visitor_hash
-      );
-
-      // Sub ID Report
-      updateReport(
-        subIdMap,
-        subId,
-        isConversion,
-        payout,
-        click.visitor_hash
-      );
-
-      // Offer Report
-      updateReport(
-        offerMap,
-        offer,
-        isConversion,
-        payout,
-        click.visitor_hash
-      );
+      addValue(daily.countries, click.country);
+      addValue(daily.subIds, click.worker_sub_id);
+      addValue(daily.offers, click.offer_id);
+      addValue(daily.cities, click.city);
+      addValue(daily.regions, click.region);
+      addValue(daily.devices, click.device);
+      addValue(daily.browsers, click.browser);
+      addValue(daily.operatingSystems, click.operating_system);
+      addValue(daily.trafficSources, click.traffic_source);
+      addValue(daily.campaigns, click.campaign);
+      addValue(daily.smartlinks, smartlink);
+      dailyRowsMap.set(date, daily);
     }
 
     const conversionRate =
       totalClicks > 0
         ? Number(((conversions / totalClicks) * 100).toFixed(2))
         : 0;
-
     const uniqueVisitors = uniqueHashes.size;
-
     const identifiableClicks = allClicks.filter(
       (click) => Boolean(click.visitor_hash)
     ).length;
 
-    const countryReport = buildReport(
-      countryMap,
-      "country",
-      totalClicks
+    const countryReport = buildReport(countryMap, "country", totalClicks);
+    const deviceReport = buildReport(deviceMap, "device", totalClicks);
+    const cityReport = buildReport(cityMap, "city", totalClicks);
+    const regionReport = buildReport(regionMap, "region", totalClicks);
+    const browserReport = buildReport(browserMap, "browser", totalClicks);
+    const osReport = buildReport(osMap, "operatingSystem", totalClicks);
+    const sourceReport = buildReport(sourceMap, "source", totalClicks);
+    const campaignReport = buildReport(campaignMap, "campaign", totalClicks);
+    const smartlinkReport = buildReport(smartlinkMap, "smartlinkId", totalClicks);
+    const dailyReport = buildReport(dailyMap, "date", totalClicks).sort(
+      (a, b) => String(a.date).localeCompare(String(b.date))
     );
+    const subIdReport = buildReport(subIdMap, "subId", totalClicks);
+    const offerReport = buildReport(offerMap, "offer", totalClicks);
 
-    const deviceReport = buildReport(
-      deviceMap,
-      "device",
-      totalClicks
-    );
-
-    const cityReport = buildReport(
-      cityMap,
-      "city",
-      totalClicks
-    );
-
-    const regionReport = buildReport(
-      regionMap,
-      "region",
-      totalClicks
-    );
-
-    const browserReport = buildReport(
-      browserMap,
-      "browser",
-      totalClicks
-    );
-
-    const osReport = buildReport(
-      osMap,
-      "operatingSystem",
-      totalClicks
-    );
-
-    const sourceReport = buildReport(
-      sourceMap,
-      "source",
-      totalClicks
-    );
-
-    const campaignReport = buildReport(
-      campaignMap,
-      "campaign",
-      totalClicks
-    );
-
-    const smartlinkReport = buildReport(
-      smartlinkMap,
-      "smartlinkId",
-      totalClicks
-    );
-
-    const dailyReport = buildReport(
-      dailyMap,
-      "date",
-      totalClicks
-    ).sort((a, b) =>
-      String(a.date).localeCompare(String(b.date))
-    );
-
-    const subIdReport = buildReport(
-      subIdMap,
-      "subId",
-      totalClicks
-    );
-
-    const offerReport = buildReport(
-      offerMap,
-      "offer",
-      totalClicks
-    );
+    const dailyRows = Array.from(dailyRowsMap.values())
+      .map((row) => ({
+        date: row.date,
+        clicks: row.clicks,
+        uniqueVisitors: row.visitors.size,
+        conversions: row.conversions,
+        earnings: Number(row.earnings.toFixed(2)),
+        countries: Array.from(row.countries).sort(),
+        subIds: Array.from(row.subIds).sort(),
+        offers: Array.from(row.offers).sort(),
+        cities: Array.from(row.cities).sort(),
+        regions: Array.from(row.regions).sort(),
+        devices: Array.from(row.devices).sort(),
+        browsers: Array.from(row.browsers).sort(),
+        operatingSystems: Array.from(row.operatingSystems).sort(),
+        trafficSources: Array.from(row.trafficSources).sort(),
+        campaigns: Array.from(row.campaigns).sort(),
+        smartlinks: Array.from(row.smartlinks).sort(),
+      }))
+      .sort((a, b) => b.date.localeCompare(a.date));
 
     return NextResponse.json(
       {
         success: true,
-
         profile: {
           id: user.id,
           affiliateId,
@@ -551,9 +430,7 @@ export async function GET(request: NextRequest) {
             "Affiliate",
           status: applicationStatus,
         },
-
         range: { from, to },
-
         stats: {
           totalClicks,
           conversions,
@@ -566,7 +443,6 @@ export async function GET(request: NextRequest) {
           suspiciousClicks,
           cleanClicks: totalClicks - suspiciousClicks,
         },
-
         countryReport,
         deviceReport,
         cityReport,
@@ -577,11 +453,9 @@ export async function GET(request: NextRequest) {
         campaignReport,
         smartlinkReport,
         dailyReport,
-
-        // New report data
         subIdReport,
         offerReport,
-
+        dailyRows,
         clicks: allClicks.slice(0, 100),
       },
       {
@@ -594,11 +468,7 @@ export async function GET(request: NextRequest) {
     );
   } catch (error) {
     console.error("Affiliate statistics error:", error);
-
-    return responseError(
-      "Affiliate statistics could not be loaded.",
-      500
-    );
+    return responseError("Affiliate statistics could not be loaded.", 500);
   }
 }
 
