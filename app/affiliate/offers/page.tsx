@@ -235,7 +235,6 @@ export default function AffiliateOffersPage() {
         offerNumber,
         offer.id,
         offer.name,
-        offer.advertiser,
         offer.category,
         offer.country,
         offer.device,
