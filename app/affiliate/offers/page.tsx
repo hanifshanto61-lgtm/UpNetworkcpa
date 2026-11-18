@@ -221,7 +221,6 @@ export default function AffiliateOffersPage() {
       offerNumber,
       offer.id,
       offer.name,
-      offer.advertiser,
       offer.category,
       offer.country,
       offer.device,
@@ -714,9 +713,6 @@ export default function AffiliateOffersPage() {
                         <h2 className="truncate text-xl font-black">
                           {offer.name}
                         </h2>
-                        <p className="mt-1 text-xs font-semibold text-slate-500">
-                          {offer.advertiser || "Direct Advertiser"}
-                        </p>
                       </div>
 
                       <div className="shrink-0 rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-right">
@@ -1290,4 +1286,4 @@ export default function AffiliateOffersPage() {
       )}
     </main>
   );
-}
+                  }
