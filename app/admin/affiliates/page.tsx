@@ -12,6 +12,7 @@ import {
   Users,
   Mail,
   Phone,
+  Send,
   Globe2,
   Building2,
   ChevronLeft,
@@ -36,6 +37,7 @@ type Affiliate = {
   affiliate_id: string;
   name: string;
   email: string;
+  telegram_id?: string;
   phone?: string;
   country?: string;
   city?: string;
@@ -756,9 +758,36 @@ async function deleteAffiliate() {
                                 "No Affiliate ID"}
                             </p>
 
-                            <p className="mt-2 break-all text-sm text-slate-500">
-                              {affiliate.email || "No email"}
-                            </p>
+                            <div className="mt-2 flex flex-col gap-2 text-sm">
+  <a
+    href={
+      affiliate.email
+        ? `mailto:${affiliate.email}`
+        : undefined
+    }
+    className="flex items-center gap-2 break-all text-blue-600 hover:text-blue-800 hover:underline"
+  >
+    <Mail className="h-4 w-4 shrink-0" />
+    {affiliate.email || "Not Provided"}
+  </a>
+
+  {affiliate.telegram_id ? (
+    <a
+      href={`https://t.me/${affiliate.telegram_id.replace(/^@/, "")}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-2 break-all font-semibold text-sky-600 hover:text-sky-800 hover:underline"
+    >
+      <Send className="h-4 w-4 shrink-0" />
+      {affiliate.telegram_id}
+    </a>
+  ) : (
+    <span className="flex items-center gap-2 text-slate-400">
+      <Send className="h-4 w-4" />
+      Not Provided
+    </span>
+  )}
+</div>
 
                             <p className="mt-1 text-xs text-slate-400">
                               Registered{" "}
