@@ -392,7 +392,13 @@ export async function GET(request: NextRequest) {
           last_name: lastName,
 
           email: user.email || profile.email || "",
-
+          telegram_id:
+  clean(profile.telegram_id) ||
+  clean(metadata.telegram) ||
+  clean(metadata.telegram_id) ||
+  clean(metadata.telegram_username) ||
+  "",
+          
           phone:
             profile.phone ||
             metadata.phone ||
@@ -548,6 +554,7 @@ export async function GET(request: NextRequest) {
         affiliate.phone,
         affiliate.country,
         affiliate.city,
+        affiliate.telegram_id,
         affiliate.company_name,
       ]
         .join(" ")
