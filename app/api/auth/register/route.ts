@@ -7,29 +7,18 @@ function clean(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return "Unknown error";
-}
-
 export async function POST(request: NextRequest) {
   try {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    if (!url || !key) {
+    if (!url || !anonKey || !serviceKey) {
       return NextResponse.json(
         { success: false, error: "Supabase configuration missing." },
         { status: 500 }
       );
     }
-
-    const supabase = createClient(url, key, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
 
     const body = await request.json();
 
@@ -39,18 +28,31 @@ export async function POST(request: NextRequest) {
     const email = clean(body.email).toLowerCase();
     const password = body.password;
 
-    if (!firstName || !lastName || !username) {
+    const rawTelegram = clean(body.telegramId);
+    const telegramId = rawTelegram.replace(/^@/, "");
+
+    if (!firstName || !lastName || !username || !telegramId) {
       return NextResponse.json(
-        { success: false, error: "Name and username are required." },
+        {
+          success: false,
+          error: "Name, username and Telegram ID are required.",
+        },
         { status: 400 }
       );
     }
 
     if (!/^[a-zA-Z0-9_-]{3,40}$/.test(username)) {
       return NextResponse.json(
+        { success: false, error: "Invalid username format." },
+        { status: 400 }
+      );
+    }
+
+    if (!/^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(telegramId)) {
+      return NextResponse.json(
         {
           success: false,
-          error: "Username must be 3–40 characters using letters, numbers, _ or -.",
+          error: "Enter a valid Telegram username (5–32 characters).",
         },
         { status: 400 }
       );
@@ -70,22 +72,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // BLOCK EMAILS THAT WERE PERMANENTLY DELETED
-    const { data: blockedEmail, error: blocklistError } =
-      await supabase
+    const supabaseAdmin = createClient(url, serviceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+
+    const supabasePublic = createClient(url, anonKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+
+    // Check permanently blocked emails.
+    const { data: blockedEmail, error: blockError } =
+      await supabaseAdmin
         .from("affiliate_email_blocklist")
         .select("id")
         .eq("email", email)
         .maybeSingle();
 
-    if (blocklistError) {
-      console.error("Registration email blocklist lookup:", blocklistError);
-
+    if (blockError) {
+      console.error("Email blocklist error:", blockError);
       return NextResponse.json(
-        {
-          success: false,
-          error: "Unable to verify email eligibility. Please try again later.",
-        },
+        { success: false, error: "Unable to verify email eligibility." },
         { status: 500 }
       );
     }
@@ -94,27 +106,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "This email address is not eligible for registration. Please contact the network administrator.",
+          error: "This email address is not eligible for registration.",
         },
         { status: 403 }
       );
     }
 
-    const { data: existing, error: lookupError } = await supabase
-      .from("profiles")
-      .select("id")
-      .or(`username.eq.${username},affiliate_id.eq.${username}`)
-      .limit(1);
+    // Check username availability.
+    const { data: existing, error: lookupError } =
+      await supabaseAdmin
+        .from("profiles")
+        .select("id")
+        .or(`username.eq.${username},affiliate_id.eq.${username}`)
+        .limit(1);
 
     if (lookupError) {
-      console.error("Registration profile lookup:", lookupError);
+      console.error("Username lookup error:", lookupError);
       return NextResponse.json(
         { success: false, error: "Unable to validate username." },
         { status: 500 }
       );
     }
 
-    if (existing && existing.length > 0) {
+    if (existing?.length) {
       return NextResponse.json(
         { success: false, error: "Username is already in use." },
         { status: 409 }
@@ -123,12 +137,56 @@ export async function POST(request: NextRequest) {
 
     const fullName = `${firstName} ${lastName}`.trim();
 
+    // IMPORTANT: signUp sends the Supabase verification email.
+    // Do not set email_confirm to true.
+    const { data: authData, error: authError } =
+      await supabasePublic.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: new URL("/login?verified=1", request.url).toString(),
+          data: {
+            account_type: "affiliate",
+            first_name: firstName,
+            last_name: lastName,
+            full_name: fullName,
+            username,
+            affiliate_id: username,
+            application_status: "pending",
+            referred_by: clean(body.referralCode) || null,
+          },
+        },
+      });
+
+    if (authError || !authData.user) {
+      console.error("Signup Auth error:", authError);
+
+      const duplicate = /already|registered|exists/i.test(
+        authError?.message || ""
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: duplicate
+            ? "An account with this email already exists. Please log in."
+            : authError?.message || "Unable to create account.",
+        },
+        { status: duplicate ? 409 : 400 }
+      );
+    }
+
+    const userId = authData.user.id;
+
+    // Always create the affiliate profile as pending.
     const profileData = {
+      id: userId,
       affiliate_id: username,
       username,
       email,
       full_name: fullName,
       referred_by: clean(body.referralCode) || null,
+      telegram_id: `@${telegramId}`,
       phone: clean(body.phone),
       country: clean(body.country),
       city: clean(body.city),
@@ -145,65 +203,20 @@ export async function POST(request: NextRequest) {
       application_status: "pending",
     };
 
-    const { data: authData, error: authError } =
-      await supabase.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-        user_metadata: {
-          account_type: "affiliate",
-          first_name: firstName,
-          last_name: lastName,
-          full_name: fullName,
-          username,
-          affiliate_id: username,
-          application_status: "pending",
-          referred_by: profileData.referred_by,
-        },
-      });
-
-    if (authError || !authData.user) {
-      console.error("Registration Auth error:", {
-        message: authError?.message,
-        code: authError?.code,
-        status: authError?.status,
-      });
-
-      const duplicate =
-        /already|duplicate|registered/i.test(authError?.message || "");
-
-      return NextResponse.json(
-        {
-          success: false,
-          error: duplicate
-            ? "An account with this email already exists. Please log in."
-            : "Supabase Auth could not create the account. Check Auth logs.",
-        },
-        { status: duplicate ? 409 : 500 }
-      );
-    }
-
-    const userId = authData.user.id;
-
-    const { error: profileError } = await supabase
+    const { error: profileError } = await supabaseAdmin
       .from("profiles")
-      .insert({
-        id: userId,
-        ...profileData,
-      });
+      .insert(profileData);
 
     if (profileError) {
-      console.error("Registration profile insert error:", {
-        message: profileError.message,
-        code: profileError.code,
-        details: profileError.details,
-      });
+      console.error("Profile insert error:", profileError);
+
+      // Clean up Auth account if profile creation failed.
+      await supabaseAdmin.auth.admin.deleteUser(userId);
 
       return NextResponse.json(
         {
           success: false,
-          error:
-            "Auth account was created, but the affiliate profile could not be saved. Contact the administrator; do not register again with the same email.",
+          error: "Unable to save affiliate profile. Please try again.",
         },
         { status: 500 }
       );
@@ -212,8 +225,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: true,
-        message:
-          "Registration successful. Your application is pending admin approval.",
+        message: "Verification email sent. Please verify your email before logging in.",
         affiliate: {
           id: userId,
           affiliate_id: username,
@@ -224,13 +236,10 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    console.error("Registration exception:", errorMessage(error));
+    console.error("Registration exception:", error);
 
     return NextResponse.json(
-      {
-        success: false,
-        error: "Registration failed. Please try again later.",
-      },
+      { success: false, error: "Registration failed. Please try again later." },
       { status: 500 }
     );
   }
