@@ -1154,7 +1154,36 @@ export default function AffiliateOffersPage() {
                 </p>
               </div>
             </div>
+{/* MAIN TRACKING LINK */}
+            <div className="mt-6 rounded-xl border border-emerald-400/20 bg-emerald-400/5 p-4">
+              <h3 className="font-bold text-emerald-300">
+                Main Tracking Link
+              </h3>
 
+              <p className="mt-1 text-xs text-slate-400">
+                Use this main link to promote the approved offer.
+              </p>
+
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+                <input
+                  readOnly
+                  aria-label="Main offer tracking link"
+                  value={getTrackingLink(detailsOffer)}
+                  onFocus={(event) => event.currentTarget.select()}
+                  className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-3 text-xs text-slate-300 outline-none"
+                />
+
+                <button
+                  type="button"
+                  onClick={() => void copyOfferLink(detailsOffer)}
+                  className="rounded-lg bg-emerald-500 px-5 py-3 text-sm font-black text-slate-950"
+                >
+                  {copiedId === detailsOffer.id
+                    ? "Copied!"
+                    : "Copy Main Link"}
+                </button>
+              </div>
+            </div>
             <div className="mt-6 rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-4">
               <h3 className="font-bold text-cyan-300">
                 Create New Sub ID
